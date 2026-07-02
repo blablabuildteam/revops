@@ -1,77 +1,54 @@
-import { supabase } from "./supabase";
 import { Company, NewOpportunity, Opportunity } from "./types";
 
-export async function getOpportunities(): Promise<Opportunity[]> {
-  const { data, error } = await supabase
-    .from("opportunities")
-    .select(`*, company:companies(*)`)
-    .order("created_at", { ascending: false });
+const base = "/api";
 
-  if (error) throw error;
-  return data as Opportunity[];
+async function req<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${base}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error ?? "Request failed");
+  }
+  return res.json();
 }
 
-export async function getOpportunity(id: string): Promise<Opportunity | null> {
-  const { data, error } = await supabase
-    .from("opportunities")
-    .select(`*, company:companies(*)`)
-    .eq("id", id)
-    .single();
-
-  if (error) throw error;
-  return data as Opportunity;
+export function getOpportunities(): Promise<Opportunity[]> {
+  return req("/opportunities");
 }
 
-export async function createOpportunity(opp: NewOpportunity): Promise<Opportunity> {
-  const { data, error } = await supabase
-    .from("opportunities")
-    .insert(opp)
-    .select(`*, company:companies(*)`)
-    .single();
-
-  if (error) throw error;
-  return data as Opportunity;
+export function getOpportunity(id: string): Promise<Opportunity> {
+  return req(`/opportunities/${id}`);
 }
 
-export async function updateOpportunity(
+export function createOpportunity(opp: NewOpportunity): Promise<Opportunity> {
+  return req("/opportunities", { method: "POST", body: JSON.stringify(opp) });
+}
+
+export function updateOpportunity(
   id: string,
   updates: Partial<NewOpportunity>
 ): Promise<Opportunity> {
-  const { data, error } = await supabase
-    .from("opportunities")
-    .update(updates)
-    .eq("id", id)
-    .select(`*, company:companies(*)`)
-    .single();
-
-  if (error) throw error;
-  return data as Opportunity;
+  return req(`/opportunities/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
 }
 
-export async function deleteOpportunity(id: string): Promise<void> {
-  const { error } = await supabase.from("opportunities").delete().eq("id", id);
-  if (error) throw error;
+export function deleteOpportunity(id: string): Promise<void> {
+  return req(`/opportunities/${id}`, { method: "DELETE" });
 }
 
-export async function getCompanies(): Promise<Company[]> {
-  const { data, error } = await supabase
-    .from("companies")
-    .select("*")
-    .order("name");
-
-  if (error) throw error;
-  return data as Company[];
+export function getCompanies(): Promise<Company[]> {
+  return req("/companies");
 }
 
-export async function createCompany(
+export function createCompany(
   company: Omit<Company, "id" | "created_at" | "updated_at">
 ): Promise<Company> {
-  const { data, error } = await supabase
-    .from("companies")
-    .insert(company)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as Company;
+  return req("/companies", { method: "POST", body: JSON.stringify(company) });
 }
