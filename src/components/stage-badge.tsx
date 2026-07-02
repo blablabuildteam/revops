@@ -5,7 +5,7 @@ const stageStyles: Record<Stage, string> = {
   prospect: "bg-neutral-800 text-neutral-300",
   qualified: "bg-blue-950 text-blue-300",
   proposal: "bg-violet-950 text-violet-300",
-  negotiation: "bg-amber-950 text-amber-300",
+  negotiation: "bg-[#e8ff47]/10 text-[#e8ff47]",
   won: "bg-emerald-950 text-emerald-300",
   lost: "bg-red-950 text-red-400",
   on_hold: "bg-neutral-800 text-neutral-500",

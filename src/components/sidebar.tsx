@@ -7,7 +7,6 @@ import {
   Columns3,
   ListFilter,
   Building2,
-  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,12 +22,15 @@ export function Sidebar() {
 
   return (
     <aside className="w-56 shrink-0 border-r border-neutral-800 flex flex-col bg-neutral-950">
+      {/* Logo */}
       <div className="px-5 py-5 border-b border-neutral-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center">
-            <TrendingUp className="w-3.5 h-3.5 text-neutral-950" />
-          </div>
-          <span className="font-semibold text-sm tracking-tight">RevOps</span>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#e8ff47]">
+            blablabuild
+          </p>
+          <p className="text-[10px] text-neutral-600 tracking-widest uppercase">
+            Revenue ops
+          </p>
         </div>
       </div>
 
@@ -41,10 +43,10 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors",
+                "flex items-center gap-3 px-2.5 py-2 rounded text-sm transition-colors",
                 active
-                  ? "bg-neutral-800 text-neutral-100 font-medium"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+                  ? "bg-[#e8ff47]/10 text-[#e8ff47] font-medium"
+                  : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900"
               )}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -55,7 +57,9 @@ export function Sidebar() {
       </nav>
 
       <div className="px-5 py-4 border-t border-neutral-800">
-        <p className="text-xs text-neutral-600 font-mono">v0.1.0</p>
+        <p className="text-[10px] text-neutral-700 tracking-widest uppercase font-mono">
+          Talk less. Build more.
+        </p>
       </div>
     </aside>
   );

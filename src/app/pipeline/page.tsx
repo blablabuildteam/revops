@@ -22,7 +22,7 @@ const stageAccent: Record<string, string> = {
   prospect: "border-neutral-700",
   qualified: "border-blue-800",
   proposal: "border-violet-800",
-  negotiation: "border-amber-800",
+  negotiation: "border-[#e8ff47]/40",
   won: "border-emerald-800",
 };
 
@@ -30,7 +30,7 @@ const stageHeader: Record<string, string> = {
   prospect: "text-neutral-400",
   qualified: "text-blue-400",
   proposal: "text-violet-400",
-  negotiation: "text-amber-400",
+  negotiation: "text-[#e8ff47]",
   won: "text-emerald-400",
 };
 
@@ -62,7 +62,7 @@ function OpportunityCard({
 
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-base font-mono font-semibold text-amber-400">
+          <p className="text-base font-mono font-semibold text-[#e8ff47]">
             {formatCurrency(opp.expected_value)}
           </p>
           <p className="text-xs text-neutral-600 font-mono">
@@ -171,7 +171,7 @@ export default function PipelinePage() {
             setEditingOpp(null);
             setFormOpen(true);
           }}
-          className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium gap-2"
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
           Nieuwe kans

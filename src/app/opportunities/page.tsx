@@ -111,7 +111,7 @@ export default function OpportunitiesPage() {
           <p className="text-sm text-neutral-500 mt-0.5">
             {filtered.length} kansen ·{" "}
             <span className="font-mono">{formatCurrency(totalExpected)}</span> verwacht ·{" "}
-            <span className="font-mono text-amber-400">
+            <span className="font-mono text-[#e8ff47]">
               {formatCurrency(totalWeighted)}
             </span>{" "}
             gewogen
@@ -122,7 +122,7 @@ export default function OpportunitiesPage() {
             setEditingOpp(null);
             setFormOpen(true);
           }}
-          className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium gap-2"
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
           Nieuwe kans
@@ -258,7 +258,7 @@ export default function OpportunitiesPage() {
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-12 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-amber-500/70 rounded-full"
+                              className="h-full bg-[#e8ff47]/70 rounded-full"
                               style={{ width: `${opp.probability}%` }}
                             />
                           </div>

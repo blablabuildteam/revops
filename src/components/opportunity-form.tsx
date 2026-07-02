@@ -275,7 +275,7 @@ export function OpportunityForm({
                 step="5"
                 value={form.probability}
                 onChange={(e) => set("probability", e.target.value)}
-                className="h-2 bg-neutral-800 accent-amber-500"
+                className="h-2 bg-neutral-800 accent-[#e8ff47]"
               />
             </div>
 
@@ -355,7 +355,7 @@ export function OpportunityForm({
             <Button
               type="submit"
               disabled={loading}
-              className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium"
+              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
             >
               {loading ? "Opslaan..." : initial ? "Opslaan" : "Toevoegen"}
             </Button>

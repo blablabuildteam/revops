@@ -88,7 +88,7 @@ function CompanyForm({
             <Button
               type="submit"
               disabled={loading}
-              className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium"
+              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
             >
               {loading ? "Toevoegen..." : "Toevoegen"}
             </Button>
@@ -135,7 +135,7 @@ export default function CompaniesPage() {
         </div>
         <Button
           onClick={() => setFormOpen(true)}
-          className="bg-amber-500 hover:bg-amber-400 text-neutral-950 font-medium gap-2"
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
           Nieuw bedrijf
@@ -201,7 +201,7 @@ export default function CompaniesPage() {
                   </div>
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Pipeline</p>
-                    <p className="text-sm font-mono text-amber-400 font-medium">
+                    <p className="text-sm font-mono text-[#e8ff47] font-medium">
                       {pipeline > 0 ? formatCurrency(pipeline) : "—"}
                     </p>
                   </div>

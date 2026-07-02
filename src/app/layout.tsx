@@ -5,8 +5,8 @@ import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 
 export const metadata: Metadata = {
-  title: "RevOps — Pipeline & Omzet",
-  description: "Revenue operations dashboard voor kansen, projecten en omzet.",
+  title: "blablabuild · RevOps",
+  description: "Revenue operations — pipeline, kansen en omzet. Talk less, build more.",
 };
 
 export default function RootLayout({
