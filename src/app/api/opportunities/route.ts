@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { sql, ensureTables } from "@/lib/db";
 
 export async function GET() {
   try {
+    await ensureTables();
     const { rows } = await sql`
       SELECT
         o.*,
@@ -27,6 +28,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureTables();
     const body = await req.json();
     const {
       name, description, company_id, type, stage, probability,

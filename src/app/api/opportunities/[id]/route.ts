@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
+import { sql, ensureTables } from "@/lib/db";
 
 export async function GET(
   _req: NextRequest,
@@ -7,6 +7,7 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    await ensureTables();
     const { rows } = await sql`
       SELECT o.*, o.expected_value * o.probability / 100 AS weighted_value,
         json_build_object('id', c.id, 'name', c.name, 'industry', c.industry,
@@ -29,6 +30,7 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
+    await ensureTables();
     const body = await req.json();
     const {
       name, description, company_id, type, stage, probability,
@@ -82,6 +84,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
+    await ensureTables();
     await sql`DELETE FROM opportunities WHERE id = ${id}`;
     return NextResponse.json({ ok: true });
   } catch (err) {
