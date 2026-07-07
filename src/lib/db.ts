@@ -50,5 +50,59 @@ export async function ensureTables() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS projects (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'active'
+        CHECK (status IN ('active', 'on_hold', 'completed', 'cancelled')),
+      share_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+      client_name TEXT,
+      client_email TEXT,
+      start_date DATE,
+      end_date DATE,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS milestones (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      position INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'pending'
+        CHECK (status IN ('pending', 'in_progress', 'completed')),
+      due_date DATE,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      milestone_id UUID REFERENCES milestones(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'open'
+        CHECK (status IN ('open', 'in_progress', 'done')),
+      created_by TEXT DEFAULT 'team'
+        CHECK (created_by IN ('team', 'client')),
+      approved BOOLEAN DEFAULT true,
+      assignee TEXT,
+      due_date DATE,
+      position INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
   initialized = true;
 }

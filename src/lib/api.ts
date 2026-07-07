@@ -1,4 +1,4 @@
-import { Company, NewOpportunity, Opportunity } from "./types";
+import { Company, NewOpportunity, Opportunity, Project, Milestone, Task } from "./types";
 
 const base = "/api";
 
@@ -51,4 +51,60 @@ export function createCompany(
   company: Omit<Company, "id" | "created_at" | "updated_at">
 ): Promise<Company> {
   return req("/companies", { method: "POST", body: JSON.stringify(company) });
+}
+
+// Projects
+export function getProjects(): Promise<(Project & { task_count: number; done_count: number; pending_requests: number })[]> {
+  return req("/projects");
+}
+
+export function getProject(id: string): Promise<Project> {
+  return req(`/projects/${id}`);
+}
+
+export function createProject(data: Partial<Project>): Promise<Project> {
+  return req("/projects", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateProject(id: string, data: Partial<Project>): Promise<Project> {
+  return req(`/projects/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return req(`/projects/${id}`, { method: "DELETE" });
+}
+
+// Milestones
+export function createMilestone(projectId: string, data: Partial<Milestone>): Promise<Milestone> {
+  return req(`/projects/${projectId}/milestones`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateMilestone(id: string, data: Partial<Milestone>): Promise<Milestone> {
+  return req(`/milestones/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteMilestone(id: string): Promise<void> {
+  return req(`/milestones/${id}`, { method: "DELETE" });
+}
+
+// Tasks
+export function createTask(projectId: string, data: Partial<Task>): Promise<Task> {
+  return req(`/projects/${projectId}/tasks`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateTask(id: string, data: Partial<Task>): Promise<Task> {
+  return req(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteTask(id: string): Promise<void> {
+  return req(`/tasks/${id}`, { method: "DELETE" });
+}
+
+// Public client view
+export function getPublicProject(token: string): Promise<Project> {
+  return req(`/project/${token}`);
+}
+
+export function submitClientTask(token: string, data: { title: string; description?: string; milestone_id?: string }): Promise<Task> {
+  return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
 }

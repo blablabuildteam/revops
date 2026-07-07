@@ -125,6 +125,77 @@ export const SENTIMENT_LABELS: Record<Sentiment, string> = {
   very_negative: "Zeer negatief",
 };
 
+export type ProjectStatus = "active" | "on_hold" | "completed" | "cancelled";
+export type TaskStatus = "open" | "in_progress" | "done";
+export type MilestoneStatus = "pending" | "in_progress" | "completed";
+
+export interface Project {
+  id: string;
+  opportunity_id?: string;
+  company_id?: string;
+  company?: Company;
+  opportunity?: Opportunity;
+  name: string;
+  description?: string;
+  status: ProjectStatus;
+  share_token: string;
+  client_name?: string;
+  client_email?: string;
+  start_date?: string;
+  end_date?: string;
+  milestones?: Milestone[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Milestone {
+  id: string;
+  project_id: string;
+  name: string;
+  description?: string;
+  position: number;
+  status: MilestoneStatus;
+  due_date?: string;
+  tasks: Task[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Task {
+  id: string;
+  project_id: string;
+  milestone_id?: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  created_by: "team" | "client";
+  approved: boolean;
+  assignee?: string;
+  due_date?: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: "Actief",
+  on_hold: "On Hold",
+  completed: "Afgerond",
+  cancelled: "Geannuleerd",
+};
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  open: "Open",
+  in_progress: "Bezig",
+  done: "Klaar",
+};
+
+export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
+  pending: "Gepland",
+  in_progress: "Bezig",
+  completed: "Afgerond",
+};
+
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   not_sent: "Niet verzonden",
   draft: "Concept",
