@@ -8,6 +8,7 @@ import {
   ListFilter,
   Building2,
   FolderKanban,
+  Euro,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const nav = [
   { href: "/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/opportunities", label: "Kansen", icon: ListFilter },
   { href: "/projects", label: "Projecten", icon: FolderKanban },
+  { href: "/finance", label: "Financieel", icon: Euro },
   { href: "/companies", label: "Bedrijven", icon: Building2 },
 ];
 

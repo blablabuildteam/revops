@@ -104,5 +104,47 @@ export async function ensureTables() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS monthly_revenue (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+      month DATE NOT NULL,
+      amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(company_id, month)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS finance_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS salary_withdrawals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      month DATE NOT NULL,
+      amount NUMERIC(12,2) NOT NULL,
+      person TEXT NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    INSERT INTO finance_settings (key, value) VALUES
+      ('salary_pct', '45'),
+      ('tax_pct', '40'),
+      ('reserve_pct', '10'),
+      ('salary_per_person', '4500'),
+      ('founders', '2')
+    ON CONFLICT (key) DO NOTHING
+  `;
+
   initialized = true;
 }
