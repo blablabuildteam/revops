@@ -38,12 +38,17 @@ export type ActivityType =
   | "proposal"
   | "follow_up";
 
+export type RetainerType = "none" | "fixed" | "commission";
+
 export interface Company {
   id: string;
   name: string;
   industry?: string;
   website?: string;
   country?: string;
+  retainer_type?: RetainerType;
+  retainer_amount?: number;
+  commission_pct?: number;
   created_at: string;
   updated_at: string;
 }

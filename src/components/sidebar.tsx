@@ -11,8 +11,11 @@ import {
   Euro,
   CheckSquare,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/components/theme-provider";
 import { useEffect, useState } from "react";
 
 const nav = [
@@ -30,6 +33,7 @@ interface SessionUser { id: string; email: string; name: string }
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { theme, toggle } = useTheme();
   const [user, setUser] = useState<SessionUser | null>(null);
 
   useEffect(() => {
@@ -89,13 +93,22 @@ export function Sidebar() {
               <p className="text-xs font-medium text-neutral-300 truncate">{user.name}</p>
               <p className="text-[10px] text-neutral-600 truncate">{user.email}</p>
             </div>
-            <button
-              onClick={handleLogout}
-              title="Uitloggen"
-              className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors shrink-0"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={toggle}
+                title={theme === "dark" ? "Licht thema" : "Donker thema"}
+                className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
+              >
+                {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={handleLogout}
+                title="Uitloggen"
+                className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
         <p className="text-[10px] text-neutral-700 tracking-widest uppercase font-mono">

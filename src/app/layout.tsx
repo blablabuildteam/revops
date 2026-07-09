@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "blablabuild · RevOps",
@@ -14,9 +15,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="nl" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="bg-neutral-950 text-neutral-100 antialiased">
-        {children}
+    <html lang="nl" className={`${GeistSans.variable} ${GeistMono.variable} dark`}>
+      <body className="antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

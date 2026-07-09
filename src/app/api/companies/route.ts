@@ -15,10 +15,13 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     await ensureTables();
-    const { name, industry, website, country } = await req.json();
+    const { name, industry, website, country, retainer_type, retainer_amount, commission_pct } = await req.json();
     const { rows } = await sql`
-      INSERT INTO companies (name, industry, website, country)
-      VALUES (${name}, ${industry ?? null}, ${website ?? null}, ${country ?? "NL"})
+      INSERT INTO companies (name, industry, website, country, retainer_type, retainer_amount, commission_pct)
+      VALUES (
+        ${name}, ${industry ?? null}, ${website ?? null}, ${country ?? "NL"},
+        ${retainer_type ?? "none"}, ${retainer_amount ?? 0}, ${commission_pct ?? 0}
+      )
       RETURNING *
     `;
     return NextResponse.json(rows[0], { status: 201 });

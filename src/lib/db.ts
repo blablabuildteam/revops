@@ -2,9 +2,35 @@ import { sql } from "@vercel/postgres";
 export { sql };
 
 let initialized = false;
+let initPromise: Promise<void> | null = null;
 
 export async function ensureTables() {
+  // Single flight: if already running, wait for the same promise
   if (initialized) return;
+  if (initPromise) return initPromise;
+  initPromise = _init();
+  return initPromise;
+}
+
+async function _init() {
+  // Check if tables already exist (fast path for warm instances after first boot)
+  try {
+    const { rows } = await sql`
+      SELECT COUNT(*) AS c FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'users'
+    `;
+    if (Number(rows[0].c) > 0) {
+      // Tables exist — still run ALTER TABLE for any new columns, but skip CREATE
+      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
+      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
+      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
+      await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
+      initialized = true;
+      return;
+    }
+  } catch {
+    // Fall through to full init
+  }
 
   await sql`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`;
 
@@ -15,10 +41,19 @@ export async function ensureTables() {
       industry TEXT,
       website TEXT,
       country TEXT DEFAULT 'NL',
+      retainer_type TEXT DEFAULT 'none'
+        CHECK (retainer_type IN ('none', 'fixed', 'commission')),
+      retainer_amount NUMERIC(12,2) DEFAULT 0,
+      commission_pct NUMERIC(5,2) DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
   `;
+
+  // Add retainer columns to existing companies tables (safe, idempotent)
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS opportunities (

@@ -48,7 +48,8 @@ export function getCompanies(): Promise<Company[]> {
 }
 
 export function createCompany(
-  company: Omit<Company, "id" | "created_at" | "updated_at">
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  company: any
 ): Promise<Company> {
   return req("/companies", { method: "POST", body: JSON.stringify(company) });
 }
