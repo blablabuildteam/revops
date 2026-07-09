@@ -15,7 +15,18 @@ html.light {
   --color-neutral-700: #d4d4d4;
   --color-neutral-800: #e5e5e5;
   --color-neutral-900: #f5f5f5;
-  --color-neutral-950: #ffffff;
+  --color-neutral-950: #fafafa;
+}
+
+/* neutral-950 is also used as dark text on lime/accent buttons —            */
+/* override the text utility so it stays dark in light mode.                 */
+html.light .text-neutral-950 {
+  color: #0a0a0a;
+}
+
+/* Active nav bg tint needs to be slightly more visible on white             */
+html.light .bg-\[\#e8ff47\]\/10 {
+  background-color: rgba(232, 255, 71, 0.2);
 }
 
 :root {
