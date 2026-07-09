@@ -62,7 +62,9 @@ export async function GET(req: NextRequest) {
   // Pipeline forecast: won active + weighted pipeline per month
   const { rows: pipeline } = await sql`
     SELECT
-      stage, expected_value, probability, weighted_value, close_date
+      stage, expected_value, probability,
+      (expected_value * probability / 100) AS weighted_value,
+      close_date
     FROM opportunities
     WHERE stage NOT IN ('lost', 'on_hold')
     ORDER BY close_date
