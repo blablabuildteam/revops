@@ -18,7 +18,8 @@ export async function middleware(req: NextRequest) {
     PUBLIC.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/project/") || // public client task submission
     pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/api/setup-users");
+    pathname.startsWith("/api/setup-users") ||
+    pathname.startsWith("/api/seed-sample-data");
 
   const token = req.cookies.get(COOKIE)?.value;
 

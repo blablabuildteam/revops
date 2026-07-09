@@ -3,30 +3,35 @@ import { sql, ensureTables } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  await ensureTables();
-  const { searchParams } = req.nextUrl;
-  const assignee = searchParams.get("assignee");
-  const status = searchParams.get("status");
+  try {
+    await ensureTables();
+    const { searchParams } = req.nextUrl;
+    const assignee = searchParams.get("assignee") || null;
+    const status = searchParams.get("status") || null;
 
-  const { rows } = await sql`
-    SELECT
-      t.*,
-      u.name AS assignee_name, u.email AS assignee_email,
-      c.name AS company_name,
-      p.name AS project_name
-    FROM todos t
-    LEFT JOIN users u ON u.id = t.assignee_id
-    LEFT JOIN companies c ON c.id = t.company_id
-    LEFT JOIN projects p ON p.id = t.project_id
-    WHERE
-      (${assignee ?? null} IS NULL OR u.id::text = ${assignee ?? null})
-      AND (${status ?? null} IS NULL OR t.status = ${status ?? null})
-    ORDER BY
-      CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
-      t.due_date ASC NULLS LAST,
-      t.created_at DESC
-  `;
-  return NextResponse.json(rows);
+    const { rows } = await sql`
+      SELECT
+        t.*,
+        u.name AS assignee_name, u.email AS assignee_email,
+        c.name AS company_name,
+        p.name AS project_name
+      FROM todos t
+      LEFT JOIN users u ON u.id = t.assignee_id
+      LEFT JOIN companies c ON c.id = t.company_id
+      LEFT JOIN projects p ON p.id = t.project_id
+      WHERE
+        (COALESCE(${assignee}, '') = '' OR u.id::text = ${assignee})
+        AND (COALESCE(${status}, '') = '' OR t.status = ${status})
+      ORDER BY
+        CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        t.due_date ASC NULLS LAST,
+        t.created_at DESC
+    `;
+    return NextResponse.json(rows);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {

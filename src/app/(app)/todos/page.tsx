@@ -279,7 +279,7 @@ export default function TodosPage() {
     if (filterStatus !== "all") params.set("status", filterStatus === "active" ? "" : filterStatus);
 
     const [todoData, userData, companyData, projectData, meData] = await Promise.all([
-      fetch(`/api/todos?${params}`).then((r) => r.json()),
+      fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/users").then((r) => r.json()).catch(() => []),
       getCompanies(),
       getProjects(),
