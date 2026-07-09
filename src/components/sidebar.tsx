@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Columns3,
@@ -9,20 +9,41 @@ import {
   Building2,
   FolderKanban,
   Euro,
+  CheckSquare,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/opportunities", label: "Kansen", icon: ListFilter },
   { href: "/projects", label: "Projecten", icon: FolderKanban },
+  { href: "/todos", label: "Taken", icon: CheckSquare },
   { href: "/finance", label: "Financieel", icon: Euro },
   { href: "/companies", label: "Bedrijven", icon: Building2 },
 ];
 
+interface SessionUser { id: string; email: string; name: string }
+
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setUser(d.user))
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside className="w-56 shrink-0 border-r border-neutral-800 flex flex-col bg-neutral-950">
@@ -60,7 +81,23 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="px-5 py-4 border-t border-neutral-800">
+      {/* User + logout */}
+      <div className="px-4 py-4 border-t border-neutral-800 space-y-3">
+        {user && (
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-neutral-300 truncate">{user.name}</p>
+              <p className="text-[10px] text-neutral-600 truncate">{user.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Uitloggen"
+              className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <p className="text-[10px] text-neutral-700 tracking-widest uppercase font-mono">
           Talk less. Build more.
         </p>

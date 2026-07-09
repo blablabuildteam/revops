@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
-import { Sidebar } from "@/components/sidebar";
 
 export const metadata: Metadata = {
   title: "blablabuild · RevOps",
@@ -17,10 +16,7 @@ export default function RootLayout({
   return (
     <html lang="nl" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="bg-neutral-950 text-neutral-100 antialiased">
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">{children}</main>
-        </div>
+        {children}
       </body>
     </html>
   );

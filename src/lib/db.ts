@@ -105,6 +105,35 @@ export async function ensureTables() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS todos (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'open'
+        CHECK (status IN ('open', 'in_progress', 'done')),
+      priority TEXT DEFAULT 'medium'
+        CHECK (priority IN ('low', 'medium', 'high')),
+      assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+      due_date DATE,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS monthly_revenue (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
