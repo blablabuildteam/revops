@@ -24,9 +24,14 @@ html.light .text-neutral-950 {
   color: #0a0a0a;
 }
 
-/* Active nav bg tint needs to be slightly more visible on white             */
+/* Lime accent text → dark olive in light mode for legibility                */
+html.light .text-\[\#e8ff47\] {
+  color: #5a6600;
+}
+
+/* Active nav bg tint: slightly stronger on white                            */
 html.light .bg-\[\#e8ff47\]\/10 {
-  background-color: rgba(232, 255, 71, 0.2);
+  background-color: rgba(90, 102, 0, 0.08);
 }
 
 :root {
