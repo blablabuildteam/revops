@@ -2,13 +2,12 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Plus,
   Search,
   Trash2,
   Pencil,
-  ExternalLink,
   ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,28 +19,84 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { StageBadge } from "@/components/stage-badge";
-import { SentimentIndicator } from "@/components/sentiment-indicator";
-import { ProposalBadge } from "@/components/proposal-badge";
 import { OpportunityForm } from "@/components/opportunity-form";
-import { getOpportunities, deleteOpportunity } from "@/lib/api";
+import { getOpportunities, deleteOpportunity, updateOpportunity } from "@/lib/api";
 import {
   Opportunity,
   Stage,
   STAGE_LABELS,
+  STAGE_ORDER,
   TYPE_LABELS,
 } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-type SortKey = "name" | "expected_value" | "probability" | "close_date" | "updated_at";
+type SortKey = "name" | "stage" | "expected_value" | "probability" | "updated_at";
+
+const stageStyles: Record<Stage, string> = {
+  prospect: "bg-neutral-800 text-neutral-300",
+  qualified: "bg-blue-950 text-blue-300",
+  proposal: "bg-violet-950 text-violet-300",
+  negotiation: "bg-[#e8ff47]/10 text-[#e8ff47]",
+  won: "bg-emerald-950 text-emerald-300",
+  lost: "bg-red-950 text-red-400",
+  on_hold: "bg-neutral-800 text-neutral-500",
+};
+
+const selectTriggerClass =
+  "h-7 border-0 bg-transparent shadow-none px-1.5 text-xs focus:ring-0";
+
+function InlineNumber({
+  value,
+  onSave,
+  className,
+  placeholder = "0",
+}: {
+  value: number;
+  onSave: (value: number) => void;
+  className?: string;
+  placeholder?: string;
+}) {
+  const [local, setLocal] = useState(String(value || ""));
+
+  useEffect(() => {
+    setLocal(String(value ?? ""));
+  }, [value]);
+
+  function commit() {
+    const next = parseFloat(local) || 0;
+    if (next !== value) onSave(next);
+  }
+
+  return (
+    <input
+      type="number"
+      min={0}
+      value={local}
+      placeholder={placeholder}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-0.5 text-xs font-mono outline-none transition-colors",
+        className
+      )}
+    />
+  );
+}
 
 export default function OpportunitiesPage() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<Stage | "all">("all");
-  const [sortKey, setSortKey] = useState<SortKey>("updated_at");
-  const [sortAsc, setSortAsc] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("stage");
+  const [sortAsc, setSortAsc] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingOpp, setEditingOpp] = useState<Opportunity | null>(null);
 
@@ -54,6 +109,17 @@ export default function OpportunitiesPage() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  const patchOpp = useCallback(async (id: string, updates: Partial<Opportunity>) => {
+    const updated = await updateOpportunity(id, updates);
+    setOpps((prev) =>
+      prev.map((o) => {
+        if (o.id !== id) return o;
+        const company = updated.company?.name ? updated.company : o.company;
+        return { ...o, ...updated, company };
+      })
+    );
   }, []);
 
   const filtered = useMemo(() => {
@@ -69,6 +135,12 @@ export default function OpportunitiesPage() {
         return matchSearch && matchStage;
       })
       .sort((a, b) => {
+        if (sortKey === "stage") {
+          const cmp =
+            STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
+          return sortAsc ? cmp : -cmp;
+        }
+
         let av: string | number = a[sortKey] ?? "";
         let bv: string | number = b[sortKey] ?? "";
         if (typeof av === "string") av = av.toLowerCase();
@@ -112,7 +184,7 @@ export default function OpportunitiesPage() {
           <h1 className="text-xl font-semibold text-neutral-100">Kansen</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {filtered.length} kansen ·{" "}
-            <span className="font-mono">{formatCurrency(totalExpected)}</span> verwacht ·{" "}
+            <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order ·{" "}
             <span className="font-mono text-[#e8ff47]">
               {formatCurrency(totalWeighted)}
             </span>{" "}
@@ -163,7 +235,17 @@ export default function OpportunitiesPage() {
       {/* Table */}
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col />
+              <col className="w-[90px]" />
+              <col className="w-[72px]" />
+              <col className="w-[118px]" />
+              <col className="w-[76px]" />
+              <col className="w-[84px]" />
+              <col className="w-[128px]" />
+              <col className="w-[68px]" />
+            </colgroup>
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
                 <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
@@ -171,47 +253,38 @@ export default function OpportunitiesPage() {
                     Naam <SortBtn col="name" />
                   </div>
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
                   Bedrijf
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-1.5 py-2.5 text-xs text-neutral-500 font-medium">
                   Type
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  Fase
-                </th>
-                <th className="text-right px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  <div className="flex items-center justify-end gap-1.5">
-                    Verwacht <SortBtn col="expected_value" />
+                <th className="text-left px-1.5 py-2.5 text-xs text-neutral-500 font-medium">
+                  <div className="flex items-center gap-1">
+                    Fase <SortBtn col="stage" />
                   </div>
                 </th>
-                <th className="text-right px-4 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1">
+                    Deal Order <SortBtn col="expected_value" />
+                  </div>
+                </th>
+                <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   Gerealiseerd
                 </th>
-                <th className="text-right px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  <div className="flex items-center justify-end gap-1.5">
+                <th className="text-right px-2 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                  <div className="flex items-center justify-end gap-1">
                     Kans % <SortBtn col="probability" />
                   </div>
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  Voorstel
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  Sentiment
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
-                  <div className="flex items-center gap-1.5">
-                    Sluitdatum <SortBtn col="close_date" />
-                  </div>
-                </th>
-                <th className="px-4 py-2.5" />
+                <th className="px-1 py-2.5 w-[68px]" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/60">
               {loading
                 ? [...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      {[...Array(11)].map((_, j) => (
+                      {[...Array(8)].map((_, j) => (
                         <td key={j} className="px-4 py-3">
                           <div className="h-4 bg-neutral-800 rounded animate-pulse" />
                         </td>
@@ -223,77 +296,77 @@ export default function OpportunitiesPage() {
                       key={opp.id}
                       className="hover:bg-neutral-900/50 transition-colors"
                     >
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="text-neutral-200 font-medium truncate max-w-48">
-                            {opp.name}
-                          </p>
-                          {opp.notes && (
-                            <p className="text-xs text-neutral-600 truncate max-w-48">
-                              {opp.notes}
-                            </p>
-                          )}
-                        </div>
+                      <td className="px-4 py-3 min-w-0">
+                        <p className="text-neutral-200 font-medium truncate">
+                          {opp.name}
+                        </p>
                       </td>
-                      <td className="px-4 py-3 text-neutral-400 text-xs">
+                      <td className="px-2 py-3 text-neutral-400 text-xs truncate">
                         {opp.company?.name || "—"}
                       </td>
-                      <td className="px-4 py-3 text-neutral-500 text-xs font-mono">
+                      <td className="px-1.5 py-3 text-neutral-500 text-xs font-mono truncate">
                         {TYPE_LABELS[opp.type]}
                       </td>
-                      <td className="px-4 py-3">
-                        <StageBadge stage={opp.stage} />
+                      <td className="px-1.5 py-3" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={opp.stage}
+                          onValueChange={(v) =>
+                            patchOpp(opp.id, { stage: v as Stage })
+                          }
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              selectTriggerClass,
+                              "w-fit rounded font-medium font-mono",
+                              stageStyles[opp.stage]
+                            )}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-neutral-800 border-neutral-700">
+                            {Object.entries(STAGE_LABELS).map(([k, v]) => (
+                              <SelectItem key={k} value={k} className="text-neutral-100">
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-neutral-300 text-xs">
-                        {formatCurrency(opp.expected_value)}
+                      <td className="px-1.5 py-3 text-right">
+                        <InlineNumber
+                          value={Number(opp.expected_value)}
+                          onSave={(v) => patchOpp(opp.id, { expected_value: v })}
+                          className="text-right text-neutral-300 w-16 ml-auto"
+                        />
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
-                        {opp.actual_value > 0 ? (
-                          <span className="text-emerald-400">
-                            {formatCurrency(opp.actual_value)}
-                          </span>
-                        ) : (
-                          <span className="text-neutral-700">—</span>
-                        )}
+                      <td className="px-1.5 py-3 text-right">
+                        <InlineNumber
+                          value={Number(opp.actual_value)}
+                          onSave={(v) => patchOpp(opp.id, { actual_value: v })}
+                          className="text-right text-emerald-400 w-16 ml-auto"
+                        />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-12 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1 min-w-0">
+                          <div className="w-7 h-1.5 bg-neutral-800 rounded-full overflow-hidden shrink-0">
                             <div
                               className="h-full bg-[#e8ff47]/70 rounded-full"
                               style={{ width: `${opp.probability}%` }}
                             />
                           </div>
-                          <span className="text-xs font-mono text-neutral-400 w-8">
-                            {opp.probability}%
-                          </span>
+                          <InlineNumber
+                            value={opp.probability}
+                            onSave={(v) =>
+                              patchOpp(opp.id, {
+                                probability: Math.min(100, Math.max(0, v)),
+                              })
+                            }
+                            className="text-right text-neutral-400 w-9 shrink-0"
+                          />
+                          <span className="text-xs text-neutral-600 shrink-0">%</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <ProposalBadge status={opp.proposal_status} />
-                          {opp.proposal_url && (
-                            <a
-                              href={opp.proposal_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-neutral-600 hover:text-neutral-400 transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <SentimentIndicator
-                          sentiment={opp.sentiment}
-                          showLabel
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-neutral-500">
-                        {formatDate(opp.close_date)}
-                      </td>
-                      <td className="px-4 py-3">
+                      <td className="px-1 py-3">
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => {

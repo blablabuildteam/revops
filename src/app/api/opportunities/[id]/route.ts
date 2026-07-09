@@ -32,46 +32,60 @@ export async function PUT(
   try {
     await ensureTables();
     const body = await req.json();
-    const {
-      name, description, company_id, type, stage, probability,
-      expected_value, actual_value, currency, sentiment,
-      proposal_status, proposal_url, owner, close_date, notes, tags,
-    } = body;
 
-    const { rows } = await sql`
+    const { rows: existing } = await sql`
+      SELECT * FROM opportunities WHERE id = ${id}
+    `;
+    if (!existing[0]) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const current = existing[0];
+    const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+    const val = <T>(key: string, fallback: T): T =>
+      has(key) ? (body[key] as T) ?? null : fallback;
+
+    await sql`
       UPDATE opportunities SET
-        name = COALESCE(${name ?? null}, name),
-        description = ${description ?? null},
-        company_id = ${company_id ?? null},
-        type = COALESCE(${type ?? null}, type),
-        stage = COALESCE(${stage ?? null}, stage),
-        probability = COALESCE(${probability ?? null}, probability),
-        expected_value = COALESCE(${expected_value ?? null}, expected_value),
-        actual_value = COALESCE(${actual_value ?? null}, actual_value),
-        currency = COALESCE(${currency ?? null}, currency),
-        sentiment = COALESCE(${sentiment ?? null}, sentiment),
-        proposal_status = ${proposal_status ?? null},
-        proposal_url = ${proposal_url ?? null},
-        owner = ${owner ?? null},
-        close_date = ${close_date ?? null},
-        notes = ${notes ?? null},
-        tags = ${tags ?? null},
+        name = ${val("name", current.name)},
+        description = ${val("description", current.description)},
+        company_id = ${val("company_id", current.company_id)},
+        type = ${val("type", current.type)},
+        stage = ${val("stage", current.stage)},
+        probability = ${val("probability", current.probability)},
+        expected_value = ${val("expected_value", current.expected_value)},
+        actual_value = ${val("actual_value", current.actual_value)},
+        currency = ${val("currency", current.currency)},
+        sentiment = ${val("sentiment", current.sentiment)},
+        proposal_status = ${val("proposal_status", current.proposal_status)},
+        proposal_url = ${val("proposal_url", current.proposal_url)},
+        owner = ${val("owner", current.owner)},
+        close_date = ${val("close_date", current.close_date)},
+        notes = ${val("notes", current.notes)},
+        tags = ${val("tags", current.tags)},
         updated_at = now()
       WHERE id = ${id}
-      RETURNING *, expected_value * probability / 100 AS weighted_value
+    `;
+
+    const { rows } = await sql`
+      SELECT
+        o.*,
+        o.expected_value * o.probability / 100 AS weighted_value,
+        json_build_object(
+          'id', c.id,
+          'name', c.name,
+          'industry', c.industry,
+          'website', c.website,
+          'country', c.country
+        ) AS company
+      FROM opportunities o
+      LEFT JOIN companies c ON c.id = o.company_id
+      WHERE o.id = ${id}
     `;
 
     if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const opp = rows[0];
-    if (opp.company_id) {
-      const { rows: companyRows } = await sql`SELECT * FROM companies WHERE id = ${opp.company_id}`;
-      opp.company = companyRows[0] ?? null;
-    } else {
-      opp.company = null;
-    }
-
-    return NextResponse.json(opp);
+    return NextResponse.json(rows[0]);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
