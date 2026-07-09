@@ -24,6 +24,7 @@ import { getOpportunities, deleteOpportunity, updateOpportunity } from "@/lib/ap
 import {
   Opportunity,
   Stage,
+  OpportunityType,
   STAGE_LABELS,
   STAGE_ORDER,
   TYPE_LABELS,
@@ -83,7 +84,7 @@ function InlineNumber({
       }}
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        "w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-0.5 text-xs font-mono outline-none transition-colors",
+        "w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-0.5 text-xs font-mono outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
         className
       )}
     />
@@ -237,14 +238,14 @@ export default function OpportunitiesPage() {
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col />
-              <col className="w-[90px]" />
-              <col className="w-[72px]" />
-              <col className="w-[118px]" />
-              <col className="w-[76px]" />
-              <col className="w-[84px]" />
-              <col className="w-[128px]" />
-              <col className="w-[68px]" />
+              <col className="w-[24%]" />
+              <col className="w-[10%]" />
+              <col className="w-[7%]" />
+              <col className="w-[12%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[20%]" />
+              <col className="w-[9%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
@@ -272,12 +273,12 @@ export default function OpportunitiesPage() {
                 <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   Gerealiseerd
                 </th>
-                <th className="text-right px-2 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  <div className="flex items-center justify-end gap-1">
+                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                  <div className="flex items-center gap-1">
                     Kans % <SortBtn col="probability" />
                   </div>
                 </th>
-                <th className="px-1 py-2.5 w-[68px]" />
+                <th className="px-1 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/60">
@@ -304,8 +305,29 @@ export default function OpportunitiesPage() {
                       <td className="px-2 py-3 text-neutral-400 text-xs truncate">
                         {opp.company?.name || "—"}
                       </td>
-                      <td className="px-1.5 py-3 text-neutral-500 text-xs font-mono truncate">
-                        {TYPE_LABELS[opp.type]}
+                      <td className="px-1.5 py-3" onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={opp.type}
+                          onValueChange={(v) =>
+                            patchOpp(opp.id, { type: v as OpportunityType })
+                          }
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              selectTriggerClass,
+                              "w-fit rounded font-mono text-neutral-500"
+                            )}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-neutral-800 border-neutral-700">
+                            {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                              <SelectItem key={k} value={k} className="text-neutral-100">
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td className="px-1.5 py-3" onClick={(e) => e.stopPropagation()}>
                         <Select
@@ -347,8 +369,8 @@ export default function OpportunitiesPage() {
                         />
                       </td>
                       <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1 min-w-0">
-                          <div className="w-7 h-1.5 bg-neutral-800 rounded-full overflow-hidden shrink-0">
+                        <div className="flex items-center gap-2 w-full min-w-[120px]">
+                          <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden min-w-[40px]">
                             <div
                               className="h-full bg-[#e8ff47]/70 rounded-full"
                               style={{ width: `${opp.probability}%` }}
@@ -361,13 +383,13 @@ export default function OpportunitiesPage() {
                                 probability: Math.min(100, Math.max(0, v)),
                               })
                             }
-                            className="text-right text-neutral-400 w-9 shrink-0"
+                            className="text-right text-neutral-300 w-12 shrink-0"
                           />
-                          <span className="text-xs text-neutral-600 shrink-0">%</span>
+                          <span className="text-xs text-neutral-500 shrink-0">%</span>
                         </div>
                       </td>
                       <td className="px-1 py-3">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center justify-end gap-0.5">
                           <button
                             onClick={() => {
                               setEditingOpp(opp);
