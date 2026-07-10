@@ -46,7 +46,49 @@ const stageStyles: Record<Stage, string> = {
 };
 
 const selectTriggerClass =
-  "h-7 border-0 bg-transparent shadow-none px-1.5 text-xs focus:ring-0";
+  "h-9 border-0 bg-transparent shadow-none px-2 text-sm focus:ring-0";
+
+function InlineProbability({
+  value,
+  onSave,
+}: {
+  value: number;
+  onSave: (value: number) => void;
+}) {
+  const [local, setLocal] = useState(value);
+
+  useEffect(() => {
+    setLocal(value);
+  }, [value]);
+
+  function commit(next: number) {
+    const clamped = Math.min(100, Math.max(0, next));
+    if (clamped !== value) onSave(clamped);
+  }
+
+  return (
+    <div
+      className="flex items-center gap-2 w-full min-w-[140px]"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={local}
+        onChange={(e) => setLocal(Number(e.target.value))}
+        onPointerUp={() => commit(local)}
+        onBlur={() => commit(local)}
+        className="flex-1 h-2.5 min-w-[60px] cursor-pointer accent-[#e8ff47]"
+      />
+      <span className="text-sm text-neutral-300 font-mono w-8 text-right shrink-0">
+        {local}
+      </span>
+      <span className="text-sm text-neutral-500 shrink-0">%</span>
+    </div>
+  );
+}
 
 function InlineNumber({
   value,
@@ -85,7 +127,7 @@ function InlineNumber({
       }}
       onClick={(e) => e.stopPropagation()}
       className={cn(
-        "w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-0.5 text-xs font-mono outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+        "w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-2 py-1 text-sm font-mono outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
         className
       )}
     />
@@ -250,36 +292,36 @@ export default function OpportunitiesPage() {
             </colgroup>
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
-                <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-4 py-3.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1.5">
                     Name <SortBtn col="name" />
                   </div>
                 </th>
-                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   Company
                 </th>
-                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   Type
                 </th>
-                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1">
                     Stage <SortBtn col="stage" />
                   </div>
                 </th>
-                <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1">
                     Deal Order <SortBtn col="expected_value" />
                   </div>
                 </th>
-                <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  Realized
+                <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                  Committed
                 </th>
-                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     Probability % <SortBtn col="probability" />
                   </div>
                 </th>
-                <th className="px-1 py-2.5" />
+                <th className="px-1 py-3.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/60">
@@ -287,8 +329,8 @@ export default function OpportunitiesPage() {
                 ? [...Array(5)].map((_, i) => (
                     <tr key={i}>
                       {[...Array(8)].map((_, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-4 bg-neutral-800 rounded animate-pulse" />
+                        <td key={j} className="px-4 py-4">
+                          <div className="h-5 bg-neutral-800 rounded animate-pulse" />
                         </td>
                       ))}
                     </tr>
@@ -298,15 +340,15 @@ export default function OpportunitiesPage() {
                       key={opp.id}
                       className="hover:bg-neutral-900/50 transition-colors"
                     >
-                      <td className="px-4 py-3 min-w-0">
-                        <p className="text-neutral-200 font-medium truncate">
+                      <td className="px-4 py-4 min-w-0">
+                        <p className="text-neutral-200 font-medium truncate text-sm">
                           {opp.name}
                         </p>
                       </td>
-                      <td className="px-2 py-3 text-neutral-400 text-xs truncate">
+                      <td className="px-2 py-4 text-neutral-400 text-sm truncate">
                         {opp.company?.name || "—"}
                       </td>
-                      <td className="px-2 py-3 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <Select
                           value={normalizeOpportunityType(opp.type)}
                           onValueChange={(v) =>
@@ -332,7 +374,7 @@ export default function OpportunitiesPage() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-3 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <Select
                           value={opp.stage}
                           onValueChange={(v) =>
@@ -357,56 +399,42 @@ export default function OpportunitiesPage() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-1.5 py-3 text-right">
+                      <td className="px-1.5 py-4 text-right">
                         <InlineNumber
                           value={Number(opp.expected_value)}
                           onSave={(v) => patchOpp(opp.id, { expected_value: v })}
                           className="text-right text-neutral-300 w-16 ml-auto"
                         />
                       </td>
-                      <td className="px-1.5 py-3 text-right">
+                      <td className="px-1.5 py-4 text-right">
                         <InlineNumber
                           value={Number(opp.actual_value)}
                           onSave={(v) => patchOpp(opp.id, { actual_value: v })}
                           className="text-right text-emerald-400 w-16 ml-auto"
                         />
                       </td>
-                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-2 w-full min-w-[120px]">
-                          <div className="flex-1 h-2 bg-neutral-800 rounded-full overflow-hidden min-w-[40px]">
-                            <div
-                              className="h-full bg-[#e8ff47]/70 rounded-full"
-                              style={{ width: `${opp.probability}%` }}
-                            />
-                          </div>
-                          <InlineNumber
-                            value={opp.probability}
-                            onSave={(v) =>
-                              patchOpp(opp.id, {
-                                probability: Math.min(100, Math.max(0, v)),
-                              })
-                            }
-                            className="text-right text-neutral-300 w-12 shrink-0"
-                          />
-                          <span className="text-xs text-neutral-500 shrink-0">%</span>
-                        </div>
+                      <td className="px-2 py-4" onClick={(e) => e.stopPropagation()}>
+                        <InlineProbability
+                          value={opp.probability}
+                          onSave={(v) => patchOpp(opp.id, { probability: v })}
+                        />
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-4">
                         <div className="flex items-center justify-end gap-0.5">
                           <button
                             onClick={() => {
                               setEditingOpp(opp);
                               setFormOpen(true);
                             }}
-                            className="p-1 text-neutral-600 hover:text-neutral-300 transition-colors rounded hover:bg-neutral-800"
+                            className="p-1.5 text-neutral-600 hover:text-neutral-300 transition-colors rounded hover:bg-neutral-800"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(opp.id)}
-                            className="p-1 text-neutral-700 hover:text-red-400 transition-colors rounded hover:bg-neutral-800"
+                            className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors rounded hover:bg-neutral-800"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>

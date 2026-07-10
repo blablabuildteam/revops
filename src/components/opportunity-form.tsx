@@ -54,7 +54,7 @@ const defaultForm: NewOpportunity = {
   tags: [],
 };
 
-const fc = "bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600";
+const fc = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm placeholder:text-neutral-600";
 
 export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityFormProps) {
   const [form, setForm] = useState<NewOpportunity>(defaultForm);
@@ -145,7 +145,6 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
         expected_value: Number(form.expected_value),
         actual_value: Number(form.actual_value),
         currency: form.currency,
-        owner: form.owner || undefined,
         notes: form.notes || undefined,
         ...(initial ? {} : { sentiment: form.sentiment, proposal_status: form.proposal_status }),
       };
@@ -259,7 +258,7 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
                 </div>
               </div>
 
-              {/* Deal Order + Realized */}
+              {/* Deal Order + Committed */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Deal Order (€)</Label>
@@ -271,7 +270,7 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Realized (€)</Label>
+                  <Label className="text-neutral-400 text-xs">Committed (€)</Label>
                   <Input
                     type="number" min="0"
                     value={form.actual_value}
@@ -284,25 +283,14 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
 
             {/* RIGHT COLUMN */}
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5 min-w-0">
-                  <Label className="text-neutral-400 text-xs">Probability — {form.probability}%</Label>
-                  <Input
-                    type="range" min="0" max="100" step="5"
-                    value={form.probability}
-                    onChange={(e) => set("probability", e.target.value)}
-                    className="h-2 bg-neutral-800 accent-[#e8ff47] mt-2 w-full"
-                  />
-                </div>
-                <div className="space-y-1.5 min-w-0">
-                  <Label className="text-neutral-400 text-xs">Owner</Label>
-                  <Input
-                    value={form.owner || ""}
-                    onChange={(e) => set("owner", e.target.value)}
-                    placeholder="e.g. Kevin"
-                    className={`${fc} w-full`}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-neutral-400 text-xs">Probability — {form.probability}%</Label>
+                <Input
+                  type="range" min="0" max="100" step="5"
+                  value={form.probability}
+                  onChange={(e) => set("probability", e.target.value)}
+                  className="h-2 bg-neutral-800 accent-[#e8ff47] mt-2 w-full"
+                />
               </div>
 
               {/* Notes */}
