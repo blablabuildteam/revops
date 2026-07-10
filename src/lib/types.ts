@@ -290,3 +290,90 @@ export function dealContractValue(
 export function dealOutstanding(deal: Pick<FinanceDeal, "deal_type" | "total_deal_value" | "monthly_fee" | "monthly_revshare" | "start_date" | "end_date" | "amount_paid">): number {
   return Math.max(0, dealContractValue(deal) - (Number(deal.amount_paid) || 0));
 }
+
+const SALARY_MONTHLY = 10890;
+
+export function expectedRevenueForMonth(deals: FinanceDeal[], month: string): number {
+  let total = 0;
+  for (const deal of deals) {
+    if (deal.deal_type === "project") {
+      for (const entry of deal.payment_schedule ?? []) {
+        if (entry.month === month) {
+          total += ((Number(entry.percentage) || 0) / 100) * (Number(deal.total_deal_value) || 0);
+        }
+      }
+    } else if (deal.deal_type === "retainer") {
+      if (!deal.start_date || !deal.end_date) continue;
+      const start = deal.start_date.slice(0, 7);
+      const end = deal.end_date.slice(0, 7);
+      if (month >= start && month <= end) {
+        total += (Number(deal.monthly_fee) || 0) + (Number(deal.monthly_revshare) || 0);
+      }
+    }
+  }
+  return total;
+}
+
+export function actualRevenueForMonth(deals: FinanceDeal[], month: string): number {
+  let total = 0;
+  for (const deal of deals) {
+    for (const payment of deal.payments ?? []) {
+      if (payment.date?.slice(0, 7) === month) {
+        total += Number(payment.amount) || 0;
+      }
+    }
+  }
+  return total;
+}
+
+export function monthlyInsights(deals: FinanceDeal[], month: string) {
+  const expected = expectedRevenueForMonth(deals, month);
+  const actual = actualRevenueForMonth(deals, month);
+  const salaryRemaining = SALARY_MONTHLY - actual;
+  return { expected, actual, salaryRemaining, salaryTarget: SALARY_MONTHLY };
+}
+
+export function forecastRevenueForMonth(opportunities: Opportunity[], month: string): number {
+  let total = 0;
+  for (const opp of opportunities) {
+    if (opp.stage === "won" || opp.stage === "lost") continue;
+    if (!opp.start_date) continue;
+    const startMonth = opp.start_date.slice(0, 7);
+    const weighted = (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100);
+    if (opp.type === "retainer") {
+      const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;
+      if (month >= startMonth && (!endMonth || month <= endMonth)) {
+        const startDate = new Date(opp.start_date);
+        const endDate = opp.end_date ? new Date(opp.end_date) : new Date(startDate.getFullYear(), startDate.getMonth() + 12, 1);
+        const months = Math.max(1,
+          (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1
+        );
+        total += (weighted / months);
+      }
+    } else {
+      if (month === startMonth) {
+        total += weighted;
+      }
+    }
+  }
+  return total;
+}
+
+export function buildInsightSeries(
+  deals: FinanceDeal[],
+  opportunities: Opportunity[],
+  startMonth: string,
+  count: number,
+) {
+  const series: { month: string; expected: number; actual: number; forecast: number; netAfterSalary: number }[] = [];
+  const [startY, startM] = startMonth.split("-").map(Number);
+  for (let i = 0; i < count; i++) {
+    const d = new Date(startY, startM - 1 + i, 1);
+    const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const expected = expectedRevenueForMonth(deals, m);
+    const actual = actualRevenueForMonth(deals, m);
+    const forecast = forecastRevenueForMonth(opportunities, m);
+    series.push({ month: m, expected, actual, forecast, netAfterSalary: expected - SALARY_MONTHLY });
+  }
+  return series;
+}

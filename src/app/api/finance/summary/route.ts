@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const salaryPct = cfg.salary_pct ?? 45;
   const taxPct = cfg.tax_pct ?? 40;
   const reservePct = cfg.reserve_pct ?? 10;
-  const salaryPerPerson = cfg.salary_per_person ?? 4500;
+  const salaryPerPerson = cfg.salary_per_person ?? 5445;
   const founders = cfg.founders ?? 2;
   const totalSalaryTarget = salaryPerPerson * founders;
 

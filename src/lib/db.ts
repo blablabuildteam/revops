@@ -265,7 +265,7 @@ async function _init() {
       ('salary_pct', '45'),
       ('tax_pct', '40'),
       ('reserve_pct', '10'),
-      ('salary_per_person', '4500'),
+      ('salary_per_person', '5445'),
       ('founders', '2')
     ON CONFLICT (key) DO NOTHING
   `;

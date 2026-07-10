@@ -23,18 +23,32 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, toDateInputValue } from "@/lib/format";
-import { getFinanceDeals, updateFinanceDeal } from "@/lib/api";
+import { DealActivationWizard } from "@/components/deal-activation-wizard";
+import { getFinanceDeals, updateFinanceDeal, getOpportunities } from "@/lib/api";
 import {
   DEAL_TYPE_LABELS,
   DealType,
   DealPaymentEntry,
   FinanceDeal,
+  Opportunity,
   PaymentScheduleEntry,
   dealContractValue,
   dealOutstanding,
   sumDealPayments,
+  monthlyInsights,
+  buildInsightSeries,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from "recharts";
 
 interface Summary {
   month: string;
@@ -100,21 +114,26 @@ export default function FinancePage() {
   const [month, setMonth] = useState(currentMonth());
   const [summary, setSummary] = useState<Summary | null>(null);
   const [deals, setDeals] = useState<FinanceDeal[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWithdrawal, setShowWithdrawal] = useState(false);
-  const [withdrawal, setWithdrawal] = useState({ person: "Kevin", amount: "4500" });
+  const [withdrawal, setWithdrawal] = useState({ person: "Kevin", amount: "5445" });
   const [selectedDeal, setSelectedDeal] = useState<FinanceDeal | null>(null);
   const [editForm, setEditForm] = useState<Partial<FinanceDeal>>({});
   const [savingDeal, setSavingDeal] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [manualDealOpen, setManualDealOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [sum, dealList] = await Promise.all([
+    const [sum, dealList, oppList] = await Promise.all([
       fetch(`/api/finance/summary?month=${month}`).then((r) => r.json()),
       getFinanceDeals(),
+      getOpportunities(),
     ]);
     setSummary(sum);
     setDeals(dealList);
+    setOpportunities(oppList);
     setLoading(false);
   }, [month]);
 
@@ -132,6 +151,7 @@ export default function FinancePage() {
 
   function openDeal(deal: FinanceDeal) {
     setSelectedDeal(deal);
+    setSaveError(null);
     const payments = deal.payments?.length
       ? deal.payments
       : deal.amount_paid > 0
@@ -181,9 +201,38 @@ export default function FinancePage() {
     }));
   }
 
+  function updateSchedule(index: number, field: keyof PaymentScheduleEntry, value: string) {
+    setEditForm((f) => ({
+      ...f,
+      payment_schedule: (f.payment_schedule ?? []).map((entry, i) =>
+        i === index
+          ? {
+              ...entry,
+              [field]: field === "percentage" ? Number(value) || 0 : value,
+            }
+          : entry
+      ),
+    }));
+  }
+
+  function addScheduleRow() {
+    setEditForm((f) => ({
+      ...f,
+      payment_schedule: [...(f.payment_schedule ?? []), { month: "", percentage: 0 }],
+    }));
+  }
+
+  function removeScheduleRow(index: number) {
+    setEditForm((f) => ({
+      ...f,
+      payment_schedule: (f.payment_schedule ?? []).filter((_, i) => i !== index),
+    }));
+  }
+
   async function saveDeal() {
     if (!selectedDeal) return;
     setSavingDeal(true);
+    setSaveError(null);
     try {
       const payments = (editForm.payments ?? []).filter((p) => p.amount > 0);
       const updated = await updateFinanceDeal(selectedDeal.id, {
@@ -193,13 +242,15 @@ export default function FinancePage() {
         total_deal_value: editForm.total_deal_value,
         monthly_fee: editForm.monthly_fee,
         monthly_revshare: editForm.monthly_revshare,
-        payment_schedule: editForm.payment_schedule,
+        payment_schedule: editForm.payment_schedule ?? [],
         payments,
-        start_date: editForm.start_date ? editForm.start_date : null,
-        end_date: editForm.end_date ? editForm.end_date : null,
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
       });
       setDeals((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       setSelectedDeal(null);
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save deal");
     } finally {
       setSavingDeal(false);
     }
@@ -209,17 +260,8 @@ export default function FinancePage() {
     ? Math.max(...summary.history.map((h) => Number(h.revenue)))
     : 1;
 
-  const forecast = summary ? Array.from({ length: 6 }).map((_, i) => {
-    const fm = addMonths(month, i + 1);
-    const wonMonthly = summary.pipeline
-      .filter((p) => p.stage === "won")
-      .reduce((s, p) => s + Number(p.expected_value), 0);
-    const pipelineAdd = summary.pipeline
-      .filter((p) => !["won", "lost"].includes(p.stage) && p.close_date?.slice(0, 7) === fm)
-      .reduce((s, p) => s + Number(p.weighted_value), 0);
-    const projected = wonMonthly + pipelineAdd;
-    return { month: fm, projected };
-  }) : [];
+  const insights = monthlyInsights(deals, month);
+  const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
 
   return (
     <div className="p-8 space-y-8">
@@ -228,7 +270,14 @@ export default function FinancePage() {
           <h1 className="text-xl font-semibold text-neutral-100">Finance overview</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Finance deals, allocation & salary pot</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setManualDealOpen(true)}
+            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add deal
+          </Button>
           <button onClick={() => setMonth((m) => addMonths(m, -1))}
             className="p-1.5 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-200 transition-colors">
             <ChevronLeft className="w-4 h-4" />
@@ -300,6 +349,100 @@ export default function FinancePage() {
             </div>
           </div>
 
+          {insightSeries.length > 0 && (
+            <div className="border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
+              <h2 className="text-sm font-medium text-neutral-300 mb-1">12-month revenue outlook</h2>
+              <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue and net after €10.9k salary</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={insightSeries} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fill: "#737373", fontSize: 11 }}
+                    tickFormatter={(v: string) => v.slice(5)}
+                    axisLine={{ stroke: "#333" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "#737373", fontSize: 11 }}
+                    tickFormatter={(v: number) => `€${(v / 1000).toFixed(0)}k`}
+                    axisLine={false}
+                    tickLine={false}
+                    width={50}
+                  />
+                  <ReferenceLine y={0} stroke="#404040" strokeDasharray="3 3" />
+                  <Tooltip
+                    contentStyle={{ background: "#171717", border: "1px solid #333", borderRadius: "8px", fontSize: 12 }}
+                    labelStyle={{ color: "#a3a3a3" }}
+                    labelFormatter={(v: string) => {
+                      const d = new Date(v + "-01");
+                      return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                    }}
+                    formatter={(value: number, name: string) => [
+                      formatCurrency(value),
+                      name === "expected" ? "Expected"
+                        : name === "actual" ? "Actual"
+                        : name === "forecast" ? "Forecasted"
+                        : "Net after salary",
+                    ]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="expected"
+                    stroke="#e8ff47"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#e8ff47" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    stroke="#34d399"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#34d399" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="forecast"
+                    stroke="#a78bfa"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#a78bfa" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="netAfterSalary"
+                    stroke="#f97316"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 3"
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#f97316" }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-6 mt-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-[#e8ff47] rounded" />
+                  <span className="text-xs text-neutral-500">Expected</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-emerald-400 rounded" />
+                  <span className="text-xs text-neutral-500">Actual</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-violet-400 rounded" style={{ backgroundImage: "repeating-linear-gradient(90deg, #a78bfa 0 4px, transparent 4px 7px)" }} />
+                  <span className="text-xs text-neutral-500">Forecasted</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-orange-500 rounded" style={{ backgroundImage: "repeating-linear-gradient(90deg, #f97316 0 3px, transparent 3px 6px)" }} />
+                  <span className="text-xs text-neutral-500">Net after salary</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-3 space-y-4">
               <div className="border border-neutral-800 rounded-lg overflow-hidden">
@@ -354,17 +497,31 @@ export default function FinancePage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <div className="flex items-center justify-end gap-3 font-mono">
+                              <div className="flex items-center justify-end gap-3 font-mono text-sm">
                                 <span className="text-neutral-300">{formatCurrency(contractValue)}</span>
                                 <span className="text-neutral-700">·</span>
                                 <span className={outstanding > 0 ? "text-orange-300" : "text-emerald-400"}>
                                   {formatCurrency(outstanding)} left
                                 </span>
                               </div>
-                              {(deal.amount_paid ?? 0) > 0 && (
-                                <span className="text-xs text-emerald-400 block mt-0.5">
-                                  {formatCurrency(deal.amount_paid)} paid ({paidPct}%)
-                                </span>
+                              {contractValue > 0 && (
+                                <div className="mt-1.5 flex items-center gap-2">
+                                  <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        "h-full rounded-full transition-all",
+                                        paidPct >= 100 ? "bg-emerald-500" : paidPct > 0 ? "bg-emerald-500/70" : ""
+                                      )}
+                                      style={{ width: `${paidPct}%` }}
+                                    />
+                                  </div>
+                                  <span className={cn(
+                                    "text-[10px] font-mono tabular-nums w-8 text-right",
+                                    paidPct >= 100 ? "text-emerald-400" : paidPct > 0 ? "text-neutral-500" : "text-neutral-700"
+                                  )}>
+                                    {paidPct}%
+                                  </span>
+                                </div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-neutral-500 text-xs">
@@ -409,6 +566,77 @@ export default function FinancePage() {
             </div>
 
             <div className="space-y-4">
+              <div className="border border-neutral-800 rounded-lg p-5 space-y-5 bg-neutral-900/40">
+                <h2 className="text-sm font-medium text-neutral-300">Monthly insights</h2>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Expected revenue</span>
+                    <span className="text-sm font-mono font-semibold text-[#e8ff47]">
+                      {formatCurrency(insights.expected)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees</p>
+                </div>
+
+                <div className="border-t border-neutral-800" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Actual revenue</span>
+                    <span className="text-sm font-mono font-semibold text-emerald-400">
+                      {formatCurrency(insights.actual)}
+                    </span>
+                  </div>
+                  {insights.expected > 0 && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500/70 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, insights.expected > 0 ? (insights.actual / insights.expected) * 100 : 0)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono text-neutral-600">
+                        {insights.expected > 0 ? Math.round((insights.actual / insights.expected) * 100) : 0}%
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-neutral-600">Recorded payments this month</p>
+                </div>
+
+                <div className="border-t border-neutral-800" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Salary coverage</span>
+                    <span className={cn(
+                      "text-sm font-mono font-semibold",
+                      insights.salaryRemaining <= 0 ? "text-emerald-400" : "text-orange-400"
+                    )}>
+                      {insights.salaryRemaining <= 0
+                        ? formatCurrency(Math.abs(insights.salaryRemaining)) + " surplus"
+                        : formatCurrency(insights.salaryRemaining) + " short"
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          insights.salaryRemaining <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
+                        )}
+                        style={{ width: `${Math.min(100, (insights.actual / insights.salaryTarget) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-600">
+                      {Math.min(100, Math.round((insights.actual / insights.salaryTarget) * 100))}%
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} target · {formatCurrency(insights.actual)} received</p>
+                </div>
+              </div>
+
               <div className="border border-neutral-800 rounded-lg p-5 space-y-4">
                 <h2 className="text-sm font-medium text-neutral-300">Allocation</h2>
                 <PctBar
@@ -488,31 +716,6 @@ export default function FinancePage() {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div className="border border-neutral-800 rounded-lg p-5 space-y-3">
-                <h2 className="text-sm font-medium text-neutral-300">Forecast (6 mo)</h2>
-                <p className="text-xs text-neutral-600">Based on active clients + weighted pipeline</p>
-                <div className="space-y-2">
-                  {forecast.map((f) => (
-                    <div key={f.month} className="flex items-center justify-between">
-                      <span className="text-xs text-neutral-500 capitalize font-mono">{f.month}</span>
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#e8ff47]/50 rounded-full"
-                            style={{
-                              width: `${Math.min((f.projected / Math.max(...forecast.map((x) => x.projected), 1)) * 100, 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-mono text-neutral-400 w-20 text-right">
-                          {formatCurrency(f.projected)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           </div>
@@ -626,17 +829,56 @@ export default function FinancePage() {
                 </div>
               </div>
 
-              {editForm.deal_type === "project" && (editForm.payment_schedule?.length ?? 0) > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-neutral-400 text-xs">Payment schedule</Label>
-                  <div className="space-y-1">
-                    {(editForm.payment_schedule as PaymentScheduleEntry[]).map((entry, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm text-neutral-400">
-                        <span>{entry.month || "—"}</span>
-                        <span className="font-mono">{entry.percentage}%</span>
+              {editForm.deal_type === "project" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-neutral-400 text-xs">Payment terms</Label>
+                    <span className={cn(
+                      "text-xs font-mono",
+                      (editForm.payment_schedule ?? []).reduce((s, e) => s + (Number(e.percentage) || 0), 0) === 100
+                        ? "text-emerald-400"
+                        : "text-orange-400"
+                    )}>
+                      Total: {(editForm.payment_schedule ?? []).reduce((s, e) => s + (Number(e.percentage) || 0), 0)}%
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {(editForm.payment_schedule ?? []).map((entry, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Input
+                          type="month"
+                          value={entry.month}
+                          onChange={(e) => updateSchedule(index, "month", e.target.value)}
+                          className={`${fc} flex-1`}
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={entry.percentage}
+                          onChange={(e) => updateSchedule(index, "percentage", e.target.value)}
+                          className={`${fc} w-24 font-mono`}
+                        />
+                        <span className="text-xs text-neutral-500">%</span>
+                        <button
+                          type="button"
+                          onClick={() => removeScheduleRow(index)}
+                          className="p-2 text-neutral-600 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     ))}
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={addScheduleRow}
+                    className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 gap-2 h-8"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add payment term
+                  </Button>
                 </div>
               )}
 
@@ -736,6 +978,10 @@ export default function FinancePage() {
             </div>
           )}
 
+          {saveError && (
+            <p className="text-red-400 text-xs bg-red-950/50 px-6 py-2">{saveError}</p>
+          )}
+
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-neutral-800">
             <Button
               type="button"
@@ -756,6 +1002,12 @@ export default function FinancePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DealActivationWizard
+        open={manualDealOpen}
+        onClose={() => setManualDealOpen(false)}
+        onComplete={() => load()}
+      />
     </div>
   );
 }

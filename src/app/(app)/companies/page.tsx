@@ -143,7 +143,7 @@ function CompanyForm({
               <div className="space-y-1.5">
                 <Label className="text-neutral-400 text-xs">Monthly amount (€)</Label>
                 <Input type="number" value={form.retainer_amount} onChange={(e) => s("retainer_amount", e.target.value)}
-                  placeholder="5000" min="0" step="100"
+                  placeholder="6050" min="0" step="100"
                   className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 font-mono" />
                 <p className="text-[11px] text-neutral-600">Auto-filled on the finance page</p>
               </div>
