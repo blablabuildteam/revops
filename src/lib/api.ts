@@ -1,4 +1,14 @@
-import { Company, NewOpportunity, Opportunity, Project, Milestone, Task } from "./types";
+import {
+  Company,
+  FinanceDeal,
+  NewFinanceDeal,
+  UpdateFinanceDeal,
+  NewOpportunity,
+  Opportunity,
+  Project,
+  Milestone,
+  Task,
+} from "./types";
 
 const base = "/api";
 
@@ -108,4 +118,26 @@ export function getPublicProject(token: string): Promise<Project> {
 
 export function submitClientTask(token: string, data: { title: string; description?: string; milestone_id?: string }): Promise<Task> {
   return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// Finance deals
+export function getFinanceDeals(opportunityId?: string): Promise<FinanceDeal[]> {
+  const query = opportunityId ? `?opportunity_id=${opportunityId}` : "";
+  return req(`/finance/deals${query}`);
+}
+
+export function getFinanceDeal(id: string): Promise<FinanceDeal> {
+  return req(`/finance/deals/${id}`);
+}
+
+export function createFinanceDeal(data: NewFinanceDeal): Promise<FinanceDeal> {
+  return req("/finance/deals", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateFinanceDeal(id: string, data: UpdateFinanceDeal): Promise<FinanceDeal> {
+  return req(`/finance/deals/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export function deleteFinanceDeal(id: string): Promise<void> {
+  return req(`/finance/deals/${id}`, { method: "DELETE" });
 }

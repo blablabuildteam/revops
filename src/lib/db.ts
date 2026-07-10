@@ -39,6 +39,29 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
+      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
+      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS finance_deals (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+          project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+          company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+          company_name TEXT NOT NULL,
+          project_name TEXT NOT NULL,
+          deal_type TEXT NOT NULL CHECK (deal_type IN ('project', 'retainer')),
+          total_deal_value NUMERIC(12,2) DEFAULT 0,
+          start_date DATE,
+          end_date DATE,
+          payment_schedule JSONB DEFAULT '[]',
+          monthly_fee NUMERIC(12,2) DEFAULT 0,
+          monthly_revshare NUMERIC(12,2) DEFAULT 0,
+          amount_paid NUMERIC(12,2) DEFAULT 0,
+          payments JSONB DEFAULT '[]',
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        )
+      `;
       await migrateOpportunityTypes();
       initialized = true;
       return;
@@ -212,6 +235,28 @@ async function _init() {
       person TEXT NOT NULL,
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS finance_deals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+      project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      company_name TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      deal_type TEXT NOT NULL CHECK (deal_type IN ('project', 'retainer')),
+      total_deal_value NUMERIC(12,2) DEFAULT 0,
+      start_date DATE,
+      end_date DATE,
+      payment_schedule JSONB DEFAULT '[]',
+      monthly_fee NUMERIC(12,2) DEFAULT 0,
+      monthly_revshare NUMERIC(12,2) DEFAULT 0,
+      amount_paid NUMERIC(12,2) DEFAULT 0,
+      payments JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
     )
   `;
 

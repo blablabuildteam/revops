@@ -3,11 +3,20 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Check, X, Copy, CheckCircle2, Circle, Clock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getProject, createMilestone, createTask, updateTask, deleteTask, updateMilestone, deleteMilestone } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { getProject, createMilestone, createTask, updateTask, deleteTask, updateMilestone, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
@@ -223,12 +232,15 @@ function MilestoneSection({
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [newMilestoneName, setNewMilestoneName] = useState("");
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     getProject(id).then((p) => { setProject(p as ProjectDetail); setLoading(false); });
@@ -256,6 +268,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     navigator.clipboard.writeText(`${window.location.origin}/project/${project.share_token}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleDeleteProject() {
+    if (!project) return;
+    setDeleting(true);
+    try {
+      await deleteProject(project.id);
+      router.push("/projects");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
   }
 
   if (loading) {
@@ -288,14 +312,52 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             {project.client_name && ` · ${project.client_name}`}
           </p>
         </div>
-        <button
-          onClick={copyShareLink}
-          className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
-        >
-          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-          {copied ? "Copied!" : "Share client link"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={copyShareLink}
+            className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? "Copied!" : "Share client link"}
+          </button>
+          <button
+            onClick={() => setDeleteOpen(true)}
+            className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:border-red-900/50 transition-colors"
+            aria-label="Delete project"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100">Delete project</DialogTitle>
+            <DialogDescription className="text-neutral-500">
+              Are you sure you want to delete <span className="text-neutral-300">{project.name}</span>?
+              This will permanently remove all phases, tasks, and the client share link.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="bg-transparent border-neutral-800">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+              className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? "Deleting..." : "Delete project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {pendingRequests > 0 && (
         <div className="flex items-center gap-3 bg-orange-950/40 border border-orange-900/50 rounded-lg px-4 py-3">

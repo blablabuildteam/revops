@@ -6,8 +6,6 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Plus,
   Search,
-  Trash2,
-  Pencil,
   ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OpportunityForm } from "@/components/opportunity-form";
-import { getOpportunities, deleteOpportunity, updateOpportunity } from "@/lib/api";
+import { DealActivationWizard } from "@/components/deal-activation-wizard";
+import { getOpportunities, deleteOpportunity, updateOpportunity, getFinanceDeals } from "@/lib/api";
 import {
   Opportunity,
   Stage,
@@ -143,11 +142,20 @@ export default function OpportunitiesPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editingOpp, setEditingOpp] = useState<Opportunity | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [activatingOpp, setActivatingOpp] = useState<Opportunity | null>(null);
+  const [activatedOpportunityIds, setActivatedOpportunityIds] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
-    const data = await getOpportunities();
+    const [data, deals] = await Promise.all([
+      getOpportunities(),
+      getFinanceDeals(),
+    ]);
     setOpps(data);
+    setActivatedOpportunityIds(
+      new Set(deals.map((d) => d.opportunity_id).filter((id): id is string => Boolean(id)))
+    );
     setLoading(false);
   }
 
@@ -168,6 +176,7 @@ export default function OpportunitiesPage() {
 
   const filtered = useMemo(() => {
     return opps
+      .filter((o) => !activatedOpportunityIds.has(o.id))
       .filter((o) => {
         const q = search.toLowerCase();
         const matchSearch =
@@ -193,7 +202,7 @@ export default function OpportunitiesPage() {
         if (av > bv) return sortAsc ? 1 : -1;
         return 0;
       });
-  }, [opps, search, stageFilter, sortKey, sortAsc]);
+  }, [opps, search, stageFilter, sortKey, sortAsc, activatedOpportunityIds]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc((a) => !a);
@@ -204,9 +213,19 @@ export default function OpportunitiesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Are you sure you want to delete this opportunity?")) return;
     await deleteOpportunity(id);
     setOpps((prev) => prev.filter((o) => o.id !== id));
+  }
+
+  function openEdit(opp: Opportunity) {
+    setEditingOpp(opp);
+    setFormOpen(true);
+  }
+
+  function openActivation(opp: Opportunity, e: React.MouseEvent) {
+    e.stopPropagation();
+    setActivatingOpp(opp);
+    setWizardOpen(true);
   }
 
   const totalExpected = filtered.reduce((s, o) => s + o.expected_value, 0);
@@ -338,7 +357,8 @@ export default function OpportunitiesPage() {
                 : filtered.map((opp) => (
                     <tr
                       key={opp.id}
-                      className="hover:bg-neutral-900/50 transition-colors"
+                      onClick={() => openEdit(opp)}
+                      className="hover:bg-neutral-900/50 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-4 min-w-0">
                         <p className="text-neutral-200 font-medium truncate text-sm">
@@ -419,24 +439,18 @@ export default function OpportunitiesPage() {
                           onSave={(v) => patchOpp(opp.id, { probability: v })}
                         />
                       </td>
-                      <td className="px-1 py-4">
-                        <div className="flex items-center justify-end gap-0.5">
-                          <button
-                            onClick={() => {
-                              setEditingOpp(opp);
-                              setFormOpen(true);
-                            }}
-                            className="p-1.5 text-neutral-600 hover:text-neutral-300 transition-colors rounded hover:bg-neutral-800"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(opp.id)}
-                            className="p-1.5 text-neutral-700 hover:text-red-400 transition-colors rounded hover:bg-neutral-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <td className="px-1 py-4" onClick={(e) => e.stopPropagation()}>
+                        {opp.stage === "won" && !activatedOpportunityIds.has(opp.id) && (
+                          <div className="flex items-center justify-end">
+                            <button
+                              onClick={(e) => openActivation(opp, e)}
+                              title="Activate deal"
+                              className="p-1.5 text-lg hover:bg-neutral-800 rounded transition-colors"
+                            >
+                              🚀
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -458,12 +472,28 @@ export default function OpportunitiesPage() {
           setEditingOpp(null);
         }}
         initial={editingOpp}
+        onDelete={handleDelete}
         onSave={(opp) => {
           setOpps((prev) => {
             const exists = prev.find((o) => o.id === opp.id);
             if (exists) return prev.map((o) => (o.id === opp.id ? opp : o));
             return [opp, ...prev];
           });
+        }}
+      />
+
+      <DealActivationWizard
+        open={wizardOpen}
+        onClose={() => {
+          setWizardOpen(false);
+          setActivatingOpp(null);
+        }}
+        opportunity={activatingOpp}
+        onComplete={() => {
+          if (activatingOpp) {
+            setActivatedOpportunityIds((prev) => new Set([...prev, activatingOpp.id]));
+            setOpps((prev) => prev.filter((o) => o.id !== activatingOpp.id));
+          }
         }}
       />
     </div>

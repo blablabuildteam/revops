@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { DEFAULT_PROJECT_MILESTONES } from "@/lib/types";
 
 export async function GET() {
   try {
@@ -40,7 +41,17 @@ export async function POST(req: NextRequest) {
       )
       RETURNING *
     `;
-    return NextResponse.json(rows[0], { status: 201 });
+
+    const project = rows[0];
+
+    for (let i = 0; i < DEFAULT_PROJECT_MILESTONES.length; i++) {
+      await sql`
+        INSERT INTO milestones (project_id, name, position, status)
+        VALUES (${project.id}, ${DEFAULT_PROJECT_MILESTONES[i]}, ${i}, 'pending')
+      `;
+    }
+
+    return NextResponse.json(project, { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

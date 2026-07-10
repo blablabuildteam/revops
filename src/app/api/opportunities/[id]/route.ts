@@ -43,7 +43,7 @@ export async function PUT(
     const current = existing[0];
     const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
     const val = <T>(key: string, fallback: T): T =>
-      has(key) ? (body[key] as T) ?? null : fallback;
+      has(key) ? ((body[key] as T) ?? fallback) : fallback;
 
     await sql`
       UPDATE opportunities SET

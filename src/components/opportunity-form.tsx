@@ -32,6 +32,7 @@ interface OpportunityFormProps {
   open: boolean;
   onClose: () => void;
   onSave: (opp: Opportunity) => void;
+  onDelete?: (id: string) => void;
   initial?: Opportunity | null;
 }
 
@@ -56,7 +57,7 @@ const defaultForm: NewOpportunity = {
 
 const fc = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm placeholder:text-neutral-600";
 
-export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityFormProps) {
+export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: OpportunityFormProps) {
   const [form, setForm] = useState<NewOpportunity>(defaultForm);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -155,6 +156,21 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!initial || !onDelete) return;
+    if (!confirm("Are you sure you want to delete this opportunity?")) return;
+    setLoading(true);
+    setError(null);
+    try {
+      onDelete(initial.id);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setLoading(false);
     }
@@ -316,19 +332,34 @@ export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityF
             <p className="text-red-400 text-xs bg-red-950/50 px-6 py-2">{error}</p>
           )}
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t border-neutral-800">
-            <Button
-              type="button" variant="ghost" onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit" disabled={loading}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
-            >
-              {loading ? "Saving..." : initial ? "Save" : "Add"}
-            </Button>
+          <div className="flex justify-between gap-3 px-6 py-4 border-t border-neutral-800">
+            <div>
+              {initial && onDelete && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                >
+                  Delete opportunity
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button" variant="ghost" onClick={onClose}
+                className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit" disabled={loading}
+                className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+              >
+                {loading ? "Saving..." : initial ? "Save" : "Add"}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

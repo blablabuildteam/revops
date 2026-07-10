@@ -204,6 +204,14 @@ export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   completed: "Completed",
 };
 
+export const DEFAULT_PROJECT_MILESTONES = [
+  "Open",
+  "Up Next",
+  "In Progress",
+  "On Hold",
+  "Done",
+] as const;
+
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   not_sent: "Not sent",
   draft: "Draft",
@@ -213,3 +221,72 @@ export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   declined: "Declined",
   expired: "Expired",
 };
+
+export type DealType = "project" | "retainer";
+
+export interface PaymentScheduleEntry {
+  month: string;
+  percentage: number;
+}
+
+export interface DealPaymentEntry {
+  date: string;
+  amount: number;
+}
+
+export interface FinanceDeal {
+  id: string;
+  opportunity_id?: string;
+  project_id?: string;
+  company_id?: string;
+  company_name: string;
+  project_name: string;
+  deal_type: DealType;
+  total_deal_value: number;
+  start_date?: string;
+  end_date?: string;
+  payment_schedule: PaymentScheduleEntry[];
+  payments: DealPaymentEntry[];
+  monthly_fee: number;
+  monthly_revshare: number;
+  amount_paid: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NewFinanceDeal = Omit<FinanceDeal, "id" | "created_at" | "updated_at">;
+
+export type UpdateFinanceDeal = Partial<
+  Omit<NewFinanceDeal, "start_date" | "end_date">
+> & {
+  start_date?: string | null;
+  end_date?: string | null;
+  payments?: DealPaymentEntry[];
+};
+
+export const DEAL_TYPE_LABELS: Record<DealType, string> = {
+  project: "Project",
+  retainer: "Retainer",
+};
+
+export function sumDealPayments(payments: DealPaymentEntry[]): number {
+  return payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+}
+
+export function dealContractValue(
+  deal: Pick<FinanceDeal, "deal_type" | "total_deal_value" | "monthly_fee" | "monthly_revshare" | "start_date" | "end_date">
+): number {
+  if (deal.deal_type === "project") return Number(deal.total_deal_value) || 0;
+  if (!deal.start_date || !deal.end_date) return 0;
+  const start = new Date(deal.start_date);
+  const end = new Date(deal.end_date);
+  const months = Math.max(
+    1,
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+  );
+  return months * ((Number(deal.monthly_fee) || 0) + (Number(deal.monthly_revshare) || 0));
+}
+
+export function dealOutstanding(deal: Pick<FinanceDeal, "deal_type" | "total_deal_value" | "monthly_fee" | "monthly_revshare" | "start_date" | "end_date" | "amount_paid">): number {
+  return Math.max(0, dealContractValue(deal) - (Number(deal.amount_paid) || 0));
+}
