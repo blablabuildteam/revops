@@ -21,11 +21,11 @@ import { useEffect, useState } from "react";
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Columns3 },
-  { href: "/opportunities", label: "Kansen", icon: ListFilter },
-  { href: "/projects", label: "Projecten", icon: FolderKanban },
-  { href: "/todos", label: "Taken", icon: CheckSquare },
-  { href: "/finance", label: "Financieel", icon: Euro },
-  { href: "/companies", label: "Bedrijven", icon: Building2 },
+  { href: "/opportunities", label: "Opportunities", icon: ListFilter },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
+  { href: "/todos", label: "Tasks", icon: CheckSquare },
+  { href: "/finance", label: "Finance", icon: Euro },
+  { href: "/companies", label: "Companies", icon: Building2 },
 ];
 
 interface SessionUser { id: string; email: string; name: string }
@@ -96,14 +96,14 @@ export function Sidebar() {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={toggle}
-                title={theme === "dark" ? "Licht thema" : "Donker thema"}
+                title={theme === "dark" ? "Light theme" : "Dark theme"}
                 className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
               >
                 {theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
               </button>
               <button
                 onClick={handleLogout}
-                title="Uitloggen"
+                title="Log out"
                 className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" />

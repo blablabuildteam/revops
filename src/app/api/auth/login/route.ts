@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const { email, password } = await req.json();
 
     if (!email || !password) {
-      return NextResponse.json({ error: "Email en wachtwoord zijn verplicht" }, { status: 400 });
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
 
     const { rows } = await sql`
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     const user = rows[0];
     if (!user || !await bcrypt.compare(password, user.password_hash)) {
-      return NextResponse.json({ error: "Onjuist e-mailadres of wachtwoord" }, { status: 401 });
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
     }
 
     const token = await signToken({ id: user.id, email: user.email, name: user.name });

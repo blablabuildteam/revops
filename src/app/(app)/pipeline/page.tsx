@@ -68,7 +68,7 @@ function OpportunityCard({
             {formatCurrency(opp.expected_value)}
           </p>
           <p className="text-xs text-neutral-600 font-mono">
-            {opp.probability}% kans ·{" "}
+            {opp.probability}% chance ·{" "}
             <span className="text-neutral-500">
               {formatCurrency(opp.weighted_value)}
             </span>
@@ -165,7 +165,7 @@ export default function PipelinePage() {
         <div>
           <h1 className="text-xl font-semibold text-neutral-100">Pipeline</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            Klik op een kaart om te bewerken · hover voor snelle faseverandering
+            Click a card to edit · hover for quick stage changes
           </p>
         </div>
         <Button
@@ -176,7 +176,7 @@ export default function PipelinePage() {
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
-          Nieuwe kans
+          New opportunity
         </Button>
       </div>
 
@@ -194,7 +194,7 @@ export default function PipelinePage() {
                     {STAGE_LABELS[stage]}
                   </p>
                   <p className="text-xs text-neutral-600 font-mono mt-0.5">
-                    {formatCurrency(stageTotal(stage))} · {stageOpps.length} kansen
+                    {formatCurrency(stageTotal(stage))} · {stageOpps.length} opportunities
                   </p>
                 </div>
               </div>
@@ -217,7 +217,7 @@ export default function PipelinePage() {
                     ))}
                 {!loading && stageOpps.length === 0 && (
                   <p className="text-xs text-neutral-700 text-center py-6">
-                    Geen kansen
+                    No opportunities
                   </p>
                 )}
               </div>

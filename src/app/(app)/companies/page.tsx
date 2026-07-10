@@ -19,9 +19,9 @@ import { Company, Opportunity, RetainerType } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 
 const RETAINER_LABELS: Record<RetainerType, string> = {
-  none: "Geen retainer",
-  fixed: "Vaste retainer",
-  commission: "Commissie op omzet",
+  none: "No retainer",
+  fixed: "Fixed retainer",
+  commission: "Revenue commission",
 };
 
 type FormState = {
@@ -98,20 +98,20 @@ function CompanyForm({
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-md">
         <DialogHeader>
           <DialogTitle className="text-neutral-100">
-            {initial ? `${initial.name} bewerken` : "Nieuw bedrijf"}
+            {initial ? `Edit ${initial.name}` : "New company"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Naam *</Label>
+            <Label className="text-neutral-400 text-xs">Name *</Label>
             <Input required value={form.name} onChange={(e) => s("name", e.target.value)}
               className="bg-neutral-800 border-neutral-700 text-neutral-100" autoFocus />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Sector</Label>
+              <Label className="text-neutral-400 text-xs">Industry</Label>
               <Input value={form.industry} onChange={(e) => s("industry", e.target.value)}
-                placeholder="bijv. SaaS, Retail"
+                placeholder="e.g. SaaS, Retail"
                 className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" />
             </div>
             <div className="space-y-1.5">
@@ -124,7 +124,7 @@ function CompanyForm({
 
           {/* Retainer section */}
           <div className="pt-2 border-t border-neutral-800 space-y-3">
-            <p className="text-xs text-neutral-500 uppercase tracking-widest">Facturatie model</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-widest">Billing model</p>
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Type</Label>
               <Select value={form.retainer_type} onValueChange={(v) => s("retainer_type", v ?? "none")}>
@@ -132,40 +132,40 @@ function CompanyForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Geen retainer</SelectItem>
-                  <SelectItem value="fixed" className="text-neutral-100">Vaste maandelijkse retainer</SelectItem>
-                  <SelectItem value="commission" className="text-neutral-100">Commissie op omzet</SelectItem>
+                  <SelectItem value="none" className="text-neutral-400">No retainer</SelectItem>
+                  <SelectItem value="fixed" className="text-neutral-100">Fixed monthly retainer</SelectItem>
+                  <SelectItem value="commission" className="text-neutral-100">Revenue commission</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {form.retainer_type === "fixed" && (
               <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Maandelijks bedrag (€)</Label>
+                <Label className="text-neutral-400 text-xs">Monthly amount (€)</Label>
                 <Input type="number" value={form.retainer_amount} onChange={(e) => s("retainer_amount", e.target.value)}
                   placeholder="5000" min="0" step="100"
                   className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 font-mono" />
-                <p className="text-[11px] text-neutral-600">Wordt automatisch vooringevuld op de financieel pagina</p>
+                <p className="text-[11px] text-neutral-600">Auto-filled on the finance page</p>
               </div>
             )}
 
             {form.retainer_type === "commission" && (
               <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Commissie percentage (%)</Label>
+                <Label className="text-neutral-400 text-xs">Commission percentage (%)</Label>
                 <Input type="number" value={form.commission_pct} onChange={(e) => s("commission_pct", e.target.value)}
                   placeholder="15" min="0" max="100" step="0.5"
                   className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 font-mono" />
-                <p className="text-[11px] text-neutral-600">Voer maandelijks de klantomzet in — wij rekenen de fee automatisch uit</p>
+                <p className="text-[11px] text-neutral-600">Enter monthly client revenue — we calculate the fee automatically</p>
               </div>
             )}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Annuleren</Button>
+              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-              {loading ? "Opslaan..." : initial ? "Opslaan" : "Toevoegen"}
+              {loading ? "Saving..." : initial ? "Save" : "Add"}
             </Button>
           </DialogFooter>
         </form>
@@ -176,9 +176,9 @@ function CompanyForm({
 
 const retainerBadge = (c: Company) => {
   if (c.retainer_type === "fixed")
-    return <span className="text-xs text-emerald-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {formatCurrency(c.retainer_amount ?? 0)}/mnd</span>;
+    return <span className="text-xs text-emerald-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {formatCurrency(c.retainer_amount ?? 0)}/mo</span>;
   if (c.retainer_type === "commission")
-    return <span className="text-xs text-blue-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {c.commission_pct}% commissie</span>;
+    return <span className="text-xs text-blue-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {c.commission_pct}% commission</span>;
   return null;
 };
 
@@ -215,12 +215,12 @@ export default function CompaniesPage() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Bedrijven</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">{companies.length} bedrijven</p>
+          <h1 className="text-xl font-semibold text-neutral-100">Companies</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">{companies.length} companies</p>
         </div>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }}
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
-          <Plus className="w-4 h-4" /> Nieuw bedrijf
+          <Plus className="w-4 h-4" /> New company
         </Button>
       </div>
 
@@ -270,7 +270,7 @@ export default function CompaniesPage() {
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div>
-                    <p className="text-xs text-neutral-600 mb-1">Omzet</p>
+                    <p className="text-xs text-neutral-600 mb-1">Revenue</p>
                     <p className="text-sm font-mono text-emerald-400 font-medium">
                       {revenue > 0 ? formatCurrency(revenue) : "—"}
                     </p>
@@ -284,7 +284,7 @@ export default function CompaniesPage() {
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Deals</p>
                     <p className="text-sm font-mono text-neutral-300 font-medium">
-                      {activeDeals.length} actief
+                      {activeDeals.length} active
                     </p>
                   </div>
                 </div>
@@ -298,7 +298,7 @@ export default function CompaniesPage() {
                       </div>
                     ))}
                     {deals.length > 3 && (
-                      <p className="text-xs text-neutral-700">+{deals.length - 3} meer</p>
+                      <p className="text-xs text-neutral-700">+{deals.length - 3} more</p>
                     )}
                   </div>
                 )}
@@ -309,7 +309,7 @@ export default function CompaniesPage() {
           {companies.length === 0 && (
             <div className="col-span-2 py-20 text-center border border-neutral-800 rounded-lg">
               <Building2 className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
-              <p className="text-neutral-600 text-sm">Nog geen bedrijven</p>
+              <p className="text-neutral-600 text-sm">No companies yet</p>
             </div>
           )}
         </div>

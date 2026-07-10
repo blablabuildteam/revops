@@ -27,7 +27,7 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } else {
-      setError(data.error ?? "Inloggen mislukt");
+      setError(data.error ?? "Login failed");
       setLoading(false);
     }
   }
@@ -48,7 +48,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs text-neutral-500 uppercase tracking-widest">
-              E-mailadres
+              Email address
             </label>
             <input
               type="email"
@@ -56,14 +56,14 @@ export default function LoginPage() {
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="naam@blablabuild.com"
+              placeholder="name@blablabuild.com"
               className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-700 outline-none focus:border-neutral-600 transition-colors font-mono"
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-xs text-neutral-500 uppercase tracking-widest">
-              Wachtwoord
+              Password
             </label>
             <input
               type="password"
@@ -86,7 +86,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-[#e8ff47] hover:bg-[#d4eb30] disabled:opacity-50 text-neutral-950 font-semibold py-3 rounded-lg text-sm transition-colors mt-2"
           >
-            {loading ? "Inloggen..." : "Inloggen"}
+            {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
 

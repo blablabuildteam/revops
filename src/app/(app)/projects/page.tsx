@@ -54,10 +54,10 @@ function CopyLink({ token }: { token: string }) {
     <button
       onClick={(e) => { e.preventDefault(); copy(); }}
       className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 transition-colors"
-      title="Kopieer klantlink"
+      title="Copy client link"
     >
       {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Gekopieerd!" : "Klantlink"}
+      {copied ? "Copied!" : "Client link"}
     </button>
   );
 }
@@ -109,23 +109,23 @@ function NewProjectDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nieuw project</DialogTitle>
+          <DialogTitle>New project</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Projectnaam *</Label>
+            <Label className="text-neutral-400 text-xs">Project name *</Label>
             <Input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="bijv. Heatnest — Website Redesign"
+              placeholder="e.g. Heatnest — Website Redesign"
               className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Bedrijf</Label>
+            <Label className="text-neutral-400 text-xs">Company</Label>
               <Select value={form.company_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, company_id: v === "none" ? "" : (v ?? "") }))}>
               <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                <SelectValue placeholder="Selecteer bedrijf" />
+                <SelectValue placeholder="Select company" />
               </SelectTrigger>
               <SelectContent className="bg-neutral-800 border-neutral-700">
-                <SelectItem value="none" className="text-neutral-400">Geen</SelectItem>
+                <SelectItem value="none" className="text-neutral-400">None</SelectItem>
                 {companies.map((c) => (
                   <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
                 ))}
@@ -134,43 +134,43 @@ function NewProjectDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Contactpersoon klant</Label>
+              <Label className="text-neutral-400 text-xs">Client contact</Label>
               <Input value={form.client_name} onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
-                placeholder="Naam"
+                placeholder="Name"
                 className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">E-mail klant</Label>
+              <Label className="text-neutral-400 text-xs">Client email</Label>
               <Input type="email" value={form.client_email} onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
-                placeholder="naam@bedrijf.nl"
+                placeholder="name@company.com"
                 className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Startdatum</Label>
+              <Label className="text-neutral-400 text-xs">Start date</Label>
               <Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
                 className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Einddatum</Label>
+              <Label className="text-neutral-400 text-xs">End date</Label>
               <Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
                 className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Omschrijving</Label>
+            <Label className="text-neutral-400 text-xs">Description</Label>
             <Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Korte omschrijving van het project..."
+              placeholder="Short project description..."
               rows={2}
               className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none" />
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Annuleren</Button>
+              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-              {loading ? "Aanmaken..." : "Project aanmaken"}
+              {loading ? "Creating..." : "Create project"}
             </Button>
           </DialogFooter>
         </form>
@@ -197,18 +197,18 @@ export default function ProjectsPage() {
     <div className="p-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Projecten</h1>
+          <h1 className="text-xl font-semibold text-neutral-100">Projects</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            {active.length} actief · {totalDone}/{totalTasks} taken klaar
+            {active.length} active · {totalDone}/{totalTasks} tasks done
             {pendingRequests > 0 && (
-              <span className="ml-2 text-orange-400 font-medium">· {pendingRequests} verzoek{pendingRequests !== 1 ? "en" : ""} wachten</span>
+              <span className="ml-2 text-orange-400 font-medium">· {pendingRequests} request{pendingRequests !== 1 ? "s" : ""} pending</span>
             )}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" />
-          Nieuw project
+          New project
         </Button>
       </div>
 
@@ -221,7 +221,7 @@ export default function ProjectsPage() {
       ) : projects.length === 0 ? (
         <div className="border border-neutral-800 rounded-lg py-20 text-center">
           <FolderKanban className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
-          <p className="text-neutral-600 text-sm">Nog geen projecten</p>
+          <p className="text-neutral-600 text-sm">No projects yet</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -243,7 +243,7 @@ export default function ProjectsPage() {
                       {pendingReqs > 0 && (
                         <span className="flex items-center gap-1 text-xs text-orange-400">
                           <AlertCircle className="w-3 h-3" />
-                          {pendingReqs} verzoek
+                          {pendingReqs} request
                         </span>
                       )}
                     </div>
@@ -264,8 +264,8 @@ export default function ProjectsPage() {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600">Voortgang</span>
-                    <span className="font-mono text-neutral-400">{doneCount}/{taskCount} taken</span>
+                    <span className="text-neutral-600">Progress</span>
+                    <span className="font-mono text-neutral-400">{doneCount}/{taskCount} tasks</span>
                   </div>
                   <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                     <div

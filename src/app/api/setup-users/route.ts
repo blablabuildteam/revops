@@ -8,7 +8,7 @@ export async function GET() {
 
     const { rows: existing } = await sql`SELECT COUNT(*) AS count FROM users`;
     if (Number(existing[0].count) > 0) {
-      return NextResponse.json({ message: "Gebruikers bestaan al." });
+      return NextResponse.json({ message: "Users already exist." });
     }
 
     const kevinHash = await bcrypt.hash("kevin2026", 12);
@@ -22,7 +22,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      message: "Gebruikers aangemaakt. Verwijder /api/setup-users.",
+      message: "Users created. Remove /api/setup-users.",
       credentials: [
         { email: "kevin@blablabuild.com", password: "kevin2026" },
         { email: "xennith@blablabuild.com", password: "xennith2026" },

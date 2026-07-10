@@ -104,43 +104,43 @@ function NewTodoDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
         <DialogHeader>
-          <DialogTitle>Nieuwe taak</DialogTitle>
+          <DialogTitle>New task</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Taak *</Label>
+            <Label className="text-neutral-400 text-xs">Task *</Label>
             <Input required value={form.title} onChange={(e) => s("title", e.target.value)}
-              placeholder="Wat moet er gedaan worden?"
+              placeholder="What needs to be done?"
               className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" autoFocus />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Toelichting</Label>
+            <Label className="text-neutral-400 text-xs">Description</Label>
             <Textarea value={form.description} onChange={(e) => s("description", e.target.value)}
-              placeholder="Optionele details..."
+              placeholder="Optional details..."
               rows={2} className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Prioriteit</Label>
+              <Label className="text-neutral-400 text-xs">Priority</Label>
               <Select value={form.priority} onValueChange={(v) => s("priority", v ?? "medium")}>
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="high" className="text-red-400">Hoog</SelectItem>
-                  <SelectItem value="medium" className="text-amber-400">Middel</SelectItem>
-                  <SelectItem value="low" className="text-neutral-400">Laag</SelectItem>
+                  <SelectItem value="high" className="text-red-400">High</SelectItem>
+                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
+                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Toegewezen aan</Label>
+              <Label className="text-neutral-400 text-xs">Assigned to</Label>
               <Select value={form.assignee_id || "none"} onValueChange={(v) => s("assignee_id", v === "none" ? "" : (v ?? ""))}>
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Kies persoon" />
+                  <SelectValue placeholder="Choose person" />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Niemand</SelectItem>
+                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id} className="text-neutral-100">{u.name}</SelectItem>
                   ))}
@@ -148,13 +148,13 @@ function NewTodoDialog({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Klant</Label>
+              <Label className="text-neutral-400 text-xs">Client</Label>
               <Select value={form.company_id || "none"} onValueChange={(v) => s("company_id", v === "none" ? "" : (v ?? ""))}>
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optioneel" />
+                  <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Geen klant</SelectItem>
+                  <SelectItem value="none" className="text-neutral-400">No client</SelectItem>
                   {companies.map((c) => (
                     <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
                   ))}
@@ -165,10 +165,10 @@ function NewTodoDialog({
               <Label className="text-neutral-400 text-xs">Project</Label>
               <Select value={form.project_id || "none"} onValueChange={(v) => s("project_id", v === "none" ? "" : (v ?? ""))}>
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optioneel" />
+                  <SelectValue placeholder="Optional" />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Geen project</SelectItem>
+                  <SelectItem value="none" className="text-neutral-400">No project</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id} className="text-neutral-100">{p.name}</SelectItem>
                   ))}
@@ -177,16 +177,16 @@ function NewTodoDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Deadline</Label>
+            <Label className="text-neutral-400 text-xs">Due date</Label>
             <Input type="date" value={form.due_date} onChange={(e) => s("due_date", e.target.value)}
               className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Annuleren</Button>
+              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-              {loading ? "Toevoegen..." : "Toevoegen"}
+              {loading ? "Adding..." : "Add"}
             </Button>
           </DialogFooter>
         </form>
@@ -245,7 +245,7 @@ function TodoCard({ todo, onUpdate, onDelete }: {
           {todo.due_date && (
             <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-600"}`}>
               <Calendar className="w-3 h-3" /> {formatDate(todo.due_date)}
-              {isOverdue && " · te laat"}
+              {isOverdue && " · overdue"}
             </span>
           )}
         </div>
@@ -302,7 +302,7 @@ export default function TodosPage() {
   useEffect(() => { load(); }, [load]);
 
   function handleDelete(id: string) {
-    if (!confirm("Taak verwijderen?")) return;
+    if (!confirm("Delete this task?")) return;
     fetch(`/api/todos/${id}`, { method: "DELETE" });
     setTodos((prev) => prev.filter((t) => t.id !== id));
   }
@@ -322,15 +322,15 @@ export default function TodosPage() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Taken</h1>
+          <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            {open} open · {inProgress} bezig
-            {overdue > 0 && <span className="text-red-400 ml-2">· {overdue} te laat</span>}
+            {open} open · {inProgress} in progress
+            {overdue > 0 && <span className="text-red-400 ml-2">· {overdue} overdue</span>}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
-          <Plus className="w-4 h-4" /> Nieuwe taak
+          <Plus className="w-4 h-4" /> New task
         </Button>
       </div>
 
@@ -341,7 +341,7 @@ export default function TodosPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="all" className="text-neutral-400">Iedereen</SelectItem>
+            <SelectItem value="all" className="text-neutral-400">Everyone</SelectItem>
             {users.map((u) => (
               <SelectItem key={u.id} value={u.id} className="text-neutral-100">{u.name}</SelectItem>
             ))}
@@ -352,9 +352,9 @@ export default function TodosPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="active" className="text-neutral-100">Actief</SelectItem>
-            <SelectItem value="all" className="text-neutral-400">Alles</SelectItem>
-            <SelectItem value="done" className="text-emerald-400">Klaar</SelectItem>
+            <SelectItem value="active" className="text-neutral-100">Active</SelectItem>
+            <SelectItem value="all" className="text-neutral-400">All</SelectItem>
+            <SelectItem value="done" className="text-emerald-400">Done</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -370,7 +370,7 @@ export default function TodosPage() {
           {grouped.high.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-red-400 uppercase tracking-widest font-medium flex items-center gap-1.5">
-                <Flag className="w-3 h-3" /> Hoog prioriteit
+                <Flag className="w-3 h-3" /> High priority
               </p>
               {grouped.high.map((t) => (
                 <TodoCard key={t.id} todo={t}
@@ -382,7 +382,7 @@ export default function TodosPage() {
           {grouped.medium.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-amber-400 uppercase tracking-widest font-medium flex items-center gap-1.5">
-                <Flag className="w-3 h-3" /> Middel
+                <Flag className="w-3 h-3" /> Medium
               </p>
               {grouped.medium.map((t) => (
                 <TodoCard key={t.id} todo={t}
@@ -394,7 +394,7 @@ export default function TodosPage() {
           {grouped.low.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-neutral-500 uppercase tracking-widest font-medium flex items-center gap-1.5">
-                <Flag className="w-3 h-3" /> Laag
+                <Flag className="w-3 h-3" /> Low
               </p>
               {grouped.low.map((t) => (
                 <TodoCard key={t.id} todo={t}
@@ -406,7 +406,7 @@ export default function TodosPage() {
           {filterStatus === "all" && grouped.done.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs text-neutral-600 uppercase tracking-widest font-medium flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3" /> Klaar
+                <CheckCircle2 className="w-3 h-3" /> Done
               </p>
               {grouped.done.map((t) => (
                 <TodoCard key={t.id} todo={t}
@@ -418,7 +418,7 @@ export default function TodosPage() {
           {todos.length === 0 && (
             <div className="py-20 text-center border border-neutral-800 rounded-lg">
               <CheckCircle2 className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
-              <p className="text-neutral-600 text-sm">Geen taken — lekker bezig!</p>
+              <p className="text-neutral-600 text-sm">No tasks — all caught up!</p>
             </div>
           )}
         </div>

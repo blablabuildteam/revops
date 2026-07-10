@@ -70,8 +70,8 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-center px-6">
         <div>
           <p className="text-xs text-[#e8ff47] tracking-[0.2em] uppercase font-bold mb-4">blablabuild</p>
-          <h1 className="text-xl font-semibold text-neutral-300 mb-2">Project niet gevonden</h1>
-          <p className="text-sm text-neutral-600">Deze link is ongeldig of verlopen.</p>
+          <h1 className="text-xl font-semibold text-neutral-300 mb-2">Project not found</h1>
+          <p className="text-sm text-neutral-600">This link is invalid or expired.</p>
         </div>
       </div>
     );
@@ -107,15 +107,15 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
           )}
           <div className="flex items-center gap-4 mt-3 text-xs text-neutral-600 font-mono">
             {project.start_date && <span>Start: {formatDate(project.start_date)}</span>}
-            {project.end_date && <span>Einde: {formatDate(project.end_date)}</span>}
+            {project.end_date && <span>End: {formatDate(project.end_date)}</span>}
           </div>
         </div>
 
         {/* Progress */}
         <div className="border border-neutral-800 rounded-lg p-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-neutral-500 uppercase tracking-widest">Voortgang</p>
-            <p className="text-sm font-mono text-neutral-300">{totalDone} van {totalTasks} taken klaar</p>
+            <p className="text-xs text-neutral-500 uppercase tracking-widest">Progress</p>
+            <p className="text-sm font-mono text-neutral-300">{totalDone} of {totalTasks} tasks done</p>
           </div>
           <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
             <div
@@ -155,7 +155,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
                   </div>
                 ))}
                 {milestoneTasks.length === 0 && (
-                  <p className="text-xs text-neutral-700 py-1">Geen taken gepland</p>
+                  <p className="text-xs text-neutral-700 py-1">No tasks planned</p>
                 )}
               </div>
             </div>
@@ -165,7 +165,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
         {/* Pending client requests */}
         {pendingClientTasks.length > 0 && (
           <div className="border border-orange-900/40 rounded-lg p-4 space-y-2">
-            <p className="text-xs text-orange-400 uppercase tracking-widest">Jouw verzoeken · wachten op goedkeuring</p>
+            <p className="text-xs text-orange-400 uppercase tracking-widest">Your requests · awaiting approval</p>
             {pendingClientTasks.map((task) => (
               <div key={task.id} className="flex items-center gap-3 py-1">
                 <div className="w-3 h-3 rounded border border-orange-600 shrink-0" />
@@ -178,13 +178,13 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
         {/* Request form */}
         <div className="border border-neutral-800 rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
-            <p className="text-sm font-medium text-neutral-300">Taak aanvragen</p>
+            <p className="text-sm font-medium text-neutral-300">Request a task</p>
             <button
               onClick={() => setRequestOpen(!requestOpen)}
               className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 transition-colors"
             >
               {requestOpen ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              {requestOpen ? "Sluiten" : "Nieuw verzoek"}
+              {requestOpen ? "Close" : "New request"}
             </button>
           </div>
 
@@ -193,7 +193,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
               {submitted ? (
                 <div className="flex items-center gap-2 text-emerald-400 py-2">
                   <Check className="w-4 h-4" />
-                  <span className="text-sm">Verzoek ingediend — we nemen het in behandeling!</span>
+                  <span className="text-sm">Request submitted — we'll review it shortly!</span>
                 </div>
               ) : (
                 <>
@@ -201,13 +201,13 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
                     required
                     value={requestTitle}
                     onChange={(e) => setRequestTitle(e.target.value)}
-                    placeholder="Wat wil je dat we toevoegen of aanpassen?"
+                    placeholder="What would you like us to add or change?"
                     className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-neutral-600"
                   />
                   <textarea
                     value={requestDesc}
                     onChange={(e) => setRequestDesc(e.target.value)}
-                    placeholder="Aanvullende toelichting (optioneel)..."
+                    placeholder="Additional details (optional)..."
                     rows={2}
                     className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-neutral-600 resize-none"
                   />
@@ -217,7 +217,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
                     className="flex items-center gap-2 text-sm bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
-                    {submitting ? "Versturen..." : "Verzoek indienen"}
+                    {submitting ? "Sending..." : "Submit request"}
                   </button>
                 </>
               )}
@@ -226,7 +226,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
         </div>
 
         <p className="text-center text-xs text-neutral-700">
-          Gemaakt door blablabuild · Talk less, build more.
+          Made by blablabuild · Talk less, build more.
         </p>
       </div>
     </div>

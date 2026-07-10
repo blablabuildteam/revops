@@ -79,7 +79,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-xl font-semibold text-neutral-100">Dashboard</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            Overzicht van pipeline &amp; omzet
+            Pipeline &amp; revenue overview
           </p>
         </div>
         <Button
@@ -87,7 +87,7 @@ export default function DashboardPage() {
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
-          Nieuwe kans
+          New opportunity
         </Button>
       </div>
 
@@ -103,25 +103,25 @@ export default function DashboardPage() {
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="Pipeline totaal"
+            label="Total pipeline"
             value={formatCurrency(pipeline)}
-            sub={`${active.length} actieve kansen`}
+            sub={`${active.length} active opportunities`}
             accent
           />
           <KpiCard
-            label="Gewogen pipeline"
+            label="Weighted pipeline"
             value={formatCurrency(weighted)}
-            sub="Op basis van kans %"
+            sub="Based on probability %"
           />
           <KpiCard
-            label="Gerealiseerde omzet"
+            label="Realized revenue"
             value={formatCurrency(actualRevenue)}
-            sub={`${won.length} gewonnen`}
+            sub={`${won.length} won`}
           />
           <KpiCard
             label="Win rate"
             value={`${winRate}%`}
-            sub={`van ${opps.filter((o) => ["won", "lost"].includes(o.stage)).length} afgesloten`}
+            sub={`of ${opps.filter((o) => ["won", "lost"].includes(o.stage)).length} closed`}
           />
         </div>
       )}
@@ -130,12 +130,12 @@ export default function DashboardPage() {
         {/* Recent opportunities */}
         <div className="col-span-2 border border-neutral-800 rounded-lg overflow-hidden">
           <div className="px-5 py-3.5 border-b border-neutral-800 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-neutral-300">Recente kansen</h2>
+            <h2 className="text-sm font-medium text-neutral-300">Recent opportunities</h2>
             <a
               href="/opportunities"
               className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
             >
-              Alle kansen →
+              All opportunities →
             </a>
           </div>
           <div className="divide-y divide-neutral-800/70">
@@ -164,7 +164,7 @@ export default function DashboardPage() {
             ))}
             {recentOpps.length === 0 && (
               <p className="px-5 py-8 text-sm text-neutral-600 text-center">
-                Nog geen kansen. Voeg er een toe!
+                No opportunities yet. Add one!
               </p>
             )}
           </div>
@@ -173,7 +173,7 @@ export default function DashboardPage() {
         {/* Stage breakdown */}
         <div className="border border-neutral-800 rounded-lg overflow-hidden">
           <div className="px-5 py-3.5 border-b border-neutral-800">
-            <h2 className="text-sm font-medium text-neutral-300">Per fase</h2>
+            <h2 className="text-sm font-medium text-neutral-300">By stage</h2>
           </div>
           <div className="p-5 space-y-3">
             {(["prospect", "qualified", "proposal", "negotiation", "won"] as const).map(
@@ -209,7 +209,7 @@ export default function DashboardPage() {
 
           <div className="border-t border-neutral-800 px-5 py-4 space-y-2">
             <h3 className="text-xs text-neutral-500 uppercase tracking-widest mb-3">
-              Aandacht nodig
+              Needs attention
             </h3>
             {opps
               .filter((o) => o.sentiment === "negative" || o.sentiment === "very_negative")
@@ -220,7 +220,7 @@ export default function DashboardPage() {
                   <div className="min-w-0">
                     <p className="text-xs text-neutral-300 truncate">{opp.name}</p>
                     <p className="text-xs text-neutral-600">
-                      Sluit {formatRelativeDate(opp.close_date)}
+                      Closes {formatRelativeDate(opp.close_date)}
                     </p>
                   </div>
                 </div>
@@ -230,7 +230,7 @@ export default function DashboardPage() {
             ).length === 0 && (
               <div className="flex items-center gap-2 text-xs text-neutral-600">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Alles ziet er goed uit
+                Everything looks good
               </div>
             )}
           </div>

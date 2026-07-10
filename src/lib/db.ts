@@ -12,6 +12,20 @@ export async function ensureTables() {
   return initPromise;
 }
 
+async function migrateOpportunityTypes() {
+  // Drop the old constraint first — updates to 'new'/'retainer' fail while it still
+  // only allows legacy values like 'new_business' and 'upsell'.
+  await sql`ALTER TABLE opportunities DROP CONSTRAINT IF EXISTS opportunities_type_check`;
+  await sql`UPDATE opportunities SET type = 'new' WHERE type IN ('new_business', 'upsell')`;
+  await sql`UPDATE opportunities SET type = 'retainer' WHERE type = 'renewal'`;
+  await sql`ALTER TABLE opportunities ALTER COLUMN type SET DEFAULT 'new'`;
+  try {
+    await sql`ALTER TABLE opportunities ADD CONSTRAINT opportunities_type_check CHECK (type IN ('new', 'project', 'retainer'))`;
+  } catch {
+    // Constraint already exists with the updated definition
+  }
+}
+
 async function _init() {
   // Check if tables already exist (fast path for warm instances after first boot)
   try {
@@ -25,6 +39,7 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
+      await migrateOpportunityTypes();
       initialized = true;
       return;
     }
@@ -61,8 +76,8 @@ async function _init() {
       company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
       name TEXT NOT NULL,
       description TEXT,
-      type TEXT NOT NULL DEFAULT 'new_business'
-        CHECK (type IN ('new_business', 'upsell', 'renewal', 'project', 'retainer')),
+      type TEXT NOT NULL DEFAULT 'new'
+        CHECK (type IN ('new', 'project', 'retainer')),
       stage TEXT NOT NULL DEFAULT 'prospect'
         CHECK (stage IN ('prospect', 'qualified', 'proposal', 'negotiation', 'won', 'lost', 'on_hold')),
       probability INTEGER DEFAULT 50 CHECK (probability >= 0 AND probability <= 100),
@@ -209,6 +224,8 @@ async function _init() {
       ('founders', '2')
     ON CONFLICT (key) DO NOTHING
   `;
+
+  await migrateOpportunityTypes();
 
   initialized = true;
 }

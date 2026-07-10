@@ -65,7 +65,7 @@ export async function POST(
     const { title, description, milestone_id } = await req.json();
 
     if (!title?.trim()) {
-      return NextResponse.json({ error: "Titel is verplicht" }, { status: 400 });
+      return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
     const { rows } = await sql`

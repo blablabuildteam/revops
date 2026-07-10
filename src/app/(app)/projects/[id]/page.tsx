@@ -49,11 +49,11 @@ function TaskRow({
         <div className="flex-1 min-w-0">
           <p className="text-sm text-orange-200">{task.title}</p>
           {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate">{task.description}</p>}
-          <p className="text-xs text-orange-600 mt-0.5">Verzoek van klant</p>
+          <p className="text-xs text-orange-600 mt-0.5">Client request</p>
         </div>
         <button onClick={() => onApprove(task.id)}
           className="flex items-center gap-1 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-900 transition-colors">
-          <Check className="w-3 h-3" /> Goedkeuren
+          <Check className="w-3 h-3" /> Approve
         </button>
         <button onClick={() => onDelete(task.id)}
           className="text-neutral-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
@@ -115,7 +115,7 @@ function AddTaskInline({
     return (
       <button onClick={() => setOpen(true)}
         className="flex items-center gap-2 text-xs text-neutral-700 hover:text-neutral-400 transition-colors px-3 py-1.5 w-full">
-        <Plus className="w-3.5 h-3.5" /> Taak toevoegen
+        <Plus className="w-3.5 h-3.5" /> Add task
       </button>
     );
   }
@@ -123,7 +123,7 @@ function AddTaskInline({
   return (
     <form onSubmit={submit} className="flex items-center gap-2 px-3 py-1.5">
       <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
-        placeholder="Taakomschrijving..."
+        placeholder="Task description..."
         className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1" />
       <Button type="submit" size="sm"
         className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
@@ -186,12 +186,12 @@ function MilestoneSection({
       <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800">
         <button onClick={cycleStatus}
           className={`text-xs px-2 py-0.5 rounded font-mono cursor-pointer ${milestoneStatusColors[milestone.status]}`}>
-          {milestone.status === "pending" ? "Gepland" : milestone.status === "in_progress" ? "Bezig" : "Afgerond"}
+          {milestone.status === "pending" ? "Planned" : milestone.status === "in_progress" ? "In progress" : "Completed"}
         </button>
         <h3 className="font-medium text-neutral-200 flex-1">{milestone.name}</h3>
         <div className="flex items-center gap-3">
           {pending > 0 && (
-            <span className="text-xs text-orange-400">{pending} verzoek{pending !== 1 ? "en" : ""}</span>
+            <span className="text-xs text-orange-400">{pending} request{pending !== 1 ? "s" : ""}</span>
           )}
           <span className="text-xs text-neutral-600 font-mono">{done}/{total}</span>
           {milestone.due_date && (
@@ -267,7 +267,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  if (!project) return <div className="p-8 text-neutral-600">Project niet gevonden</div>;
+  if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
 
   const allTasks = [
     ...project.milestones.flatMap((m) => m.tasks || []),
@@ -293,7 +293,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-          {copied ? "Gekopieerd!" : "Deel klantlink"}
+          {copied ? "Copied!" : "Share client link"}
         </button>
       </div>
 
@@ -301,7 +301,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex items-center gap-3 bg-orange-950/40 border border-orange-900/50 rounded-lg px-4 py-3">
           <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse shrink-0" />
           <p className="text-sm text-orange-300">
-            <span className="font-medium">{pendingRequests} taakverzoek{pendingRequests !== 1 ? "en" : ""}</span> van de klant wachten op goedkeuring
+            <span className="font-medium">{pendingRequests} task request{pendingRequests !== 1 ? "s" : ""}</span> from the client awaiting approval
           </p>
         </div>
       )}
@@ -331,12 +331,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <Input
           value={newMilestoneName}
           onChange={(e) => setNewMilestoneName(e.target.value)}
-          placeholder="Nieuwe fase toevoegen... (bijv. Discovery, Design, Build)"
+          placeholder="Add new phase... (e.g. Discovery, Design, Build)"
           className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
         />
         <Button type="submit" disabled={addingMilestone || !newMilestoneName.trim()}
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 shrink-0">
-          <Plus className="w-4 h-4" /> Fase
+          <Plus className="w-4 h-4" /> Phase
         </Button>
       </form>
     </div>

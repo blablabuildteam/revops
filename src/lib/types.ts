@@ -8,9 +8,7 @@ export type Stage =
   | "on_hold";
 
 export type OpportunityType =
-  | "new_business"
-  | "upsell"
-  | "renewal"
+  | "new"
   | "project"
   | "retainer";
 
@@ -96,11 +94,11 @@ export type NewOpportunity = Omit<
 
 export const STAGE_LABELS: Record<Stage, string> = {
   prospect: "Prospect",
-  qualified: "Gekwalificeerd",
-  proposal: "Voorstel",
-  negotiation: "Onderhandeling",
-  won: "Gewonnen",
-  lost: "Verloren",
+  qualified: "Qualified",
+  proposal: "Proposal",
+  negotiation: "Negotiation",
+  won: "Won",
+  lost: "Lost",
   on_hold: "On Hold",
 };
 
@@ -115,19 +113,24 @@ export const STAGE_ORDER: Stage[] = [
 ];
 
 export const TYPE_LABELS: Record<OpportunityType, string> = {
-  new_business: "Nieuw",
-  upsell: "Upsell",
-  renewal: "Verlenging",
+  new: "New",
   project: "Project",
   retainer: "Retainer",
 };
 
+export function normalizeOpportunityType(type: string): OpportunityType {
+  if (type === "new" || type === "project" || type === "retainer") return type;
+  if (type === "new_business" || type === "upsell") return "new";
+  if (type === "renewal") return "retainer";
+  return "new";
+}
+
 export const SENTIMENT_LABELS: Record<Sentiment, string> = {
-  very_positive: "Zeer positief",
-  positive: "Positief",
-  neutral: "Neutraal",
-  negative: "Negatief",
-  very_negative: "Zeer negatief",
+  very_positive: "Very positive",
+  positive: "Positive",
+  neutral: "Neutral",
+  negative: "Negative",
+  very_negative: "Very negative",
 };
 
 export type ProjectStatus = "active" | "on_hold" | "completed" | "cancelled";
@@ -183,30 +186,30 @@ export interface Task {
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: "Actief",
+  active: "Active",
   on_hold: "On Hold",
-  completed: "Afgerond",
-  cancelled: "Geannuleerd",
+  completed: "Completed",
+  cancelled: "Cancelled",
 };
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   open: "Open",
-  in_progress: "Bezig",
-  done: "Klaar",
+  in_progress: "In progress",
+  done: "Done",
 };
 
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
-  pending: "Gepland",
-  in_progress: "Bezig",
-  completed: "Afgerond",
+  pending: "Planned",
+  in_progress: "In progress",
+  completed: "Completed",
 };
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
-  not_sent: "Niet verzonden",
-  draft: "Concept",
-  sent: "Verzonden",
-  viewed: "Bekeken",
-  accepted: "Geaccepteerd",
-  declined: "Afgewezen",
-  expired: "Verlopen",
+  not_sent: "Not sent",
+  draft: "Draft",
+  sent: "Sent",
+  viewed: "Viewed",
+  accepted: "Accepted",
+  declined: "Declined",
+  expired: "Expired",
 };

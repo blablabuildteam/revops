@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +24,7 @@ import {
   Opportunity,
   STAGE_LABELS,
   TYPE_LABELS,
+  normalizeOpportunityType,
 } from "@/lib/types";
 import { createOpportunity, updateOpportunity, getCompanies, createCompany } from "@/lib/api";
 
@@ -39,7 +39,7 @@ const defaultForm: NewOpportunity = {
   name: "",
   company_id: undefined,
   description: "",
-  type: "new_business",
+  type: "new",
   stage: "prospect",
   probability: 25,
   expected_value: 0,
@@ -54,25 +54,25 @@ const defaultForm: NewOpportunity = {
   tags: [],
 };
 
-const fieldClass =
-  "bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600";
+const fc = "bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600";
 
-export function OpportunityForm({
-  open,
-  onClose,
-  onSave,
-  initial,
-}: OpportunityFormProps) {
+export function OpportunityForm({ open, onClose, onSave, initial }: OpportunityFormProps) {
   const [form, setForm] = useState<NewOpportunity>(defaultForm);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [addingCompany, setAddingCompany] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    getCompanies().then(setCompanies);
+  const resizeNotes = useCallback(() => {
+    const el = notesRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   }, []);
+
+  useEffect(() => { getCompanies().then(setCompanies); }, []);
 
   useEffect(() => {
     if (initial) {
@@ -80,7 +80,7 @@ export function OpportunityForm({
         name: initial.name,
         company_id: initial.company_id,
         description: initial.description || "",
-        type: initial.type,
+        type: normalizeOpportunityType(initial.type),
         stage: initial.stage,
         probability: initial.probability,
         expected_value: initial.expected_value,
@@ -94,10 +94,26 @@ export function OpportunityForm({
         notes: initial.notes || "",
         tags: initial.tags || [],
       });
+      if (initial.company?.id && initial.company?.name) {
+        setCompanies((prev) =>
+          prev.some((c) => c.id === initial.company!.id)
+            ? prev
+            : [...prev, initial.company as Company]
+        );
+      }
     } else {
       setForm(defaultForm);
     }
   }, [initial, open]);
+
+  useEffect(() => {
+    if (open) resizeNotes();
+  }, [open, form.notes, resizeNotes]);
+
+  const companyName = useMemo(() => {
+    if (!form.company_id) return null;
+    return companies.find((c) => c.id === form.company_id)?.name ?? initial?.company?.name ?? null;
+  }, [form.company_id, companies, initial?.company?.name]);
 
   const set = (key: keyof NewOpportunity, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -131,12 +147,7 @@ export function OpportunityForm({
         currency: form.currency,
         owner: form.owner || undefined,
         notes: form.notes || undefined,
-        ...(initial
-          ? {}
-          : {
-              sentiment: form.sentiment,
-              proposal_status: form.proposal_status,
-            }),
+        ...(initial ? {} : { sentiment: form.sentiment, proposal_status: form.proposal_status }),
       };
       const saved = initial
         ? await updateOpportunity(initial.id, payload)
@@ -144,7 +155,7 @@ export function OpportunityForm({
       onSave(saved);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Er is iets misgegaan");
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -152,190 +163,185 @@ export function OpportunityForm({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-4xl w-[calc(100%-2rem)] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-neutral-100">
-            {initial ? "Kans bewerken" : "Nieuwe kans toevoegen"}
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-5xl w-[92vw] p-0 overflow-hidden">
+        <div className="px-6 pt-6 pb-2">
+          <DialogHeader>
+            <DialogTitle className="text-neutral-100 text-lg">
+              {initial ? "Edit opportunity" : "Add new opportunity"}
+            </DialogTitle>
+          </DialogHeader>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-neutral-500">
-              Basis
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-3 space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Naam *</Label>
-                <Input
-                  required
-                  value={form.name}
-                  onChange={(e) => set("name", e.target.value)}
-                  placeholder="bijv. Website redesign Q3"
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="md:col-span-2 space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Bedrijf</Label>
-                <Select
-                  value={form.company_id || "none"}
-                  onValueChange={(v) => set("company_id", v === "none" ? undefined : v)}
-                >
-                  <SelectTrigger className={fieldClass}>
-                    <SelectValue placeholder="Selecteer bedrijf" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
-                    <SelectItem value="none" className="text-neutral-400">Geen bedrijf</SelectItem>
-                    {companies.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-neutral-100">
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
+        <form onSubmit={handleSubmit}>
+          <div className="grid grid-cols-[3fr_2fr] gap-8 px-6 py-4">
+            {/* LEFT COLUMN */}
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Name *</Label>
                   <Input
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    placeholder="Nieuw bedrijf toevoegen..."
-                    className={`${fieldClass} text-xs h-7`}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddCompany())}
+                    required
+                    value={form.name}
+                    onChange={(e) => set("name", e.target.value)}
+                    placeholder="e.g. Website redesign Q3"
+                    className={`${fc} w-full`}
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAddCompany}
-                    disabled={addingCompany || !newCompanyName.trim()}
-                    className="h-7 text-xs border-neutral-700 bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Company</Label>
+                  <Select
+                    value={form.company_id || "none"}
+                    onValueChange={(v) => {
+                      if (v === "__new__") return;
+                      set("company_id", v === "none" ? undefined : v);
+                    }}
                   >
-                    +
-                  </Button>
+                    <SelectTrigger className={`${fc} w-full`}>
+                      <SelectValue>{companyName ?? "No company"}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-neutral-800 border-neutral-700">
+                      <SelectItem value="none" className="text-neutral-400">No company</SelectItem>
+                      {companies.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
+                      ))}
+                      <div className="border-t border-neutral-700 mt-1 pt-1 px-1 pb-1">
+                        <div
+                          className="flex gap-1.5 items-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            value={newCompanyName}
+                            onChange={(e) => setNewCompanyName(e.target.value)}
+                            placeholder="New company..."
+                            className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-neutral-500"
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter") { e.preventDefault(); handleAddCompany(); }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddCompany}
+                            disabled={addingCompany || !newCompanyName.trim()}
+                            className="shrink-0 h-6 w-6 rounded bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                          >+</button>
+                        </div>
+                      </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Type</Label>
+                  <Select value={form.type} onValueChange={(v) => set("type", v)}>
+                    <SelectTrigger className={`${fc} w-full`}>
+                      <SelectValue>{TYPE_LABELS[form.type]}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-neutral-800 border-neutral-700">
+                      {Object.entries(TYPE_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k} className="text-neutral-100">{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Stage</Label>
+                  <Select value={form.stage} onValueChange={(v) => set("stage", v)}>
+                    <SelectTrigger className={`${fc} w-full`}>
+                      <SelectValue>{STAGE_LABELS[form.stage]}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-neutral-800 border-neutral-700">
+                      {Object.entries(STAGE_LABELS).map(([k, v]) => (
+                        <SelectItem key={k} value={k} className="text-neutral-100">{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Type</Label>
-                <Select value={form.type} onValueChange={(v) => set("type", v)}>
-                  <SelectTrigger className={fieldClass}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
-                    {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-neutral-100">{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Deal Order + Realized */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-neutral-400 text-xs">Deal Order (€)</Label>
+                  <Input
+                    type="number" min="0"
+                    value={form.expected_value}
+                    onChange={(e) => set("expected_value", e.target.value)}
+                    className={`${fc} font-mono`}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-neutral-400 text-xs">Realized (€)</Label>
+                  <Input
+                    type="number" min="0"
+                    value={form.actual_value}
+                    onChange={(e) => set("actual_value", e.target.value)}
+                    className={`${fc} font-mono`}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-neutral-500">
-              Deal
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Fase</Label>
-                <Select value={form.stage} onValueChange={(v) => set("stage", v)}>
-                  <SelectTrigger className={fieldClass}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
-                    {Object.entries(STAGE_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-neutral-100">{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            {/* RIGHT COLUMN */}
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Probability — {form.probability}%</Label>
+                  <Input
+                    type="range" min="0" max="100" step="5"
+                    value={form.probability}
+                    onChange={(e) => set("probability", e.target.value)}
+                    className="h-2 bg-neutral-800 accent-[#e8ff47] mt-2 w-full"
+                  />
+                </div>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-neutral-400 text-xs">Owner</Label>
+                  <Input
+                    value={form.owner || ""}
+                    onChange={(e) => set("owner", e.target.value)}
+                    placeholder="e.g. Kevin"
+                    className={`${fc} w-full`}
+                  />
+                </div>
               </div>
 
+              {/* Notes */}
               <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Deal Order (€)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.expected_value}
-                  onChange={(e) => set("expected_value", e.target.value)}
-                  className={`${fieldClass} font-mono`}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Gerealiseerd (€)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.actual_value}
-                  onChange={(e) => set("actual_value", e.target.value)}
-                  className={`${fieldClass} font-mono`}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Kans (%) — {form.probability}%</Label>
-                <Input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={form.probability}
-                  onChange={(e) => set("probability", e.target.value)}
-                  className="h-2 bg-neutral-800 accent-[#e8ff47] mt-3"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-neutral-500">
-              Overig
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Verantwoordelijke</Label>
-                <Input
-                  value={form.owner || ""}
-                  onChange={(e) => set("owner", e.target.value)}
-                  placeholder="bijv. Kevin"
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="md:col-span-2 space-y-1.5">
-                <Label className="text-neutral-400 text-xs">Notities</Label>
+                <Label className="text-neutral-400 text-xs">Notes</Label>
                 <Textarea
+                  ref={notesRef}
                   value={form.notes || ""}
-                  onChange={(e) => set("notes", e.target.value)}
-                  placeholder="Context, updates, volgende stappen..."
-                  rows={3}
-                  className={`${fieldClass} resize-none`}
+                  onChange={(e) => {
+                    set("notes", e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = `${e.target.scrollHeight}px`;
+                  }}
+                  placeholder="Context, updates, next steps..."
+                  rows={1}
+                  className={`${fc} resize-none w-full min-h-10 overflow-hidden`}
                 />
               </div>
             </div>
           </div>
 
           {error && (
-            <p className="text-red-400 text-xs bg-red-950/50 px-3 py-2 rounded">{error}</p>
+            <p className="text-red-400 text-xs bg-red-950/50 px-6 py-2">{error}</p>
           )}
 
-          <DialogFooter className="gap-2">
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-neutral-800">
             <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
+              type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
             >
-              Annuleren
+              Cancel
             </Button>
             <Button
-              type="submit"
-              disabled={loading}
+              type="submit" disabled={loading}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
             >
-              {loading ? "Opslaan..." : initial ? "Opslaan" : "Toevoegen"}
+              {loading ? "Saving..." : initial ? "Save" : "Add"}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

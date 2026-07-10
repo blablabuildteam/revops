@@ -28,6 +28,7 @@ import {
   STAGE_LABELS,
   STAGE_ORDER,
   TYPE_LABELS,
+  normalizeOpportunityType,
 } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -161,7 +162,7 @@ export default function OpportunitiesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Weet je zeker dat je deze kans wil verwijderen?")) return;
+    if (!confirm("Are you sure you want to delete this opportunity?")) return;
     await deleteOpportunity(id);
     setOpps((prev) => prev.filter((o) => o.id !== id));
   }
@@ -182,14 +183,14 @@ export default function OpportunitiesPage() {
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Kansen</h1>
+          <h1 className="text-xl font-semibold text-neutral-100">Opportunities</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            {filtered.length} kansen ·{" "}
+            {filtered.length} opportunities ·{" "}
             <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order ·{" "}
             <span className="font-mono text-[#e8ff47]">
               {formatCurrency(totalWeighted)}
             </span>{" "}
-            gewogen
+            weighted
           </p>
         </div>
         <Button
@@ -200,7 +201,7 @@ export default function OpportunitiesPage() {
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
-          Nieuwe kans
+          New opportunity
         </Button>
       </div>
 
@@ -211,7 +212,7 @@ export default function OpportunitiesPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Zoeken..."
+            placeholder="Search..."
             className="pl-9 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-sm"
           />
         </div>
@@ -223,7 +224,7 @@ export default function OpportunitiesPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="all" className="text-neutral-400">Alle fases</SelectItem>
+            <SelectItem value="all" className="text-neutral-400">All stages</SelectItem>
             {Object.entries(STAGE_LABELS).map(([k, v]) => (
               <SelectItem key={k} value={k} className="text-neutral-100">
                 {v}
@@ -238,31 +239,31 @@ export default function OpportunitiesPage() {
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[24%]" />
+              <col className="w-[23%]" />
               <col className="w-[10%]" />
+              <col className="w-[10%]" />
+              <col className="w-[14%]" />
+              <col className="w-[9%]" />
+              <col className="w-[9%]" />
+              <col className="w-[18%]" />
               <col className="w-[7%]" />
-              <col className="w-[12%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
-              <col className="w-[20%]" />
-              <col className="w-[9%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
                 <th className="text-left px-4 py-2.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1.5">
-                    Naam <SortBtn col="name" />
+                    Name <SortBtn col="name" />
                   </div>
                 </th>
                 <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
-                  Bedrijf
+                  Company
                 </th>
-                <th className="text-left px-1.5 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
                   Type
                 </th>
-                <th className="text-left px-1.5 py-2.5 text-xs text-neutral-500 font-medium">
+                <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1">
-                    Fase <SortBtn col="stage" />
+                    Stage <SortBtn col="stage" />
                   </div>
                 </th>
                 <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
@@ -271,11 +272,11 @@ export default function OpportunitiesPage() {
                   </div>
                 </th>
                 <th className="text-right px-1.5 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  Gerealiseerd
+                  Realized
                 </th>
                 <th className="text-left px-2 py-2.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1">
-                    Kans % <SortBtn col="probability" />
+                    Probability % <SortBtn col="probability" />
                   </div>
                 </th>
                 <th className="px-1 py-2.5" />
@@ -305,9 +306,9 @@ export default function OpportunitiesPage() {
                       <td className="px-2 py-3 text-neutral-400 text-xs truncate">
                         {opp.company?.name || "—"}
                       </td>
-                      <td className="px-1.5 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-3 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <Select
-                          value={opp.type}
+                          value={normalizeOpportunityType(opp.type)}
                           onValueChange={(v) =>
                             patchOpp(opp.id, { type: v as OpportunityType })
                           }
@@ -315,10 +316,12 @@ export default function OpportunitiesPage() {
                           <SelectTrigger
                             className={cn(
                               selectTriggerClass,
-                              "w-fit rounded font-mono text-neutral-500"
+                              "w-full max-w-full rounded font-mono text-neutral-500"
                             )}
                           >
-                            <SelectValue />
+                            <SelectValue>
+                              {TYPE_LABELS[normalizeOpportunityType(opp.type)]}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent className="bg-neutral-800 border-neutral-700">
                             {Object.entries(TYPE_LABELS).map(([k, v]) => (
@@ -329,7 +332,7 @@ export default function OpportunitiesPage() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-1.5 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-3 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <Select
                           value={opp.stage}
                           onValueChange={(v) =>
@@ -339,11 +342,11 @@ export default function OpportunitiesPage() {
                           <SelectTrigger
                             className={cn(
                               selectTriggerClass,
-                              "w-fit rounded font-medium font-mono",
+                              "w-full max-w-full rounded font-medium font-mono",
                               stageStyles[opp.stage]
                             )}
                           >
-                            <SelectValue />
+                            <SelectValue>{STAGE_LABELS[opp.stage]}</SelectValue>
                           </SelectTrigger>
                           <SelectContent className="bg-neutral-800 border-neutral-700">
                             {Object.entries(STAGE_LABELS).map(([k, v]) => (
@@ -415,7 +418,7 @@ export default function OpportunitiesPage() {
 
         {!loading && filtered.length === 0 && (
           <div className="py-16 text-center">
-            <p className="text-neutral-600 text-sm">Geen kansen gevonden</p>
+            <p className="text-neutral-600 text-sm">No opportunities found</p>
           </div>
         )}
       </div>

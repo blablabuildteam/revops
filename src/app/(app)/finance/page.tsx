@@ -36,7 +36,7 @@ interface Summary {
 
 function monthLabel(ym: string) {
   const [y, m] = ym.split("-");
-  return new Intl.DateTimeFormat("nl-NL", { month: "long", year: "numeric" })
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" })
     .format(new Date(Number(y), Number(m) - 1, 1));
 }
 
@@ -140,8 +140,8 @@ export default function FinancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Financieel overzicht</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Omzet, verdeling & salaris potje</p>
+          <h1 className="text-xl font-semibold text-neutral-100">Finance overview</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">Revenue, allocation & salary pot</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setMonth((m) => addMonths(m, -1))}
@@ -170,7 +170,7 @@ export default function FinancePage() {
             <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Omzet</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-widest">Revenue</p>
               </div>
               <p className="text-2xl font-mono font-semibold text-[#e8ff47]">
                 {formatCurrency(summary.totalRevenue)}
@@ -181,38 +181,38 @@ export default function FinancePage() {
             <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
               <div className="flex items-center gap-2 mb-1">
                 <Wallet className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Salaris potje</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-widest">Salary pot</p>
               </div>
               <p className="text-2xl font-mono font-semibold text-neutral-100">
                 {formatCurrency(summary.splits.salaryPot)}
               </p>
               <p className="text-xs mt-1">
                 {summary.canPaySalary
-                  ? <span className="text-emerald-500">✓ Salaris mogelijk</span>
-                  : <span className="text-orange-400">Tekort {formatCurrency(summary.shortfall)}</span>}
+                  ? <span className="text-emerald-500">✓ Salary possible</span>
+                  : <span className="text-orange-400">Shortfall {formatCurrency(summary.shortfall)}</span>}
               </p>
             </div>
 
             <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
               <div className="flex items-center gap-2 mb-1">
                 <PiggyBank className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Pot saldo</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-widest">Pot balance</p>
               </div>
               <p className="text-2xl font-mono font-semibold text-neutral-100">
                 {formatCurrency(summary.potBalance)}
               </p>
-              <p className="text-xs text-neutral-600 mt-1">Cumulatief opgebouwd</p>
+              <p className="text-xs text-neutral-600 mt-1">Cumulative balance</p>
             </div>
 
             <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
               <div className="flex items-center gap-2 mb-1">
                 <Receipt className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Belasting</p>
+                <p className="text-xs text-neutral-500 uppercase tracking-widest">Tax</p>
               </div>
               <p className="text-2xl font-mono font-semibold text-neutral-100">
                 {formatCurrency(summary.splits.taxReserve)}
               </p>
-              <p className="text-xs text-neutral-600 mt-1">Gereserveerd</p>
+              <p className="text-xs text-neutral-600 mt-1">Reserved</p>
             </div>
           </div>
 
@@ -221,8 +221,8 @@ export default function FinancePage() {
             <div className="col-span-2 space-y-4">
               <div className="border border-neutral-800 rounded-lg overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-neutral-800">
-                  <h2 className="text-sm font-medium text-neutral-300">Omzet per klant — {monthLabel(month)}</h2>
-                  <p className="text-xs text-neutral-600 mt-0.5">Voer de werkelijke omzet in per klant</p>
+                  <h2 className="text-sm font-medium text-neutral-300">Revenue per client — {monthLabel(month)}</h2>
+                  <p className="text-xs text-neutral-600 mt-0.5">Enter actual revenue per client</p>
                 </div>
                 <div className="divide-y divide-neutral-800/60">
                   {companies.map((company) => {
@@ -266,7 +266,7 @@ export default function FinancePage() {
               {/* History bar chart */}
               {summary.history.length > 0 && (
                 <div className="border border-neutral-800 rounded-lg p-5">
-                  <h2 className="text-sm font-medium text-neutral-300 mb-4">Omzet afgelopen maanden</h2>
+                  <h2 className="text-sm font-medium text-neutral-300 mb-4">Revenue last months</h2>
                   <div className="flex items-end gap-3 h-32">
                     {summary.history.map((h) => {
                       const pct = (Number(h.revenue) / maxHistory) * 100;
@@ -295,17 +295,17 @@ export default function FinancePage() {
 
             {/* Right: Split + pot + salary */}
             <div className="space-y-4">
-              {/* Verdeling */}
+              {/* Allocation */}
               <div className="border border-neutral-800 rounded-lg p-5 space-y-4">
-                <h2 className="text-sm font-medium text-neutral-300">Verdeling</h2>
+                <h2 className="text-sm font-medium text-neutral-300">Allocation</h2>
                 <PctBar
-                  label="Salaris potje"
+                  label="Salary pot"
                   pct={summary.settings.salaryPct}
                   value={summary.splits.salaryPot}
                   color="text-[#e8ff47]"
                 />
                 <PctBar
-                  label="Belasting"
+                  label="Tax"
                   pct={summary.settings.taxPct}
                   value={summary.splits.taxReserve}
                   color="text-red-400"
@@ -318,12 +318,12 @@ export default function FinancePage() {
                 />
               </div>
 
-              {/* Salaris uitbetaling */}
+              {/* Salary payout */}
               <div className="border border-neutral-800 rounded-lg p-5 space-y-3">
-                <h2 className="text-sm font-medium text-neutral-300">Salaris uitbetaling</h2>
+                <h2 className="text-sm font-medium text-neutral-300">Salary payout</h2>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Target per persoon</span>
+                    <span className="text-neutral-500">Target per person</span>
                     <span className="font-mono text-neutral-300">{formatCurrency(summary.settings.salaryPerPerson)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
@@ -331,11 +331,11 @@ export default function FinancePage() {
                     <span className="font-mono text-neutral-300">{formatCurrency(summary.salaryTarget)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Uitbetaald deze maand</span>
+                    <span className="text-neutral-500">Paid this month</span>
                     <span className="font-mono text-neutral-300">{formatCurrency(summary.withdrawnThisMonth)}</span>
                   </div>
                   <div className="border-t border-neutral-800 pt-1.5 flex justify-between text-xs">
-                    <span className="text-neutral-500">Pot saldo</span>
+                    <span className="text-neutral-500">Pot balance</span>
                     <span className={`font-mono font-semibold ${summary.potBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {formatCurrency(summary.potBalance)}
                     </span>
@@ -348,14 +348,14 @@ export default function FinancePage() {
                     variant="outline"
                     className="w-full text-xs border-neutral-700 bg-neutral-800 text-neutral-300 hover:bg-neutral-700 gap-2 h-8"
                   >
-                    <Plus className="w-3 h-3" /> Uitbetaling registreren
+                    <Plus className="w-3 h-3" /> Record payout
                   </Button>
                 ) : (
                   <div className="space-y-2">
                     <input
                       value={withdrawal.person}
                       onChange={(e) => setWithdrawal((w) => ({ ...w, person: e.target.value }))}
-                      placeholder="Naam"
+                      placeholder="Name"
                       className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-100 outline-none"
                     />
                     <input
@@ -367,11 +367,11 @@ export default function FinancePage() {
                     <div className="flex gap-2">
                       <Button onClick={handleWithdrawal}
                         className="flex-1 h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-                        Opslaan
+                        Save
                       </Button>
                       <Button onClick={() => setShowWithdrawal(false)} variant="ghost"
                         className="h-7 text-xs text-neutral-600 hover:text-neutral-300">
-                        Annuleren
+                        Cancel
                       </Button>
                     </div>
                   </div>
@@ -380,8 +380,8 @@ export default function FinancePage() {
 
               {/* 6-month forecast */}
               <div className="border border-neutral-800 rounded-lg p-5 space-y-3">
-                <h2 className="text-sm font-medium text-neutral-300">Forecast (6 mnd)</h2>
-                <p className="text-xs text-neutral-600">Op basis van actieve klanten + gewogen pipeline</p>
+                <h2 className="text-sm font-medium text-neutral-300">Forecast (6 mo)</h2>
+                <p className="text-xs text-neutral-600">Based on active clients + weighted pipeline</p>
                 <div className="space-y-2">
                   {forecast.map((f) => (
                     <div key={f.month} className="flex items-center justify-between">
