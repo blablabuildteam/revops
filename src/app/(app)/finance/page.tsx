@@ -6,10 +6,6 @@ import { useEffect, useState, useCallback } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  TrendingUp,
-  Wallet,
-  PiggyBank,
-  Receipt,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -91,43 +87,25 @@ function formatDate(date?: string) {
   }).format(new Date(date));
 }
 
-function PctBar({ label, pct, value, color }: { label: string; pct: number; value: number; color: string }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-neutral-500">{label} ({pct}%)</span>
-        <span className={`font-mono font-medium ${color}`}>{formatCurrency(value)}</span>
-      </div>
-      <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${color === "text-[#e8ff47]" ? "bg-[#e8ff47]" : color === "text-red-400" ? "bg-red-500" : "bg-neutral-600"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 const fc = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm";
 
 export default function FinancePage() {
-  const [month, setMonth] = useState(currentMonth());
+  const month = currentMonth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [deals, setDeals] = useState<FinanceDeal[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showWithdrawal, setShowWithdrawal] = useState(false);
-  const [withdrawal, setWithdrawal] = useState({ person: "Kevin", amount: "5445" });
   const [selectedDeal, setSelectedDeal] = useState<FinanceDeal | null>(null);
   const [editForm, setEditForm] = useState<Partial<FinanceDeal>>({});
   const [savingDeal, setSavingDeal] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [manualDealOpen, setManualDealOpen] = useState(false);
+  const [insightsMonth, setInsightsMonth] = useState(currentMonth);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [sum, dealList, oppList] = await Promise.all([
-      fetch(`/api/finance/summary?month=${month}`).then((r) => r.json()),
+      fetch(`/api/finance/summary?month=${currentMonth()}`).then((r) => r.json()),
       getFinanceDeals(),
       getOpportunities(),
     ]);
@@ -135,19 +113,9 @@ export default function FinancePage() {
     setDeals(dealList);
     setOpportunities(oppList);
     setLoading(false);
-  }, [month]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  async function handleWithdrawal() {
-    await fetch("/api/finance/withdrawals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month, amount: parseFloat(withdrawal.amount), person: withdrawal.person }),
-    });
-    setShowWithdrawal(false);
-    load();
-  }
 
   function openDeal(deal: FinanceDeal) {
     setSelectedDeal(deal);
@@ -260,7 +228,7 @@ export default function FinancePage() {
     ? Math.max(...summary.history.map((h) => Number(h.revenue)))
     : 1;
 
-  const insights = monthlyInsights(deals, month);
+  const insights = monthlyInsights(deals, insightsMonth);
   const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
 
   return (
@@ -270,87 +238,22 @@ export default function FinancePage() {
           <h1 className="text-xl font-semibold text-neutral-100">Finance overview</h1>
           <p className="text-sm text-neutral-500 mt-0.5">Finance deals, allocation & salary pot</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={() => setManualDealOpen(true)}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add deal
-          </Button>
-          <button onClick={() => setMonth((m) => addMonths(m, -1))}
-            className="p-1.5 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-200 transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-medium text-neutral-200 w-36 text-center capitalize">
-            {monthLabel(month)}
-          </span>
-          <button onClick={() => setMonth((m) => addMonths(m, 1))}
-            className="p-1.5 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-200 transition-colors"
-            disabled={month >= currentMonth()}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+        <Button
+          onClick={() => setManualDealOpen(true)}
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add deal
+        </Button>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />)}
-        </div>
+        <div className="h-64 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
       ) : summary && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Revenue</p>
-              </div>
-              <p className="text-2xl font-mono font-semibold text-[#e8ff47]">
-                {formatCurrency(summary.totalRevenue)}
-              </p>
-              <p className="text-xs text-neutral-600 mt-1">{monthLabel(month)}</p>
-            </div>
-
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <div className="flex items-center gap-2 mb-1">
-                <Wallet className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Salary pot</p>
-              </div>
-              <p className="text-2xl font-mono font-semibold text-neutral-100">
-                {formatCurrency(summary.splits.salaryPot)}
-              </p>
-              <p className="text-xs mt-1">
-                {summary.canPaySalary
-                  ? <span className="text-emerald-500">✓ Salary possible</span>
-                  : <span className="text-orange-400">Shortfall {formatCurrency(summary.shortfall)}</span>}
-              </p>
-            </div>
-
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <div className="flex items-center gap-2 mb-1">
-                <PiggyBank className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Pot balance</p>
-              </div>
-              <p className="text-2xl font-mono font-semibold text-neutral-100">
-                {formatCurrency(summary.potBalance)}
-              </p>
-              <p className="text-xs text-neutral-600 mt-1">Cumulative balance</p>
-            </div>
-
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <div className="flex items-center gap-2 mb-1">
-                <Receipt className="w-3.5 h-3.5 text-neutral-600" />
-                <p className="text-xs text-neutral-500 uppercase tracking-widest">Tax</p>
-              </div>
-              <p className="text-2xl font-mono font-semibold text-neutral-100">
-                {formatCurrency(summary.splits.taxReserve)}
-              </p>
-              <p className="text-xs text-neutral-600 mt-1">Reserved</p>
-            </div>
-          </div>
-
           {insightSeries.length > 0 && (
-            <div className="border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <div className="lg:col-span-3 border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
               <h2 className="text-sm font-medium text-neutral-300 mb-1">12-month revenue outlook</h2>
               <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue and net after €10.9k salary</p>
               <ResponsiveContainer width="100%" height={220}>
@@ -424,6 +327,10 @@ export default function FinancePage() {
               </ResponsiveContainer>
               <div className="flex items-center justify-center gap-6 mt-3">
                 <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-violet-400 rounded" style={{ backgroundImage: "repeating-linear-gradient(90deg, #a78bfa 0 4px, transparent 4px 7px)" }} />
+                  <span className="text-xs text-neutral-500">Forecasted</span>
+                </div>
+                <div className="flex items-center gap-2">
                   <div className="w-4 h-0.5 bg-[#e8ff47] rounded" />
                   <span className="text-xs text-neutral-500">Expected</span>
                 </div>
@@ -432,19 +339,105 @@ export default function FinancePage() {
                   <span className="text-xs text-neutral-500">Actual</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-0.5 bg-violet-400 rounded" style={{ backgroundImage: "repeating-linear-gradient(90deg, #a78bfa 0 4px, transparent 4px 7px)" }} />
-                  <span className="text-xs text-neutral-500">Forecasted</span>
-                </div>
-                <div className="flex items-center gap-2">
                   <div className="w-4 h-0.5 bg-orange-500 rounded" style={{ backgroundImage: "repeating-linear-gradient(90deg, #f97316 0 3px, transparent 3px 6px)" }} />
                   <span className="text-xs text-neutral-500">Net after salary</span>
                 </div>
               </div>
             </div>
+
+            <div className="border border-neutral-800 rounded-lg p-5 space-y-5 bg-neutral-900/40">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-medium text-neutral-300">Monthly insights</h2>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setInsightsMonth((m) => addMonths(m, -1))}
+                      className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-200 transition-colors"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs font-medium text-neutral-400 w-20 text-center capitalize">
+                      {monthLabel(insightsMonth).split(" ")[0].slice(0, 3)} {insightsMonth.split("-")[0]}
+                    </span>
+                    <button
+                      onClick={() => setInsightsMonth((m) => addMonths(m, 1))}
+                      className="p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-neutral-200 transition-colors"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Expected revenue</span>
+                    <span className="text-sm font-mono font-semibold text-[#e8ff47]">
+                      {formatCurrency(insights.expected)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees</p>
+                </div>
+
+                <div className="border-t border-neutral-800" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Actual revenue</span>
+                    <span className="text-sm font-mono font-semibold text-emerald-400">
+                      {formatCurrency(insights.actual)}
+                    </span>
+                  </div>
+                  {insights.expected > 0 && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500/70 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, insights.expected > 0 ? (insights.actual / insights.expected) * 100 : 0)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono text-neutral-600">
+                        {insights.expected > 0 ? Math.round((insights.actual / insights.expected) * 100) : 0}%
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-neutral-600">Recorded payments this month</p>
+                </div>
+
+                <div className="border-t border-neutral-800" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Salary coverage</span>
+                    <span className={cn(
+                      "text-sm font-mono font-semibold",
+                      insights.salaryRemaining <= 0 ? "text-emerald-400" : "text-orange-400"
+                    )}>
+                      {insights.salaryRemaining <= 0
+                        ? formatCurrency(Math.abs(insights.salaryRemaining)) + " surplus"
+                        : formatCurrency(insights.salaryRemaining) + " short"
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          insights.salaryRemaining <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
+                        )}
+                        style={{ width: `${Math.min(100, (insights.actual / insights.salaryTarget) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-mono text-neutral-600">
+                      {Math.min(100, Math.round((insights.actual / insights.salaryTarget) * 100))}%
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} target · {formatCurrency(insights.actual)} received</p>
+                </div>
+            </div>
+            </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            <div className="lg:col-span-3 space-y-4">
+          <div className="space-y-4">
               <div className="border border-neutral-800 rounded-lg overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-neutral-800">
                   <h2 className="text-sm font-medium text-neutral-300">Finance deals</h2>
@@ -563,161 +556,6 @@ export default function FinancePage() {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="space-y-4">
-              <div className="border border-neutral-800 rounded-lg p-5 space-y-5 bg-neutral-900/40">
-                <h2 className="text-sm font-medium text-neutral-300">Monthly insights</h2>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Expected revenue</span>
-                    <span className="text-sm font-mono font-semibold text-[#e8ff47]">
-                      {formatCurrency(insights.expected)}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees</p>
-                </div>
-
-                <div className="border-t border-neutral-800" />
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Actual revenue</span>
-                    <span className="text-sm font-mono font-semibold text-emerald-400">
-                      {formatCurrency(insights.actual)}
-                    </span>
-                  </div>
-                  {insights.expected > 0 && (
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500/70 rounded-full transition-all"
-                          style={{ width: `${Math.min(100, insights.expected > 0 ? (insights.actual / insights.expected) * 100 : 0)}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-mono text-neutral-600">
-                        {insights.expected > 0 ? Math.round((insights.actual / insights.expected) * 100) : 0}%
-                      </span>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-neutral-600">Recorded payments this month</p>
-                </div>
-
-                <div className="border-t border-neutral-800" />
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Salary coverage</span>
-                    <span className={cn(
-                      "text-sm font-mono font-semibold",
-                      insights.salaryRemaining <= 0 ? "text-emerald-400" : "text-orange-400"
-                    )}>
-                      {insights.salaryRemaining <= 0
-                        ? formatCurrency(Math.abs(insights.salaryRemaining)) + " surplus"
-                        : formatCurrency(insights.salaryRemaining) + " short"
-                      }
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          insights.salaryRemaining <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
-                        )}
-                        style={{ width: `${Math.min(100, (insights.actual / insights.salaryTarget) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] font-mono text-neutral-600">
-                      {Math.min(100, Math.round((insights.actual / insights.salaryTarget) * 100))}%
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} target · {formatCurrency(insights.actual)} received</p>
-                </div>
-              </div>
-
-              <div className="border border-neutral-800 rounded-lg p-5 space-y-4">
-                <h2 className="text-sm font-medium text-neutral-300">Allocation</h2>
-                <PctBar
-                  label="Salary pot"
-                  pct={summary.settings.salaryPct}
-                  value={summary.splits.salaryPot}
-                  color="text-[#e8ff47]"
-                />
-                <PctBar
-                  label="Tax"
-                  pct={summary.settings.taxPct}
-                  value={summary.splits.taxReserve}
-                  color="text-red-400"
-                />
-                <PctBar
-                  label="Reserve"
-                  pct={summary.settings.reservePct}
-                  value={summary.splits.companyReserve}
-                  color="text-neutral-400"
-                />
-              </div>
-
-              <div className="border border-neutral-800 rounded-lg p-5 space-y-3">
-                <h2 className="text-sm font-medium text-neutral-300">Salary payout</h2>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Target per person</span>
-                    <span className="font-mono text-neutral-300">{formatCurrency(summary.settings.salaryPerPerson)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Totaal ({summary.settings.founders} founders)</span>
-                    <span className="font-mono text-neutral-300">{formatCurrency(summary.salaryTarget)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Paid this month</span>
-                    <span className="font-mono text-neutral-300">{formatCurrency(summary.withdrawnThisMonth)}</span>
-                  </div>
-                  <div className="border-t border-neutral-800 pt-1.5 flex justify-between text-xs">
-                    <span className="text-neutral-500">Pot balance</span>
-                    <span className={`font-mono font-semibold ${summary.potBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {formatCurrency(summary.potBalance)}
-                    </span>
-                  </div>
-                </div>
-
-                {!showWithdrawal ? (
-                  <Button
-                    onClick={() => setShowWithdrawal(true)}
-                    variant="outline"
-                    className="w-full text-xs border-neutral-700 bg-neutral-800 text-neutral-300 hover:bg-neutral-700 gap-2 h-8"
-                  >
-                    <Plus className="w-3 h-3" /> Record payout
-                  </Button>
-                ) : (
-                  <div className="space-y-2">
-                    <input
-                      value={withdrawal.person}
-                      onChange={(e) => setWithdrawal((w) => ({ ...w, person: e.target.value }))}
-                      placeholder="Name"
-                      className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-100 outline-none"
-                    />
-                    <input
-                      type="number"
-                      value={withdrawal.amount}
-                      onChange={(e) => setWithdrawal((w) => ({ ...w, amount: e.target.value }))}
-                      className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1.5 text-xs font-mono text-neutral-100 outline-none"
-                    />
-                    <div className="flex gap-2">
-                      <Button onClick={handleWithdrawal}
-                        className="flex-1 h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-                        Save
-                      </Button>
-                      <Button onClick={() => setShowWithdrawal(false)} variant="ghost"
-                        className="h-7 text-xs text-neutral-600 hover:text-neutral-300">
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </>
       )}

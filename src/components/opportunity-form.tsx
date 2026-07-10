@@ -51,6 +51,8 @@ const defaultForm: NewOpportunity = {
   proposal_url: "",
   owner: "",
   close_date: "",
+  start_date: "",
+  end_date: "",
   notes: "",
   tags: [],
 };
@@ -64,7 +66,10 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
   const [addingCompany, setAddingCompany] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoad = useRef(true);
 
   const resizeNotes = useCallback(() => {
     const el = notesRef.current;
@@ -92,6 +97,8 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         proposal_url: initial.proposal_url || "",
         owner: initial.owner || "",
         close_date: initial.close_date || "",
+        start_date: initial.start_date ? initial.start_date.slice(0, 7) : "",
+        end_date: initial.end_date ? initial.end_date.slice(0, 7) : "",
         notes: initial.notes || "",
         tags: initial.tags || [],
       });
@@ -119,6 +126,51 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
   const set = (key: keyof NewOpportunity, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  const buildPayload = useCallback((f: NewOpportunity) => ({
+    name: f.name,
+    company_id: f.company_id || undefined,
+    type: f.type,
+    stage: f.stage,
+    probability: Number(f.probability),
+    expected_value: Number(f.expected_value),
+    actual_value: Number(f.actual_value),
+    currency: f.currency,
+    notes: f.notes || undefined,
+    start_date: f.start_date ? f.start_date + "-01" : undefined,
+    end_date: f.end_date ? f.end_date + "-01" : undefined,
+  }), []);
+
+  useEffect(() => {
+    if (!initial || !open) return;
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      try {
+        setSaveStatus("saving");
+        const saved = await updateOpportunity(initial.id, buildPayload(form));
+        onSave(saved);
+        setSaveStatus("saved");
+        setTimeout(() => setSaveStatus("idle"), 1500);
+      } catch {
+        setSaveStatus("idle");
+      }
+    }, 800);
+
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  useEffect(() => {
+    isInitialLoad.current = true;
+    setSaveStatus("idle");
+  }, [open, initial]);
+
   async function handleAddCompany() {
     if (!newCompanyName.trim()) return;
     setAddingCompany(true);
@@ -134,24 +186,19 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (initial) {
+      onClose();
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const payload = {
-        name: form.name,
-        company_id: form.company_id || undefined,
-        type: form.type,
-        stage: form.stage,
-        probability: Number(form.probability),
-        expected_value: Number(form.expected_value),
-        actual_value: Number(form.actual_value),
-        currency: form.currency,
-        notes: form.notes || undefined,
-        ...(initial ? {} : { sentiment: form.sentiment, proposal_status: form.proposal_status }),
+        ...buildPayload(form),
+        sentiment: form.sentiment,
+        proposal_status: form.proposal_status,
       };
-      const saved = initial
-        ? await updateOpportunity(initial.id, payload)
-        : await createOpportunity({ ...defaultForm, ...payload });
+      const saved = await createOpportunity(payload);
       onSave(saved);
       onClose();
     } catch (err: unknown) {
@@ -295,6 +342,27 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-neutral-400 text-xs">Expected start</Label>
+                  <Input
+                    type="month"
+                    value={form.start_date ?? ""}
+                    onChange={(e) => set("start_date", e.target.value)}
+                    className={fc}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-neutral-400 text-xs">Expected delivery</Label>
+                  <Input
+                    type="month"
+                    value={form.end_date ?? ""}
+                    onChange={(e) => set("end_date", e.target.value)}
+                    className={fc}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* RIGHT COLUMN */}
@@ -332,7 +400,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
             <p className="text-red-400 text-xs bg-red-950/50 px-6 py-2">{error}</p>
           )}
 
-          <div className="flex justify-between gap-3 px-6 py-4 border-t border-neutral-800">
+          <div className="flex justify-between items-center gap-3 px-6 py-4 border-t border-neutral-800">
             <div>
               {initial && onDelete && (
                 <Button
@@ -346,19 +414,36 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                 </Button>
               )}
             </div>
-            <div className="flex gap-3">
-              <Button
-                type="button" variant="ghost" onClick={onClose}
-                className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit" disabled={loading}
-                className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
-              >
-                {loading ? "Saving..." : initial ? "Save" : "Add"}
-              </Button>
+            <div className="flex items-center gap-3">
+              {initial && (
+                <span className="text-xs text-neutral-500 transition-opacity">
+                  {saveStatus === "saving" && "Saving..."}
+                  {saveStatus === "saved" && <span className="text-emerald-400">✓ Saved</span>}
+                </span>
+              )}
+              {initial ? (
+                <Button
+                  type="button" onClick={onClose}
+                  className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium"
+                >
+                  Done
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="button" variant="ghost" onClick={onClose}
+                    className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit" disabled={loading}
+                    className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+                  >
+                    {loading ? "Saving..." : "Add"}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </form>

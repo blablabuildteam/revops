@@ -12,19 +12,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Company,
   DealType,
   Opportunity,
   PaymentScheduleEntry,
   Project,
 } from "@/lib/types";
-import { createFinanceDeal, createProject, updateProject } from "@/lib/api";
+import { createFinanceDeal, createProject, updateProject, getCompanies, createCompany } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface DealActivationWizardProps {
   open: boolean;
   onClose: () => void;
-  opportunity: Opportunity | null;
-  onComplete: (project: Project) => void;
+  opportunity?: Opportunity | null;
+  onComplete: (project?: Project) => void;
 }
 
 const fc =
@@ -46,6 +54,7 @@ export function DealActivationWizard({
   opportunity,
   onComplete,
 }: DealActivationWizardProps) {
+  const isManual = !opportunity;
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +62,10 @@ export function DealActivationWizard({
 
   const [projectName, setProjectName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [companyId, setCompanyId] = useState<string | undefined>(undefined);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [addingCompany, setAddingCompany] = useState(false);
   const [dealType, setDealType] = useState<DealType>("project");
   const [totalDealValue, setTotalDealValue] = useState("0");
   const [startDate, setStartDate] = useState("");
@@ -65,22 +78,45 @@ export function DealActivationWizard({
   ]);
 
   useEffect(() => {
-    if (!open || !opportunity) return;
-    setStep(1);
-    setProject(null);
+    if (open) getCompanies().then(setCompanies);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     setError(null);
-    setProjectName(defaultProjectName(opportunity));
-    setCompanyName(opportunity.company?.name ?? "");
-    setDealType(opportunity.type === "retainer" ? "retainer" : "project");
-    setTotalDealValue(String(opportunity.expected_value || 0));
-    setStartDate(opportunity.start_date ?? "");
-    setEndDate(opportunity.end_date ?? opportunity.close_date ?? "");
-    setMonthlyFee(String(opportunity.expected_value || 0));
-    setMonthlyRevshare("0");
-    setPaymentSchedule([
-      { month: monthInputValue(opportunity.start_date), percentage: 50 },
-      { month: monthInputValue(opportunity.end_date ?? opportunity.close_date), percentage: 50 },
-    ]);
+    setProject(null);
+
+    if (opportunity) {
+      setStep(1);
+      setProjectName(defaultProjectName(opportunity));
+      setCompanyName(opportunity.company?.name ?? "");
+      setCompanyId(opportunity.company_id);
+      setDealType(opportunity.type === "retainer" ? "retainer" : "project");
+      setTotalDealValue(String(opportunity.expected_value || 0));
+      setStartDate(opportunity.start_date ?? "");
+      setEndDate(opportunity.end_date ?? opportunity.close_date ?? "");
+      setMonthlyFee(String(opportunity.expected_value || 0));
+      setMonthlyRevshare("0");
+      setPaymentSchedule([
+        { month: monthInputValue(opportunity.start_date), percentage: 50 },
+        { month: monthInputValue(opportunity.end_date ?? opportunity.close_date), percentage: 50 },
+      ]);
+    } else {
+      setStep(2);
+      setProjectName("");
+      setCompanyName("");
+      setCompanyId(undefined);
+      setDealType("project");
+      setTotalDealValue("0");
+      setStartDate("");
+      setEndDate("");
+      setMonthlyFee("0");
+      setMonthlyRevshare("0");
+      setPaymentSchedule([
+        { month: "", percentage: 50 },
+        { month: "", percentage: 50 },
+      ]);
+    }
   }, [open, opportunity]);
 
   const paymentTotal = useMemo(
@@ -109,15 +145,29 @@ export function DealActivationWizard({
     setPaymentSchedule((prev) => prev.filter((_, i) => i !== index));
   }
 
+  async function handleAddCompany() {
+    if (!newCompanyName.trim()) return;
+    setAddingCompany(true);
+    try {
+      const company = await createCompany({ name: newCompanyName.trim() });
+      setCompanies((c) => [...c, company]);
+      setCompanyId(company.id);
+      setCompanyName(company.name);
+      setNewCompanyName("");
+    } finally {
+      setAddingCompany(false);
+    }
+  }
+
   async function handleCreateProject() {
-    if (!opportunity || !projectName.trim()) return;
+    if (!projectName.trim()) return;
     setLoading(true);
     setError(null);
     try {
       const created = await createProject({
         name: projectName.trim(),
-        company_id: opportunity.company_id,
-        opportunity_id: opportunity.id,
+        company_id: opportunity?.company_id ?? companyId,
+        opportunity_id: opportunity?.id,
         status: "active",
         start_date: startDate || undefined,
         end_date: endDate || undefined,
@@ -132,7 +182,6 @@ export function DealActivationWizard({
   }
 
   async function handleCreateDeal() {
-    if (!opportunity || !project) return;
     if (!companyName.trim() || !projectName.trim()) {
       setError("Company and project name are required");
       return;
@@ -146,14 +195,26 @@ export function DealActivationWizard({
     setLoading(true);
     setError(null);
     try {
-      if (project.name !== projectName.trim()) {
+      let projectId = project?.id;
+
+      if (isManual && !projectId) {
+        const created = await createProject({
+          name: projectName.trim(),
+          company_id: companyId,
+          status: "active",
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        });
+        setProject(created);
+        projectId = created.id;
+      } else if (project && project.name !== projectName.trim()) {
         await updateProject(project.id, { name: projectName.trim() });
       }
 
       await createFinanceDeal({
-        opportunity_id: opportunity.id,
-        project_id: project.id,
-        company_id: opportunity.company_id,
+        opportunity_id: opportunity?.id,
+        project_id: projectId,
+        company_id: opportunity?.company_id ?? companyId,
         company_name: companyName.trim(),
         project_name: projectName.trim(),
         deal_type: dealType,
@@ -166,7 +227,7 @@ export function DealActivationWizard({
         amount_paid: 0,
         payments: [],
       });
-      onComplete(project);
+      onComplete(project ?? undefined);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create finance deal");
@@ -175,41 +236,43 @@ export function DealActivationWizard({
     }
   }
 
-  if (!opportunity) return null;
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-3xl w-[92vw] p-0 overflow-hidden">
         <div className="px-6 pt-6 pb-2">
           <DialogHeader>
             <DialogTitle className="text-neutral-100 text-lg">
-              Activate won deal
+              {isManual ? "Add finance deal" : "Activate won deal"}
             </DialogTitle>
             <p className="text-sm text-neutral-500">
-              Step {step} of 2 — {step === 1 ? "Create project" : "Create finance deal"}
+              {isManual
+                ? "Manually record a new finance deal"
+                : `Step ${step} of 2 — ${step === 1 ? "Create project" : "Create finance deal"}`}
             </p>
           </DialogHeader>
 
-          <div className="flex items-center gap-2 mt-4">
-            {[1, 2].map((s) => (
-              <div key={s} className="flex items-center gap-2 flex-1">
-                <div
-                  className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium border",
-                    step >= s
-                      ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
-                      : "border-neutral-700 text-neutral-600"
-                  )}
-                >
-                  {s}
+          {!isManual && (
+            <div className="flex items-center gap-2 mt-4">
+              {[1, 2].map((s) => (
+                <div key={s} className="flex items-center gap-2 flex-1">
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium border",
+                      step >= s
+                        ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+                        : "border-neutral-700 text-neutral-600"
+                    )}
+                  >
+                    {s}
+                  </div>
+                  <span className={cn("text-xs", step >= s ? "text-neutral-300" : "text-neutral-600")}>
+                    {s === 1 ? "Project" : "Finance deal"}
+                  </span>
+                  {s < 2 && <div className="flex-1 h-px bg-neutral-800" />}
                 </div>
-                <span className={cn("text-xs", step >= s ? "text-neutral-300" : "text-neutral-600")}>
-                  {s === 1 ? "Project" : "Finance deal"}
-                </span>
-                {s < 2 && <div className="flex-1 h-px bg-neutral-800" />}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 space-y-5">
@@ -249,17 +312,67 @@ export function DealActivationWizard({
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Company</Label>
-                  <Input
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    className={fc}
-                  />
+                  {isManual ? (
+                    <Select
+                      value={companyId || "none"}
+                      onValueChange={(v) => {
+                        if (v === "__new__" || v === "none") {
+                          if (v === "none") { setCompanyId(undefined); setCompanyName(""); }
+                          return;
+                        }
+                        setCompanyId(v);
+                        const c = companies.find((c) => c.id === v);
+                        if (c) setCompanyName(c.name);
+                      }}
+                    >
+                      <SelectTrigger className={`${fc} w-full`}>
+                        <SelectValue>{companyName || "Select company"}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-neutral-800 border-neutral-700">
+                        <SelectItem value="none" className="text-neutral-400">No company</SelectItem>
+                        {companies.map((c) => (
+                          <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
+                        ))}
+                        <div className="border-t border-neutral-700 mt-1 pt-1 px-1 pb-1">
+                          <div
+                            className="flex gap-1.5 items-center"
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              value={newCompanyName}
+                              onChange={(e) => setNewCompanyName(e.target.value)}
+                              placeholder="New company..."
+                              className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-neutral-500"
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") { e.preventDefault(); handleAddCompany(); }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCompany}
+                              disabled={addingCompany || !newCompanyName.trim()}
+                              className="shrink-0 h-6 w-6 rounded bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                            >+</button>
+                          </div>
+                        </div>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      className={fc}
+                    />
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Project</Label>
                   <Input
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
+                    placeholder={isManual ? "e.g. Website redesign" : ""}
                     className={fc}
                   />
                 </div>
@@ -407,10 +520,10 @@ export function DealActivationWizard({
           <Button
             type="button"
             variant="ghost"
-            onClick={step === 1 ? onClose : () => setStep(1)}
+            onClick={step === 1 ? onClose : isManual ? onClose : () => setStep(1)}
             className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
           >
-            {step === 1 ? "Cancel" : "Back"}
+            {step === 1 || isManual ? "Cancel" : "Back"}
           </Button>
           <Button
             type="button"
@@ -422,7 +535,13 @@ export function DealActivationWizard({
             onClick={step === 1 ? handleCreateProject : handleCreateDeal}
             className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
           >
-            {loading ? "Saving..." : step === 1 ? "Create project & continue" : "Create finance deal"}
+            {loading
+              ? "Saving..."
+              : step === 1
+                ? "Create project & continue"
+                : isManual
+                  ? "Add deal"
+                  : "Create finance deal"}
           </Button>
         </div>
       </DialogContent>

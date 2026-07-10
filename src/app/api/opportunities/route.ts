@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 
+const asNull = (v: unknown) => (v === "" || v == null ? null : v);
+
 export async function GET() {
   try {
     await ensureTables();
@@ -33,20 +35,20 @@ export async function POST(req: NextRequest) {
     const {
       name, description, company_id, type, stage, probability,
       expected_value, actual_value, currency, sentiment,
-      proposal_status, proposal_url, owner, close_date, notes, tags,
+      proposal_status, proposal_url, owner, close_date, start_date, end_date, notes, tags,
     } = body;
 
     const { rows } = await sql`
       INSERT INTO opportunities (
         name, description, company_id, type, stage, probability,
         expected_value, actual_value, currency, sentiment,
-        proposal_status, proposal_url, owner, close_date, notes, tags
+        proposal_status, proposal_url, owner, close_date, start_date, end_date, notes, tags
       ) VALUES (
-        ${name}, ${description ?? null}, ${company_id ?? null},
+        ${name}, ${asNull(description)}, ${asNull(company_id)},
         ${type}, ${stage}, ${probability},
         ${expected_value}, ${actual_value}, ${currency}, ${sentiment},
-        ${proposal_status ?? null}, ${proposal_url ?? null}, ${owner ?? null},
-        ${close_date ?? null}, ${notes ?? null}, ${tags ?? null}
+        ${asNull(proposal_status)}, ${asNull(proposal_url)}, ${asNull(owner)},
+        ${asNull(close_date)}, ${asNull(start_date)}, ${asNull(end_date)}, ${asNull(notes)}, ${tags ?? null}
       )
       RETURNING *,
         expected_value * probability / 100 AS weighted_value

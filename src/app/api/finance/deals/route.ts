@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { formatFinanceDealRow, normalizeDateParam, normalizeDealPayments } from "@/lib/format";
+import { formatFinanceDealRow, normalizeDateParam, normalizeDealPayments, normalizePaymentSchedule } from "@/lib/format";
 
 function sumPayments(payments: { amount: number }[]) {
   return payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -77,9 +77,9 @@ export async function POST(req: NextRequest) {
         ${opportunity_id ?? null}, ${project_id ?? null}, ${company_id ?? null},
         ${company_name}, ${project_name}, ${deal_type},
         ${total_deal_value ?? 0},
-        ${normalizeDateParam(start_date)}::date,
-        ${normalizeDateParam(end_date)}::date,
-        ${JSON.stringify(payment_schedule ?? [])},
+        ${normalizeDateParam(start_date)},
+        ${normalizeDateParam(end_date)},
+        ${JSON.stringify(normalizePaymentSchedule(payment_schedule))},
         ${monthly_fee ?? 0}, ${monthly_revshare ?? 0}, ${amountPaid},
         ${JSON.stringify(normalizedPayments)}
       )

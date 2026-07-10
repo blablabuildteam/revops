@@ -61,6 +61,8 @@ export async function PUT(
         proposal_url = ${val("proposal_url", current.proposal_url)},
         owner = ${val("owner", current.owner)},
         close_date = ${val("close_date", current.close_date)},
+        start_date = ${val("start_date", current.start_date)},
+        end_date = ${val("end_date", current.end_date)},
         notes = ${val("notes", current.notes)},
         tags = ${val("tags", current.tags)},
         updated_at = now()

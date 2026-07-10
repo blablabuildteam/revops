@@ -340,6 +340,7 @@ export function forecastRevenueForMonth(opportunities: Opportunity[], month: str
     if (!opp.start_date) continue;
     const startMonth = opp.start_date.slice(0, 7);
     const weighted = (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100);
+
     if (opp.type === "retainer") {
       const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;
       if (month >= startMonth && (!endMonth || month <= endMonth)) {
@@ -351,8 +352,14 @@ export function forecastRevenueForMonth(opportunities: Opportunity[], month: str
         total += (weighted / months);
       }
     } else {
-      if (month === startMonth) {
-        total += weighted;
+      // Project: 50% on start, 50% on delivery
+      const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;
+      if (!endMonth || endMonth === startMonth) {
+        // No delivery date or same month — full amount in start month
+        if (month === startMonth) total += weighted;
+      } else {
+        if (month === startMonth) total += weighted * 0.5;
+        if (month === endMonth) total += weighted * 0.5;
       }
     }
   }

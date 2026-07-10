@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { formatFinanceDealRow, normalizeDateParam, normalizeDealPayments } from "@/lib/format";
+import {
+  formatFinanceDealRow,
+  normalizeDateParam,
+  normalizeDealPayments,
+  normalizePaymentSchedule,
+} from "@/lib/format";
 
 function sumPayments(payments: { amount: number }[]) {
   return payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
@@ -18,7 +23,8 @@ export async function GET(
     return NextResponse.json(formatFinanceDealRow(rows[0]));
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Database error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -51,15 +57,19 @@ export async function PUT(
 
     const startDateValue = has("start_date")
       ? normalizeDateParam(start_date)
-      : normalizeDateParam(current.start_date as string | null);
+      : normalizeDateParam(current.start_date as string | Date | null);
     const endDateValue = has("end_date")
       ? normalizeDateParam(end_date)
-      : normalizeDateParam(current.end_date as string | null);
+      : normalizeDateParam(current.end_date as string | Date | null);
 
     const normalizedPayments = has("payments")
       ? normalizeDealPayments(payments)
       : normalizeDealPayments(current.payments);
     const amountPaid = sumPayments(normalizedPayments);
+
+    const normalizedSchedule = has("payment_schedule")
+      ? normalizePaymentSchedule(payment_schedule)
+      : normalizePaymentSchedule(current.payment_schedule);
 
     const { rows } = await sql`
       UPDATE finance_deals SET
@@ -67,9 +77,9 @@ export async function PUT(
         project_name = COALESCE(${project_name ?? null}, project_name),
         deal_type = COALESCE(${deal_type ?? null}, deal_type),
         total_deal_value = COALESCE(${total_deal_value ?? null}, total_deal_value),
-        start_date = ${startDateValue}::date,
-        end_date = ${endDateValue}::date,
-        payment_schedule = COALESCE(${payment_schedule ? JSON.stringify(payment_schedule) : null}, payment_schedule),
+        start_date = ${startDateValue},
+        end_date = ${endDateValue},
+        payment_schedule = ${JSON.stringify(normalizedSchedule)},
         monthly_fee = COALESCE(${monthly_fee ?? null}, monthly_fee),
         monthly_revshare = COALESCE(${monthly_revshare ?? null}, monthly_revshare),
         payments = ${JSON.stringify(normalizedPayments)},
@@ -82,7 +92,8 @@ export async function PUT(
     return NextResponse.json(formatFinanceDealRow(rows[0]));
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Database error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -97,6 +108,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Database error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

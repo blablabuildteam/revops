@@ -32,15 +32,48 @@ export function formatRelativeDate(dateStr?: string): string {
   return `In ${Math.round(diffDays / 30)} mo`;
 }
 
-export function toDateInputValue(date?: string | null): string {
-  if (!date) return "";
-  return String(date).slice(0, 10);
+function toISODateString(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-export function normalizeDateParam(date?: string | null): string | null {
-  if (!date) return null;
-  const normalized = String(date).slice(0, 10);
-  return normalized || null;
+function toMonthInputValue(month?: string | Date | null): string {
+  if (!month) return "";
+  if (month instanceof Date) {
+    const y = month.getUTCFullYear();
+    const m = String(month.getUTCMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
+  }
+  const str = String(month).trim();
+  if (/^\d{4}-\d{2}/.test(str)) return str.slice(0, 7);
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) return toMonthInputValue(parsed);
+  return "";
+}
+
+export function toDateInputValue(date?: string | Date | null): string {
+  if (!date) return "";
+  if (date instanceof Date) return toISODateString(date);
+  const str = String(date).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) return toISODateString(parsed);
+  return "";
+}
+
+export function normalizeDateParam(date?: string | Date | null): string | null {
+  const value = toDateInputValue(date);
+  return value || null;
+}
+
+export function normalizePaymentSchedule(schedule: unknown): { month: string; percentage: number }[] {
+  if (!Array.isArray(schedule)) return [];
+  return schedule.map((entry) => ({
+    month: toMonthInputValue(entry?.month as string | Date | null | undefined),
+    percentage: Number(entry?.percentage) || 0,
+  }));
 }
 
 export function formatFinanceDealRow(row: Record<string, unknown>) {
@@ -55,11 +88,11 @@ export function formatFinanceDealRow(row: Record<string, unknown>) {
     monthly_fee: Number(row.monthly_fee),
     monthly_revshare: Number(row.monthly_revshare),
     amount_paid: amountPaid,
-    start_date: row.start_date ? String(row.start_date).slice(0, 10) : undefined,
-    end_date: row.end_date ? String(row.end_date).slice(0, 10) : undefined,
-    payment_schedule: row.payment_schedule ?? [],
-    payments: payments.map((p: { date?: string; amount?: number }) => ({
-      date: p.date ? String(p.date).slice(0, 10) : "",
+    start_date: row.start_date ? toDateInputValue(row.start_date as string | Date) : undefined,
+    end_date: row.end_date ? toDateInputValue(row.end_date as string | Date) : undefined,
+    payment_schedule: normalizePaymentSchedule(row.payment_schedule),
+    payments: payments.map((p: { date?: string | Date; amount?: number }) => ({
+      date: toDateInputValue(p.date),
       amount: Number(p.amount) || 0,
     })),
   };
@@ -68,7 +101,7 @@ export function formatFinanceDealRow(row: Record<string, unknown>) {
 export function normalizeDealPayments(payments: unknown): { date: string; amount: number }[] {
   if (!Array.isArray(payments)) return [];
   return payments.map((p) => ({
-    date: p?.date ? String(p.date).slice(0, 10) : "",
+    date: toDateInputValue(p?.date as string | Date | null | undefined),
     amount: Number(p?.amount) || 0,
   }));
 }
