@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 
-const asNull = (v: unknown) => (v === "" || v == null ? null : v);
+const asNull = (v: unknown): string | null => {
+  if (v == null || v === "") return null;
+  return String(v);
+};
 
 export async function GET() {
   try {

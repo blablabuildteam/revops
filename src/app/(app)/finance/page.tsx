@@ -277,12 +277,12 @@ export default function FinancePage() {
                   <Tooltip
                     contentStyle={{ background: "#171717", border: "1px solid #333", borderRadius: "8px", fontSize: 12 }}
                     labelStyle={{ color: "#a3a3a3" }}
-                    labelFormatter={(v: string) => {
-                      const d = new Date(v + "-01");
+                    labelFormatter={(v) => {
+                      const d = new Date(String(v) + "-01");
                       return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
                     }}
-                    formatter={(value: number, name: string) => [
-                      formatCurrency(value),
+                    formatter={(value, name) => [
+                      formatCurrency(Number(value ?? 0)),
                       name === "expected" ? "Expected"
                         : name === "actual" ? "Actual"
                         : name === "forecast" ? "Forecasted"

@@ -320,7 +320,7 @@ export function DealActivationWizard({
                           if (v === "none") { setCompanyId(undefined); setCompanyName(""); }
                           return;
                         }
-                        setCompanyId(v);
+                        setCompanyId(v ?? undefined);
                         const c = companies.find((c) => c.id === v);
                         if (c) setCompanyName(c.name);
                       }}
