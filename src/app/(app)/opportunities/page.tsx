@@ -133,6 +133,68 @@ function InlineNumber({
   );
 }
 
+function InlineMonth({
+  value,
+  onSave,
+  className,
+}: {
+  value?: string;
+  onSave: (value: string | null) => void;
+  className?: string;
+}) {
+  const month = value?.slice(0, 7) ?? "";
+  const [local, setLocal] = useState(month);
+
+  useEffect(() => {
+    setLocal(value?.slice(0, 7) ?? "");
+  }, [value]);
+
+  function commit(next: string) {
+    const iso = next ? `${next}-01` : null;
+    const current = value?.slice(0, 7) ? `${value.slice(0, 7)}-01` : null;
+    if (iso !== current) onSave(iso);
+  }
+
+  return (
+    <input
+      type="month"
+      value={local}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        commit(e.target.value);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-1 text-xs font-mono text-neutral-400 outline-none transition-colors min-w-0 w-[118px]",
+        className
+      )}
+    />
+  );
+}
+
+function InlinePeriod({
+  startDate,
+  endDate,
+  onSaveStart,
+  onSaveEnd,
+}: {
+  startDate?: string;
+  endDate?: string;
+  onSaveStart: (value: string | null) => void;
+  onSaveEnd: (value: string | null) => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-1 min-w-0"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <InlineMonth value={startDate} onSave={onSaveStart} />
+      <span className="text-neutral-600 text-xs shrink-0">—</span>
+      <InlineMonth value={endDate} onSave={onSaveEnd} />
+    </div>
+  );
+}
+
 export default function OpportunitiesPage() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -300,24 +362,25 @@ export default function OpportunitiesPage() {
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[23%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[14%]" />
-              <col className="w-[9%]" />
-              <col className="w-[9%]" />
+              <col className="w-[11%]" />
               <col className="w-[18%]" />
-              <col className="w-[7%]" />
+              <col className="w-[8%]" />
+              <col className="w-[12%]" />
+              <col className="w-[16%]" />
+              <col className="w-[8%]" />
+              <col className="w-[8%]" />
+              <col className="w-[15%]" />
+              <col className="w-[4%]" />
             </colgroup>
             <thead>
               <tr className="border-b border-neutral-800 bg-neutral-900/60">
                 <th className="text-left px-4 py-3.5 text-xs text-neutral-500 font-medium">
+                  Company
+                </th>
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1.5">
                     Name <SortBtn col="name" />
                   </div>
-                </th>
-                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
-                  Company
                 </th>
                 <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   Type
@@ -326,6 +389,9 @@ export default function OpportunitiesPage() {
                   <div className="flex items-center gap-1">
                     Stage <SortBtn col="stage" />
                   </div>
+                </th>
+                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
+                  Period
                 </th>
                 <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1">
@@ -347,7 +413,7 @@ export default function OpportunitiesPage() {
               {loading
                 ? [...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      {[...Array(8)].map((_, j) => (
+                      {[...Array(9)].map((_, j) => (
                         <td key={j} className="px-4 py-4">
                           <div className="h-5 bg-neutral-800 rounded animate-pulse" />
                         </td>
@@ -360,13 +426,13 @@ export default function OpportunitiesPage() {
                       onClick={() => openEdit(opp)}
                       className="hover:bg-neutral-900/50 transition-colors cursor-pointer"
                     >
-                      <td className="px-4 py-4 min-w-0">
-                        <p className="text-neutral-200 font-medium truncate text-sm">
+                      <td className="px-4 py-4 text-neutral-300 text-sm truncate font-medium">
+                        {opp.company?.name || "—"}
+                      </td>
+                      <td className="px-2 py-4 min-w-0">
+                        <p className="text-neutral-400 truncate text-sm">
                           {opp.name}
                         </p>
-                      </td>
-                      <td className="px-2 py-4 text-neutral-400 text-sm truncate">
-                        {opp.company?.name || "—"}
                       </td>
                       <td className="px-2 py-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <Select
@@ -418,6 +484,14 @@ export default function OpportunitiesPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </td>
+                      <td className="px-2 py-4 overflow-hidden">
+                        <InlinePeriod
+                          startDate={opp.start_date}
+                          endDate={opp.end_date}
+                          onSaveStart={(v) => patchOpp(opp.id, { start_date: v || "" })}
+                          onSaveEnd={(v) => patchOpp(opp.id, { end_date: v || "" })}
+                        />
                       </td>
                       <td className="px-1.5 py-4 text-right">
                         <InlineNumber

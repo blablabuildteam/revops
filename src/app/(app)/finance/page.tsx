@@ -255,7 +255,7 @@ export default function FinancePage() {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-3 border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
               <h2 className="text-sm font-medium text-neutral-300 mb-1">12-month revenue outlook</h2>
-              <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue and net after €10.9k salary</p>
+              <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue and net after €9k salary</p>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={insightSeries} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
@@ -406,14 +406,14 @@ export default function FinancePage() {
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Salary coverage</span>
+                    <span className="text-xs text-neutral-500">Expected shortage</span>
                     <span className={cn(
                       "text-sm font-mono font-semibold",
-                      insights.salaryRemaining <= 0 ? "text-emerald-400" : "text-orange-400"
+                      insights.expectedShortage <= 0 ? "text-emerald-400" : "text-orange-400"
                     )}>
-                      {insights.salaryRemaining <= 0
-                        ? formatCurrency(Math.abs(insights.salaryRemaining)) + " surplus"
-                        : formatCurrency(insights.salaryRemaining) + " short"
+                      {insights.expectedShortage <= 0
+                        ? formatCurrency(Math.abs(insights.expectedShortage)) + " surplus"
+                        : formatCurrency(insights.expectedShortage) + " short"
                       }
                     </span>
                   </div>
@@ -422,16 +422,16 @@ export default function FinancePage() {
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          insights.salaryRemaining <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
+                          insights.expectedShortage <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
                         )}
-                        style={{ width: `${Math.min(100, (insights.actual / insights.salaryTarget) * 100)}%` }}
+                        style={{ width: `${Math.min(100, (insights.expected / insights.salaryTarget) * 100)}%` }}
                       />
                     </div>
                     <span className="text-[10px] font-mono text-neutral-600">
-                      {Math.min(100, Math.round((insights.actual / insights.salaryTarget) * 100))}%
+                      {Math.min(100, Math.round((insights.expected / insights.salaryTarget) * 100))}%
                     </span>
                   </div>
-                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} target · {formatCurrency(insights.actual)} received</p>
+                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} salary · {formatCurrency(insights.expected)} expected</p>
                 </div>
             </div>
             </div>

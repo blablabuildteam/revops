@@ -291,7 +291,7 @@ export function dealOutstanding(deal: Pick<FinanceDeal, "deal_type" | "total_dea
   return Math.max(0, dealContractValue(deal) - (Number(deal.amount_paid) || 0));
 }
 
-const SALARY_MONTHLY = 10890;
+const SALARY_MONTHLY = 9000;
 
 export function expectedRevenueForMonth(deals: FinanceDeal[], month: string): number {
   let total = 0;
@@ -329,8 +329,8 @@ export function actualRevenueForMonth(deals: FinanceDeal[], month: string): numb
 export function monthlyInsights(deals: FinanceDeal[], month: string) {
   const expected = expectedRevenueForMonth(deals, month);
   const actual = actualRevenueForMonth(deals, month);
-  const salaryRemaining = SALARY_MONTHLY - actual;
-  return { expected, actual, salaryRemaining, salaryTarget: SALARY_MONTHLY };
+  const expectedShortage = SALARY_MONTHLY - expected;
+  return { expected, actual, expectedShortage, salaryTarget: SALARY_MONTHLY };
 }
 
 export function forecastRevenueForMonth(opportunities: Opportunity[], month: string): number {
