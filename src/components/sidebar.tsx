@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
-  Columns3,
   ListFilter,
   Building2,
   FolderKanban,
@@ -20,7 +19,6 @@ import { useEffect, useState } from "react";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pipeline", label: "Pipeline", icon: Columns3 },
   { href: "/opportunities", label: "Opportunities", icon: ListFilter },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/todos", label: "Tasks", icon: CheckSquare },

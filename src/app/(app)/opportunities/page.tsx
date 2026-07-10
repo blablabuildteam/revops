@@ -3,10 +3,13 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
   ArrowUpDown,
+  Columns3,
+  ListFilter,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { OpportunityForm } from "@/components/opportunity-form";
+import { OpportunityPipelineView } from "@/components/opportunity-pipeline-view";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
 import { getOpportunities, deleteOpportunity, updateOpportunity, getFinanceDeals } from "@/lib/api";
 import {
@@ -195,7 +199,14 @@ function InlinePeriod({
   );
 }
 
+type ViewMode = "list" | "pipeline";
+
 export default function OpportunitiesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const view: ViewMode =
+    searchParams.get("view") === "pipeline" ? "pipeline" : "list";
+
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -290,6 +301,30 @@ export default function OpportunitiesPage() {
     setWizardOpen(true);
   }
 
+  function setView(next: ViewMode) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "pipeline") {
+      params.set("view", "pipeline");
+    } else {
+      params.delete("view");
+    }
+    const query = params.toString();
+    router.replace(query ? `/opportunities?${query}` : "/opportunities");
+  }
+
+  async function handlePipelineStageChange(id: string, stage: Stage) {
+    const probMap: Record<Stage, number> = {
+      prospect: 20,
+      qualified: 40,
+      proposal: 60,
+      negotiation: 80,
+      won: 100,
+      lost: 0,
+      on_hold: 25,
+    };
+    await patchOpp(id, { stage, probability: probMap[stage] });
+  }
+
   const totalExpected = filtered.reduce((s, o) => s + o.expected_value, 0);
   const totalWeighted = filtered.reduce((s, o) => s + o.weighted_value, 0);
 
@@ -314,21 +349,46 @@ export default function OpportunitiesPage() {
               {formatCurrency(totalWeighted)}
             </span>{" "}
             weighted
+            {view === "pipeline" && (
+              <span className="text-neutral-600">
+                {" "}
+                · click a card to edit · hover for quick stage changes
+              </span>
+            )}
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingOpp(null);
-            setFormOpen(true);
-          }}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          New opportunity
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setView(view === "pipeline" ? "list" : "pipeline")}
+            className="border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 gap-2"
+          >
+            {view === "pipeline" ? (
+              <>
+                <ListFilter className="w-4 h-4" />
+                List view
+              </>
+            ) : (
+              <>
+                <Columns3 className="w-4 h-4" />
+                Pipeline
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={() => {
+              setEditingOpp(null);
+              setFormOpen(true);
+            }}
+            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            New opportunity
+          </Button>
+        </div>
       </div>
 
-      {/* Filters */}
+      {view === "list" && (
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
@@ -356,8 +416,9 @@ export default function OpportunitiesPage() {
           </SelectContent>
         </Select>
       </div>
+      )}
 
-      {/* Table */}
+      {view === "list" ? (
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
@@ -538,6 +599,16 @@ export default function OpportunitiesPage() {
           </div>
         )}
       </div>
+      ) : (
+        <OpportunityPipelineView
+          opps={filtered}
+          loading={loading}
+          activatedOpportunityIds={activatedOpportunityIds}
+          onEdit={openEdit}
+          onStageChange={handlePipelineStageChange}
+          onActivate={openActivation}
+        />
+      )}
 
       <OpportunityForm
         open={formOpen}
