@@ -8,6 +8,7 @@ import {
   Project,
   Milestone,
   Task,
+  TaskComment,
 } from "./types";
 
 const base = "/api";
@@ -132,6 +133,17 @@ export function updateTask(id: string, data: Partial<Task>): Promise<Task> {
 
 export function deleteTask(id: string): Promise<void> {
   return req(`/tasks/${id}`, { method: "DELETE" });
+}
+
+export function getTaskComments(taskId: string) {
+  return req<TaskComment[]>(`/tasks/${taskId}/comments`);
+}
+
+export function createTaskComment(taskId: string, body: string) {
+  return req<TaskComment>(`/tasks/${taskId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
 }
 
 // Public client view

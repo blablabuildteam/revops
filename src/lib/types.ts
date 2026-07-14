@@ -150,6 +150,7 @@ export interface Project {
   description?: string;
   status: ProjectStatus;
   share_token: string;
+  edit_token?: string | null;
   client_name?: string;
   client_email?: string;
   start_date?: string;
@@ -190,8 +191,18 @@ export interface Task {
   url?: string | null;
   priority: TaskPriority;
   position: number;
+  comment_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_user_id?: string | null;
+  author_name: string;
+  body: string;
+  created_at: string;
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {

@@ -23,7 +23,17 @@ export async function GET(
     `;
 
     const { rows: tasks } = await sql`
-      SELECT * FROM tasks WHERE project_id = ${id} ORDER BY position, created_at
+      SELECT
+        t.*,
+        COALESCE(cc.count, 0)::int AS comment_count
+      FROM tasks t
+      LEFT JOIN (
+        SELECT task_id, COUNT(*)::int AS count
+        FROM task_comments
+        GROUP BY task_id
+      ) cc ON cc.task_id = t.id
+      WHERE t.project_id = ${id}
+      ORDER BY t.position, t.created_at
     `;
 
     project.milestones = milestones.map((m) => ({

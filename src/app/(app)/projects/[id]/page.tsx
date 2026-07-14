@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter,
+  ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import Link from "next/link";
@@ -50,6 +50,7 @@ import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
+import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
@@ -223,6 +224,7 @@ function TaskDetailDialog({
     assignee: "",
     description: "",
     url: "",
+    priority: "low" as "low" | "medium" | "high",
   });
   const [loading, setLoading] = useState(false);
 
@@ -234,6 +236,7 @@ function TaskDetailDialog({
         assignee: task.assignee ?? "",
         description: task.description ?? "",
         url: task.url ?? "",
+        priority: task.priority ?? "low",
       });
     }
   }, [task, open]);
@@ -251,6 +254,7 @@ function TaskDetailDialog({
         assignee: form.assignee || null,
         description: form.description || null,
         url: form.url || null,
+        priority: form.priority,
       });
       onSave(updated);
       onClose();
@@ -303,6 +307,22 @@ function TaskDetailDialog({
                   {TASK_ASSIGNEES.map((name) => (
                     <SelectItem key={name} value={name} className="text-neutral-100">{name}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-neutral-400 text-xs">Priority</Label>
+              <Select
+                value={form.priority}
+                onValueChange={(v) => setForm((f) => ({ ...f, priority: (v ?? "low") as "low" | "medium" | "high" }))}
+              >
+                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-800 border-neutral-700">
+                  <SelectItem value="high" className="text-red-400">High</SelectItem>
+                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
+                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1297,7 +1317,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [newMilestoneName, setNewMilestoneName] = useState("");
   const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
   const [addingMilestone, setAddingMilestone] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedEdit, setCopiedEdit] = useState(false);
+  const [sharingEdit, setSharingEdit] = useState(false);
+  const [revokingEdit, setRevokingEdit] = useState(false);
   const { requestDelete, confirmDialog } = useConfirmDelete();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1687,11 +1709,33 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  function copyShareLink() {
+  async function shareEditAccess() {
     if (!project) return;
-    navigator.clipboard.writeText(`${window.location.origin}/project/${project.share_token}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setSharingEdit(true);
+    try {
+      let editToken = project.edit_token;
+      if (!editToken) {
+        const result = await grantEditAccess(project.id);
+        editToken = result.edit_token;
+        setProject((prev) => prev ? { ...prev, edit_token: editToken } : prev);
+      }
+      navigator.clipboard.writeText(`${window.location.origin}/project/${editToken}/board`);
+      setCopiedEdit(true);
+      setTimeout(() => setCopiedEdit(false), 2000);
+    } finally {
+      setSharingEdit(false);
+    }
+  }
+
+  async function removeEditAccess() {
+    if (!project?.edit_token) return;
+    setRevokingEdit(true);
+    try {
+      await revokeEditAccess(project.id);
+      setProject((prev) => prev ? { ...prev, edit_token: null } : prev);
+    } finally {
+      setRevokingEdit(false);
+    }
   }
 
   function requestDeleteProject() {
@@ -1701,7 +1745,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       description: (
         <>
           Are you sure you want to delete <span className="text-neutral-300">{project.name}</span>?
-          This will permanently remove all phases, tasks, and the client share link.
+          This will permanently remove all phases, tasks, and external board access.
         </>
       ),
       confirmLabel: "Delete project",
@@ -1841,7 +1885,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           />
         )}
         <div className="flex-1">
-          <h1 className="text-xl font-semibold text-neutral-100">{project.name}</h1>
+          <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
+            {project.name}
+            {project.edit_token && (
+              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/50 text-amber-400">
+                External
+              </span>
+            )}
+          </h1>
           <p className="text-sm text-neutral-600 mt-0.5">
             {(project.company as { name?: string })?.name || "—"}
             {project.client_name && ` · ${project.client_name}`}
@@ -1878,12 +1929,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             Edit statuses
           </button>
           <button
-            onClick={copyShareLink}
-            className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
+            onClick={shareEditAccess}
+            disabled={sharingEdit}
+            className="flex items-center gap-2 text-xs border border-[#e8ff47]/30 px-3 py-2 rounded-lg text-[#e8ff47] hover:border-[#e8ff47]/50 transition-colors disabled:opacity-50"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied!" : "Share client link"}
+            {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+            {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share board access"}
           </button>
+          {project.edit_token && (
+            <button
+              onClick={removeEditAccess}
+              disabled={revokingEdit}
+              className="flex items-center gap-2 text-xs border border-red-900/50 px-3 py-2 rounded-lg text-red-400 hover:border-red-800 transition-colors disabled:opacity-50"
+            >
+              <UserX className="w-3.5 h-3.5" />
+              {revokingEdit ? "Removing..." : "Remove access"}
+            </button>
+          )}
           <button
             onClick={requestDeleteProject}
             className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:border-red-900/50 transition-colors"

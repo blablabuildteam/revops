@@ -40,6 +40,19 @@ export function formatDate(dateStr?: string): string {
   }).format(date);
 }
 
+export function formatDateTime(dateStr?: string): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function formatRelativeDate(dateStr?: string): string {
   if (!dateStr) return "—";
   const date = parseLocalDate(dateStr);

@@ -92,6 +92,21 @@ async function _init() {
       await sql`UPDATE todos SET priority = 'low' WHERE priority != 'low'`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS task_comments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          author_name TEXT NOT NULL,
+          body TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT now()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
+        ON task_comments (task_id, created_at)
+      `;
       await sql`
         CREATE TABLE IF NOT EXISTS finance_deals (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -188,6 +203,7 @@ async function _init() {
       status TEXT DEFAULT 'active'
         CHECK (status IN ('active', 'on_hold', 'completed', 'cancelled')),
       share_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'),
+      edit_token TEXT UNIQUE,
       client_name TEXT,
       client_email TEXT,
       start_date DATE,
@@ -277,6 +293,22 @@ async function _init() {
       updated_at TIMESTAMPTZ DEFAULT now(),
       UNIQUE(company_id, month)
     )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
+    ON task_comments (task_id, created_at)
   `;
 
   await sql`

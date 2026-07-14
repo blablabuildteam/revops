@@ -39,6 +39,7 @@ import {
   CUSTOM_PHASE_DEFAULT_COLOR,
 } from "@/lib/types";
 import { batchUpdateMilestones } from "@/lib/api";
+import { batchUpdateEditBoardMilestones } from "@/lib/edit-board-api";
 
 interface StatusEntry {
   _key: string;
@@ -152,12 +153,14 @@ export function EditStatusesDialog({
   projectId,
   milestones,
   onSave,
+  editToken,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
   milestones: Milestone[];
   onSave: (updated: Milestone[]) => void;
+  editToken?: string;
 }) {
   const [entries, setEntries] = useState<StatusEntry[]>([]);
   const [saving, setSaving] = useState(false);
@@ -225,7 +228,9 @@ export function EditStatusesDialog({
         color: e.color,
         position: i,
       }));
-      const updated = await batchUpdateMilestones(projectId, payload);
+      const updated = editToken
+        ? await batchUpdateEditBoardMilestones(editToken, payload)
+        : await batchUpdateMilestones(projectId, payload);
       onSave(updated);
       onOpenChange(false);
     } finally {

@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useMemo } from "react";
-import { Plus, Copy, Check, ExternalLink, AlertCircle, FolderKanban } from "lucide-react";
+import { Plus, ExternalLink, AlertCircle, FolderKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getProjects, getCompanies, createProject } from "@/lib/api";
 import { Company, Project, PROJECT_STATUS_LABELS } from "@/lib/types";
@@ -42,28 +42,6 @@ const statusColors: Record<string, string> = {
   completed: "bg-emerald-950 text-emerald-400",
   cancelled: "bg-red-950 text-red-500",
 };
-
-function CopyLink({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
-  const url = `${window.location.origin}/project/${token}`;
-
-  function copy() {
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <button
-      onClick={(e) => { e.preventDefault(); copy(); }}
-      className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 transition-colors"
-      title="Copy client link"
-    >
-      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Copied!" : "Client link"}
-    </button>
-  );
-}
 
 function NewProjectDialog({
   open,
@@ -380,13 +358,10 @@ export default function ProjectsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-neutral-800">
-                  <div className="text-xs text-neutral-700 font-mono">
-                    {project.start_date && formatDate(project.start_date)}
-                    {project.start_date && project.end_date && " → "}
-                    {project.end_date && formatDate(project.end_date)}
-                  </div>
-                  <CopyLink token={project.share_token} />
+                <div className="mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-700 font-mono">
+                  {project.start_date && formatDate(project.start_date)}
+                  {project.start_date && project.end_date && " → "}
+                  {project.end_date && formatDate(project.end_date)}
                 </div>
               </Link>
             );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import {
   Plus, Check, X, Trash2, Pencil, Filter,
 } from "lucide-react";
@@ -20,7 +20,13 @@ import {
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, createTask, updateTask } from "@/lib/api";
+import { getProject, createTask, updateTask, batchUpdateMilestones } from "@/lib/api";
+import {
+  createEditBoardTask,
+  getEditBoardProject,
+  updateEditBoardTask,
+  batchUpdateEditBoardMilestones,
+} from "@/lib/edit-board-api";
 import {
   Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor,
 } from "@/lib/types";
@@ -30,6 +36,42 @@ export const TASK_ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const UNASSIGNED_ID = "unassigned";
+
+type BoardApi = {
+  getProject: (projectId: string) => Promise<{ milestones?: Milestone[] }>;
+  createTask: (projectId: string, data: Partial<Task>) => Promise<Task>;
+  updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
+  batchUpdateMilestones: (
+    projectId: string,
+    milestones: { id?: string; name: string; color?: string | null; position: number }[],
+  ) => Promise<Milestone[]>;
+};
+
+const defaultBoardApi: BoardApi = {
+  getProject,
+  createTask,
+  updateTask,
+  batchUpdateMilestones,
+};
+
+const BoardApiContext = createContext<BoardApi>(defaultBoardApi);
+
+export function useBoardApi() {
+  return useContext(BoardApiContext);
+}
+
+export { BoardApiContext };
+export type { BoardApi };
+
+export function buildEditBoardApi(editToken: string): BoardApi {
+  return {
+    getProject: () => getEditBoardProject(editToken),
+    createTask: (_projectId, data) => createEditBoardTask(editToken, data),
+    updateTask: (id, data) => updateEditBoardTask(editToken, id, data),
+    batchUpdateMilestones: (_projectId, milestones) =>
+      batchUpdateEditBoardMilestones(editToken, milestones),
+  };
+}
 
 function isApprovedTask(task: Task) {
   return task.approved !== false;
@@ -85,12 +127,14 @@ function TaskDetailDialog({
   onClose: () => void;
   onSave: (t: Task) => void;
 }) {
+  const boardApi = useBoardApi();
   const [form, setForm] = useState({
     title: "",
     due_date: "",
     assignee: "",
     description: "",
     url: "",
+    priority: "low" as "low" | "medium" | "high",
   });
   const [loading, setLoading] = useState(false);
 
@@ -102,6 +146,7 @@ function TaskDetailDialog({
         assignee: task.assignee ?? "",
         description: task.description ?? "",
         url: task.url ?? "",
+        priority: task.priority ?? "low",
       });
     }
   }, [task, open]);
@@ -113,12 +158,13 @@ function TaskDetailDialog({
     if (!title) return;
     setLoading(true);
     try {
-      const updated = await updateTask(task.id, {
+      const updated = await boardApi.updateTask(task.id, {
         title,
         due_date: form.due_date || null,
         assignee: form.assignee || null,
         description: form.description || null,
         url: form.url || null,
+        priority: form.priority,
       });
       onSave(updated);
       onClose();
@@ -174,6 +220,22 @@ function TaskDetailDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-neutral-400 text-xs">Priority</Label>
+              <Select
+                value={form.priority}
+                onValueChange={(v) => setForm((f) => ({ ...f, priority: (v ?? "low") as "low" | "medium" | "high" }))}
+              >
+                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-800 border-neutral-700">
+                  <SelectItem value="high" className="text-red-400">High</SelectItem>
+                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
+                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">URL</Label>
@@ -218,11 +280,12 @@ function InlineAssigneeSelect({
   task: Task;
   onUpdate: (t: Task) => void;
 }) {
+  const boardApi = useBoardApi();
   return (
     <Select
       value={task.assignee || "none"}
       onValueChange={(v) => {
-        updateTask(task.id, { assignee: !v || v === "none" ? undefined : v }).then(onUpdate);
+        boardApi.updateTask(task.id, { assignee: !v || v === "none" ? undefined : v }).then(onUpdate);
       }}
     >
       <SelectTrigger
@@ -250,11 +313,12 @@ function InlineDateInput({
   task: Task;
   onUpdate: (t: Task) => void;
 }) {
+  const boardApi = useBoardApi();
   return (
     <DatePicker
       value={toDateInputValue(task.due_date)}
       onChange={(v) => {
-        updateTask(task.id, { due_date: v || null }).then(onUpdate);
+        boardApi.updateTask(task.id, { due_date: v || null }).then(onUpdate);
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
@@ -432,6 +496,7 @@ function TaskRow({
   onAddSubtask?: () => void;
   indent?: boolean;
 }) {
+  const boardApi = useBoardApi();
   return (
     <div className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group`}>
       <TaskNameCell
@@ -444,7 +509,7 @@ function TaskRow({
       />
       <PriorityFlag
         priority={task.priority ?? "low"}
-        onChange={(next) => { updateTask(task.id, { priority: next }).then(onUpdate); }}
+        onChange={(next) => { boardApi.updateTask(task.id, { priority: next }).then(onUpdate); }}
       />
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
       <InlineDateInput task={task} onUpdate={onUpdate} />
@@ -492,13 +557,14 @@ function TaskWithSubtasks({
   onRename: (id: string, title: string) => Promise<void>;
   onTaskAdd: (t: Task) => void;
 }) {
+  const boardApi = useBoardApi();
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
 
   async function submitSubtask(e: React.FormEvent) {
     e.preventDefault();
     if (!subtaskTitle.trim()) return;
-    const newTask = await createTask(projectId, {
+    const newTask = await boardApi.createTask(projectId, {
       title: subtaskTitle.trim(),
       parent_id: task.id,
       milestone_id: task.milestone_id ?? undefined,
@@ -572,13 +638,14 @@ function AddTaskInline({
   projectId: string;
   milestoneId?: string;
 }) {
+  const boardApi = useBoardApi();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    const task = await createTask(projectId, { title: title.trim(), milestone_id: milestoneId });
+    const task = await boardApi.createTask(projectId, { title: title.trim(), milestone_id: milestoneId });
     onAdd(task);
     setTitle("");
     setOpen(false);
@@ -622,6 +689,7 @@ function MilestoneTasksSection({
   onPhaseChange,
   onRename,
   isUnassigned,
+  showEmptyPhases,
 }: {
   milestone: Milestone;
   milestones: Milestone[];
@@ -634,6 +702,7 @@ function MilestoneTasksSection({
   onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
   onRename: (id: string, title: string) => Promise<void>;
   isUnassigned?: boolean;
+  showEmptyPhases?: boolean;
 }) {
   const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
   const subtasksByParent = groupSubtasksByParent(tasks);
@@ -641,7 +710,7 @@ function MilestoneTasksSection({
     ? "#a3a3a3"
     : resolvePhaseColor(milestone.name, milestone.color);
 
-  if (approvedTopLevel.length === 0) return null;
+  if (approvedTopLevel.length === 0 && !showEmptyPhases) return null;
 
   return (
     <div className={`border rounded-lg overflow-hidden ${
@@ -694,16 +763,23 @@ export function ProjectTaskBoardPanel({
   filterStatus,
   onTaskUpdate,
   onTaskDelete,
+  showAllPhases,
+  milestonesOverride,
+  hideToolbar,
 }: {
   projectId: string;
   tasks: Task[];
   filterStatus: "active" | "all" | "done";
   onTaskUpdate: (t: Task, milestone?: { name?: string; color?: string }) => void;
   onTaskDelete: (id: string) => void;
+  showAllPhases?: boolean;
+  milestonesOverride?: Milestone[];
+  hideToolbar?: boolean;
 }) {
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const boardApi = useBoardApi();
+  const [milestones, setMilestones] = useState<Milestone[]>(milestonesOverride ?? []);
   const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!milestonesOverride);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
@@ -714,14 +790,19 @@ export function ProjectTaskBoardPanel({
   }, [tasks]);
 
   useEffect(() => {
+    if (milestonesOverride) {
+      setMilestones(milestonesOverride);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    getProject(projectId)
+    boardApi.getProject(projectId)
       .then((p) => {
         setMilestones((p as ProjectDetail).milestones ?? []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [projectId]);
+  }, [projectId, milestonesOverride]);
 
   function milestoneMeta(milestoneId?: string | null) {
     if (!milestoneId) return { name: undefined, color: undefined };
@@ -744,7 +825,7 @@ export function ProjectTaskBoardPanel({
     const targetTopLevel = localTasks.filter(
       (t) => (t.milestone_id ?? UNASSIGNED_ID) === toMilestoneId && isTopLevelTask(t),
     );
-    const updated = await updateTask(taskId, {
+    const updated = await boardApi.updateTask(taskId, {
       milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
       position: targetTopLevel.length,
     });
@@ -752,7 +833,7 @@ export function ProjectTaskBoardPanel({
   }
 
   async function handleRename(id: string, title: string) {
-    const updated = await updateTask(id, { title });
+    const updated = await boardApi.updateTask(id, { title });
     handleTaskUpdate(updated);
   }
 
@@ -778,16 +859,18 @@ export function ProjectTaskBoardPanel({
     updated_at: "",
   };
 
-  const visibleMilestones = milestones.filter((m) => {
-    const sectionTasks = tasksByMilestone.get(m.id) ?? [];
-    const hasTasks = sectionTasks.some(isTopLevelTask);
-    if (!hasTasks) return false;
-    if (filterStatus === "active") return !isDonePhase(m.name);
-    if (filterStatus === "done") return isDonePhase(m.name);
-    return true;
-  });
+  const visibleMilestones = showAllPhases
+    ? milestones
+    : milestones.filter((m) => {
+        const sectionTasks = tasksByMilestone.get(m.id) ?? [];
+        const hasTasks = sectionTasks.some(isTopLevelTask);
+        if (!hasTasks) return false;
+        if (filterStatus === "active") return !isDonePhase(m.name);
+        if (filterStatus === "done") return isDonePhase(m.name);
+        return true;
+      });
 
-  const showUnassigned = unassigned.some(isTopLevelTask) && filterStatus !== "done";
+  const showUnassigned = unassigned.some(isTopLevelTask) && (showAllPhases || filterStatus !== "done");
 
   if (loading) {
     return (
@@ -804,6 +887,7 @@ export function ProjectTaskBoardPanel({
   return (
     <>
       <div className="px-3 py-3 space-y-3">
+        {!hideToolbar && (
         <div className="flex items-center justify-end gap-2 px-1">
           <Popover>
             <PopoverTrigger
@@ -835,6 +919,7 @@ export function ProjectTaskBoardPanel({
             Edit statuses
           </button>
         </div>
+        )}
         {!hasVisibleTasks && (
           <p className="text-xs text-neutral-700 px-1 py-2">No tasks in this view</p>
         )}
@@ -851,6 +936,7 @@ export function ProjectTaskBoardPanel({
             onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
             onPhaseChange={handlePhaseChange}
             onRename={handleRename}
+            showEmptyPhases={showAllPhases}
           />
         ))}
         {showUnassigned && (
@@ -866,6 +952,7 @@ export function ProjectTaskBoardPanel({
             onPhaseChange={handlePhaseChange}
             onRename={handleRename}
             isUnassigned
+            showEmptyPhases={showAllPhases}
           />
         )}
       </div>
