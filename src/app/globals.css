@@ -129,7 +129,7 @@ body {
   }
 }
 
-/* Native month inputs — readable text + visible calendar icon in dark UI */
+/* Native month inputs — readable text; custom Lucide icon replaces browser indicator */
 .month-picker-input {
   color-scheme: dark;
 }
@@ -139,12 +139,10 @@ html.light .month-picker-input {
 }
 
 .month-picker-input::-webkit-calendar-picker-indicator {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  opacity: 0;
-  cursor: pointer;
+  display: none;
+  -webkit-appearance: none;
+}
+
+.month-picker-input::-moz-calendar-picker-indicator {
+  display: none;
 }

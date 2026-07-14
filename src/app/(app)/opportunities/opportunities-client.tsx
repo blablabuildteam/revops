@@ -195,7 +195,7 @@ function InlineMonth({
   }
 
   return (
-    <div className="relative shrink-0 w-[140px]">
+    <div className="relative shrink-0 w-[150px]">
       <input
         type="month"
         value={local}
@@ -526,10 +526,10 @@ export default function OpportunitiesPageClient() {
               <col className="w-[10%]" />
               <col className="w-[16%]" />
               <col className="w-[11%]" />
-              <col className="w-[28%]" />
+              <col className="w-[30%]" />
               <col className="w-[9%]" />
               <col className="w-[8%]" />
-              <col className="w-[14%]" />
+              <col className="w-[12%]" />
               <col className="w-[4%]" />
             </colgroup>
             <thead>
