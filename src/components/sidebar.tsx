@@ -52,14 +52,16 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-neutral-800">
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.png"
-            alt="Logo"
-            width={32}
-            height={32}
-            className="rounded-md shrink-0"
-          />
+          <span className="logo-radiation-wrap">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="Logo"
+              width={32}
+              height={32}
+              className="rounded-md"
+            />
+          </span>
           <div className="space-y-0.5">
             <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#e8ff47]">
               blablabuild

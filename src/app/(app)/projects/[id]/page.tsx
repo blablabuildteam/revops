@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, GripVertical,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import Link from "next/link";
@@ -46,6 +46,7 @@ import { BinaryText } from "@/components/binary-text";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
+import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -770,11 +771,10 @@ function SortableTaskRow({
       </label>
 
       <div
-        className="min-w-0 flex items-center gap-1 cursor-grab active:cursor-grabbing touch-none"
+        className="min-w-0 flex items-center cursor-grab active:cursor-grabbing touch-none"
         {...listeners}
         {...attributes}
       >
-        <GripVertical className="w-3.5 h-3.5 shrink-0 text-neutral-700 group-hover:text-neutral-500 transition-colors" />
         <TaskNameCell
           task={task}
           allowSubtasks
@@ -1301,8 +1301,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
+  const [filterBarOpen, setFilterBarOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
   const tasksRef = useRef<TasksByMilestone>({});
 
   const milestoneIds = [
@@ -1847,6 +1849,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => { setFilterBarOpen((v) => !v); }}
+            className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors ${
+              filterBarOpen || filters.length > 0
+                ? "border-[#e8ff47]/30 text-[#e8ff47] hover:border-[#e8ff47]/50"
+                : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
+          </button>
+          <button
             onClick={() => setEditStatusesOpen(true)}
             className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
           >
@@ -1881,6 +1894,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {(filterBarOpen || filters.length > 0) && (
+        <TaskFilterBar
+          filters={filters}
+          milestones={project.milestones}
+          onAddFilter={addFilter}
+          onUpdateFilter={updateFilter}
+          onRemoveFilter={removeFilter}
+          onClearFilters={clearFilters}
+        />
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -1909,7 +1933,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               }}
               milestones={project.milestones}
               projectId={project.id}
-              tasks={tasksByMilestone[UNASSIGNED_ID] || []}
+              tasks={applyTaskFilters(tasksByMilestone[UNASSIGNED_ID] || [], filters, project.milestones)}
               onDelete={() => {}}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={confirmTaskDelete}
@@ -1922,25 +1946,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               onRename={handleRename}
             />
           )}
-          {project.milestones.map((milestone) => (
-            <MilestoneSection
-              key={milestone.id}
-              milestone={milestone}
-              milestones={project.milestones}
-              projectId={project.id}
-              tasks={tasksByMilestone[milestone.id] || []}
-              onDelete={confirmMilestoneDelete}
-              onTaskUpdate={handleTaskUpdate}
-              onTaskDelete={confirmTaskDelete}
-              onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
-              onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
-              onPhaseChange={handleTaskPhaseChange}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-              onTogglePhase={togglePhaseSelect}
-              onRename={handleRename}
-            />
-          ))}
+          {project.milestones.map((milestone) => {
+            const filteredTasks = applyTaskFilters(tasksByMilestone[milestone.id] || [], filters, project.milestones);
+            return (
+              <MilestoneSection
+                key={milestone.id}
+                milestone={milestone}
+                milestones={project.milestones}
+                projectId={project.id}
+                tasks={filteredTasks}
+                onDelete={confirmMilestoneDelete}
+                onTaskUpdate={handleTaskUpdate}
+                onTaskDelete={confirmTaskDelete}
+                onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
+                onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
+                onPhaseChange={handleTaskPhaseChange}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onTogglePhase={togglePhaseSelect}
+                onRename={handleRename}
+              />
+            );
+          })}
         </div>
       </DndContext>
 

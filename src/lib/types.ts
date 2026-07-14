@@ -322,45 +322,108 @@ export function dealOutstanding(deal: Pick<FinanceDeal, "deal_type" | "total_dea
 }
 
 const SALARY_MONTHLY = 9000;
+const INCOME_TAX_PCT = 0.4;
 
-export function expectedRevenueForMonth(deals: FinanceDeal[], month: string): number {
-  let total = 0;
+export interface RevenueBreakdownItem {
+  dealId: string;
+  projectName: string;
+  companyName: string;
+  amount: number;
+  label: string;
+}
+
+export function expectedRevenueBreakdownForMonth(
+  deals: FinanceDeal[],
+  month: string,
+): RevenueBreakdownItem[] {
+  const items: RevenueBreakdownItem[] = [];
+
   for (const deal of deals) {
     if (deal.deal_type === "project") {
       for (const entry of deal.payment_schedule ?? []) {
-        if (entry.month === month) {
-          total += ((Number(entry.percentage) || 0) / 100) * (Number(deal.total_deal_value) || 0);
-        }
+        if (entry.month !== month) continue;
+        const amount =
+          ((Number(entry.percentage) || 0) / 100) * (Number(deal.total_deal_value) || 0);
+        if (amount <= 0) continue;
+        items.push({
+          dealId: deal.id,
+          projectName: deal.project_name,
+          companyName: deal.company_name,
+          amount,
+          label: `${entry.percentage}% payment`,
+        });
       }
     } else if (deal.deal_type === "retainer") {
       if (!deal.start_date || !deal.end_date) continue;
       const start = deal.start_date.slice(0, 7);
       const end = deal.end_date.slice(0, 7);
-      if (month >= start && month <= end) {
-        total += (Number(deal.monthly_fee) || 0) + (Number(deal.monthly_revshare) || 0);
-      }
+      if (month < start || month > end) continue;
+      const amount = (Number(deal.monthly_fee) || 0) + (Number(deal.monthly_revshare) || 0);
+      if (amount <= 0) continue;
+      items.push({
+        dealId: deal.id,
+        projectName: deal.project_name,
+        companyName: deal.company_name,
+        amount,
+        label: "Monthly retainer",
+      });
     }
   }
-  return total;
+
+  return items.sort((a, b) => b.amount - a.amount);
+}
+
+export function expectedRevenueForMonth(deals: FinanceDeal[], month: string): number {
+  return expectedRevenueBreakdownForMonth(deals, month).reduce((sum, item) => sum + item.amount, 0);
+}
+
+function actualPaymentLabel(payments: DealPaymentEntry[], month: string): string {
+  const monthPayments = payments.filter(
+    (payment) => payment.date?.slice(0, 7) === month && (Number(payment.amount) || 0) > 0,
+  );
+  if (monthPayments.length === 0) return "Payment";
+  if (monthPayments.length === 1) {
+    const date = monthPayments[0].date;
+    if (!date) return "Payment";
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(date));
+  }
+  return `${monthPayments.length} payments`;
+}
+
+export function actualRevenueBreakdownForMonth(
+  deals: FinanceDeal[],
+  month: string,
+): RevenueBreakdownItem[] {
+  const items: RevenueBreakdownItem[] = [];
+
+  for (const deal of deals) {
+    const monthPayments = (deal.payments ?? []).filter(
+      (payment) => payment.date?.slice(0, 7) === month,
+    );
+    const amount = monthPayments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+    if (amount <= 0) continue;
+    items.push({
+      dealId: deal.id,
+      projectName: deal.project_name,
+      companyName: deal.company_name,
+      amount,
+      label: actualPaymentLabel(deal.payments ?? [], month),
+    });
+  }
+
+  return items.sort((a, b) => b.amount - a.amount);
 }
 
 export function actualRevenueForMonth(deals: FinanceDeal[], month: string): number {
-  let total = 0;
-  for (const deal of deals) {
-    for (const payment of deal.payments ?? []) {
-      if (payment.date?.slice(0, 7) === month) {
-        total += Number(payment.amount) || 0;
-      }
-    }
-  }
-  return total;
+  return actualRevenueBreakdownForMonth(deals, month).reduce((sum, item) => sum + item.amount, 0);
 }
 
 export function monthlyInsights(deals: FinanceDeal[], month: string) {
   const expected = expectedRevenueForMonth(deals, month);
   const actual = actualRevenueForMonth(deals, month);
-  const expectedShortage = SALARY_MONTHLY - expected;
-  return { expected, actual, expectedShortage, salaryTarget: SALARY_MONTHLY };
+  const actualIncomeTax = actual * INCOME_TAX_PCT;
+  const availableSalary = actual - actualIncomeTax - SALARY_MONTHLY;
+  return { expected, actual, actualIncomeTax, availableSalary, salaryTarget: SALARY_MONTHLY };
 }
 
 export function forecastRevenueForMonth(opportunities: Opportunity[], month: string): number {

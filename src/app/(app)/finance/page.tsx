@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -35,6 +35,9 @@ import {
   sumDealPayments,
   monthlyInsights,
   buildInsightSeries,
+  expectedRevenueBreakdownForMonth,
+  actualRevenueBreakdownForMonth,
+  type RevenueBreakdownItem,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -91,6 +94,188 @@ function formatDate(date?: string) {
 
 const fc = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm";
 
+function BreakdownItems({
+  breakdown,
+  amountClassName,
+  onDealClick,
+}: {
+  breakdown: RevenueBreakdownItem[];
+  amountClassName: string;
+  onDealClick?: (dealId: string) => void;
+}) {
+  return (
+    <ul className="space-y-1.5">
+      {breakdown.map((item) => {
+        const content = (
+          <>
+            <div className="min-w-0">
+              <p className="text-neutral-200 truncate">{item.projectName}</p>
+              <p className="text-[10px] text-neutral-500 truncate">
+                {item.companyName} · {item.label}
+              </p>
+            </div>
+            <span className={cn("font-mono shrink-0", amountClassName)}>
+              {formatCurrency(item.amount)}
+            </span>
+          </>
+        );
+
+        return (
+          <li key={item.dealId}>
+            {onDealClick ? (
+              <button
+                type="button"
+                onClick={() => onDealClick(item.dealId)}
+                className="flex w-full items-start justify-between gap-3 rounded px-1 py-0.5 -mx-1 text-left hover:bg-neutral-800/80 transition-colors"
+              >
+                {content}
+              </button>
+            ) : (
+              <div className="flex items-start justify-between gap-3">{content}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function RevenueBreakdownTooltip({
+  amount,
+  amountClassName,
+  breakdown,
+  emptyMessage,
+  onDealClick,
+}: {
+  amount: number;
+  amountClassName: string;
+  breakdown: RevenueBreakdownItem[];
+  emptyMessage: string;
+  onDealClick?: (dealId: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span
+        className={cn(
+          "text-sm font-mono font-semibold cursor-help underline decoration-dotted decoration-neutral-600 underline-offset-2",
+          amountClassName,
+        )}
+      >
+        {formatCurrency(amount)}
+      </span>
+      {hovered && (
+        <div className="absolute right-0 top-full z-50 w-64 pt-2">
+          <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-xs shadow-xl shadow-black/40">
+            <p className="font-medium text-neutral-300 mb-2">Breakdown by project</p>
+            {breakdown.length === 0 ? (
+              <p className="text-neutral-500">{emptyMessage}</p>
+            ) : (
+              <BreakdownItems
+                breakdown={breakdown}
+                amountClassName={amountClassName}
+                onDealClick={onDealClick}
+              />
+            )}
+            <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center justify-between">
+              <span className="text-neutral-500">Total</span>
+              <span className="font-mono font-medium text-neutral-200">
+                {formatCurrency(amount)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InsightChartTooltip({
+  active,
+  label,
+  forecast,
+  netAfterSalary,
+  deals,
+  onDealClick,
+}: {
+  active?: boolean;
+  label?: string | number;
+  forecast: number;
+  netAfterSalary: number;
+  deals: FinanceDeal[];
+  onDealClick?: (dealId: string) => void;
+}) {
+  if (!active || label == null) return null;
+
+  const month = String(label);
+  const monthTitle = new Date(`${month}-01`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+  const expectedBreakdown = expectedRevenueBreakdownForMonth(deals, month);
+  const actualBreakdown = actualRevenueBreakdownForMonth(deals, month);
+  const expected = expectedBreakdown.reduce((sum, item) => sum + item.amount, 0);
+  const actual = actualBreakdown.reduce((sum, item) => sum + item.amount, 0);
+
+  return (
+    <div className="w-72 rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-xs shadow-xl shadow-black/40">
+      <p className="font-medium text-neutral-300 mb-3">{monthTitle}</p>
+
+      <div className="space-y-3">
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-neutral-400">Expected</span>
+            <span className="font-mono font-semibold text-[#e8ff47]">{formatCurrency(expected)}</span>
+          </div>
+          {expectedBreakdown.length === 0 ? (
+            <p className="text-neutral-600">No expected revenue</p>
+          ) : (
+            <BreakdownItems
+              breakdown={expectedBreakdown}
+              amountClassName="text-[#e8ff47]"
+              onDealClick={onDealClick}
+            />
+          )}
+        </div>
+
+        <div className="border-t border-neutral-800" />
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-neutral-400">Actual</span>
+            <span className="font-mono font-semibold text-emerald-400">{formatCurrency(actual)}</span>
+          </div>
+          {actualBreakdown.length === 0 ? (
+            <p className="text-neutral-600">No payments recorded</p>
+          ) : (
+            <BreakdownItems
+              breakdown={actualBreakdown}
+              amountClassName="text-emerald-400"
+              onDealClick={onDealClick}
+            />
+          )}
+        </div>
+
+        <div className="border-t border-neutral-800 pt-2 space-y-1">
+          <div className="flex items-center justify-between text-neutral-500">
+            <span>Forecasted</span>
+            <span className="font-mono text-violet-300">{formatCurrency(forecast)}</span>
+          </div>
+          <div className="flex items-center justify-between text-neutral-500">
+            <span>Net after salary</span>
+            <span className="font-mono text-orange-400">{formatCurrency(netAfterSalary)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FinancePage() {
   const month = currentMonth();
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -142,6 +327,11 @@ export default function FinancePage() {
       payment_schedule: deal.payment_schedule ?? [],
     });
   }
+
+  const handleDealBreakdownClick = useCallback((dealId: string) => {
+    const deal = deals.find((entry) => entry.id === dealId);
+    if (deal) openDeal(deal);
+  }, [deals]);
 
   function updatePayment(index: number, field: keyof DealPaymentEntry, value: string) {
     setEditForm((f) => ({
@@ -231,6 +421,14 @@ export default function FinancePage() {
     : 1;
 
   const insights = monthlyInsights(deals, insightsMonth);
+  const expectedBreakdown = useMemo(
+    () => expectedRevenueBreakdownForMonth(deals, insightsMonth),
+    [deals, insightsMonth],
+  );
+  const actualBreakdown = useMemo(
+    () => actualRevenueBreakdownForMonth(deals, insightsMonth),
+    [deals, insightsMonth],
+  );
   const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
 
   return (
@@ -277,19 +475,22 @@ export default function FinancePage() {
                   />
                   <ReferenceLine y={0} stroke="#404040" strokeDasharray="3 3" />
                   <Tooltip
-                    contentStyle={{ background: "#171717", border: "1px solid #333", borderRadius: "8px", fontSize: 12 }}
-                    labelStyle={{ color: "#a3a3a3" }}
-                    labelFormatter={(v) => {
-                      const d = new Date(String(v) + "-01");
-                      return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                    }}
-                    formatter={(value, name) => [
-                      formatCurrency(Number(value ?? 0)),
-                      name === "expected" ? "Expected"
-                        : name === "actual" ? "Actual"
-                        : name === "forecast" ? "Forecasted"
-                        : "Net after salary",
-                    ]}
+                    allowEscapeViewBox={{ x: true, y: true }}
+                    wrapperStyle={{ pointerEvents: "auto", zIndex: 50 }}
+                    content={(props) => (
+                      <InsightChartTooltip
+                        active={props.active}
+                        label={props.label}
+                        forecast={Number(
+                          props.payload?.find((entry) => entry.dataKey === "forecast")?.value ?? 0,
+                        )}
+                        netAfterSalary={Number(
+                          props.payload?.find((entry) => entry.dataKey === "netAfterSalary")?.value ?? 0,
+                        )}
+                        deals={deals}
+                        onDealClick={handleDealBreakdownClick}
+                      />
+                    )}
                   />
                   <Line
                     type="monotone"
@@ -372,9 +573,13 @@ export default function FinancePage() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-neutral-500">Expected revenue</span>
-                    <span className="text-sm font-mono font-semibold text-[#e8ff47]">
-                      {formatCurrency(insights.expected)}
-                    </span>
+                    <RevenueBreakdownTooltip
+                      amount={insights.expected}
+                      amountClassName="text-[#e8ff47]"
+                      breakdown={expectedBreakdown}
+                      emptyMessage="No expected revenue this month"
+                      onDealClick={handleDealBreakdownClick}
+                    />
                   </div>
                   <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees · incl. VAT</p>
                 </div>
@@ -384,9 +589,13 @@ export default function FinancePage() {
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-neutral-500">Actual revenue</span>
-                    <span className="text-sm font-mono font-semibold text-emerald-400">
-                      {formatCurrency(insights.actual)}
-                    </span>
+                    <RevenueBreakdownTooltip
+                      amount={insights.actual}
+                      amountClassName="text-emerald-400"
+                      breakdown={actualBreakdown}
+                      emptyMessage="No payments recorded this month"
+                      onDealClick={handleDealBreakdownClick}
+                    />
                   </div>
                   {insights.expected > 0 && (
                     <div className="flex items-center gap-2 mt-1.5">
@@ -408,14 +617,26 @@ export default function FinancePage() {
 
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-neutral-500">Expected shortage</span>
+                    <span className="text-xs text-neutral-500">Actual income tax</span>
+                    <span className="text-sm font-mono font-semibold text-red-400">
+                      {formatCurrency(insights.actualIncomeTax)}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-600">40% of actual revenue</p>
+                </div>
+
+                <div className="border-t border-neutral-800" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-neutral-500">Available salary</span>
                     <span className={cn(
                       "text-sm font-mono font-semibold",
-                      insights.expectedShortage <= 0 ? "text-emerald-400" : "text-orange-400"
+                      insights.availableSalary >= 0 ? "text-emerald-400" : "text-orange-400"
                     )}>
-                      {insights.expectedShortage <= 0
-                        ? formatCurrency(Math.abs(insights.expectedShortage)) + " surplus"
-                        : formatCurrency(insights.expectedShortage) + " short"
+                      {insights.availableSalary >= 0
+                        ? formatCurrency(insights.availableSalary) + " surplus"
+                        : formatCurrency(Math.abs(insights.availableSalary)) + " short"
                       }
                     </span>
                   </div>
@@ -424,16 +645,32 @@ export default function FinancePage() {
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          insights.expectedShortage <= 0 ? "bg-emerald-500" : "bg-orange-500/70"
+                          insights.availableSalary >= 0 ? "bg-emerald-500" : "bg-orange-500/70"
                         )}
-                        style={{ width: `${Math.min(100, (insights.expected / insights.salaryTarget) * 100)}%` }}
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            insights.salaryTarget > 0
+                              ? ((insights.actual - insights.actualIncomeTax) / insights.salaryTarget) * 100
+                              : 0,
+                          )}%`,
+                        }}
                       />
                     </div>
                     <span className="text-[10px] font-mono text-neutral-600">
-                      {Math.min(100, Math.round((insights.expected / insights.salaryTarget) * 100))}%
+                      {Math.min(
+                        100,
+                        Math.round(
+                          insights.salaryTarget > 0
+                            ? ((insights.actual - insights.actualIncomeTax) / insights.salaryTarget) * 100
+                            : 0,
+                        ),
+                      )}%
                     </span>
                   </div>
-                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} salary · {formatCurrency(insights.expected)} expected incl. VAT</p>
+                  <p className="text-[10px] text-neutral-600">
+                    {formatCurrency(insights.salaryTarget)} salary · {formatCurrency(insights.actual - insights.actualIncomeTax)} after tax
+                  </p>
                 </div>
             </div>
             </div>

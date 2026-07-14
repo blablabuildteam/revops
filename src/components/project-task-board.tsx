@@ -16,6 +16,8 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
+import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { getProject, createTask, updateTask } from "@/lib/api";
 import {
   Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor,
@@ -703,6 +705,8 @@ export function ProjectTaskBoardPanel({
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [editStatusesOpen, setEditStatusesOpen] = useState(false);
+  const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
 
   useEffect(() => {
     setLocalTasks(tasks);
@@ -799,6 +803,23 @@ export function ProjectTaskBoardPanel({
   return (
     <>
       <div className="px-3 py-3 space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <TaskFilterBar
+            filters={filters}
+            milestones={milestones}
+            onAddFilter={addFilter}
+            onUpdateFilter={updateFilter}
+            onRemoveFilter={removeFilter}
+            onClearFilters={clearFilters}
+          />
+          <button
+            onClick={() => setEditStatusesOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 transition-colors shrink-0"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit statuses
+          </button>
+        </div>
         {!hasVisibleTasks && (
           <p className="text-xs text-neutral-700 px-1 py-2">No tasks in this view</p>
         )}
@@ -808,7 +829,7 @@ export function ProjectTaskBoardPanel({
             milestone={milestone}
             milestones={milestones}
             projectId={projectId}
-            tasks={tasksByMilestone.get(milestone.id) ?? []}
+            tasks={applyTaskFilters(tasksByMilestone.get(milestone.id) ?? [], filters, milestones)}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}
@@ -822,7 +843,7 @@ export function ProjectTaskBoardPanel({
             milestone={unassignedMilestone}
             milestones={milestones}
             projectId={projectId}
-            tasks={unassigned}
+            tasks={applyTaskFilters(unassigned, filters, milestones)}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}
@@ -838,6 +859,13 @@ export function ProjectTaskBoardPanel({
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onSave={handleTaskUpdate}
+      />
+      <EditStatusesDialog
+        open={editStatusesOpen}
+        onOpenChange={setEditStatusesOpen}
+        projectId={projectId}
+        milestones={milestones}
+        onSave={(updated) => setMilestones(updated)}
       />
     </>
   );
