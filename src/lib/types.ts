@@ -180,6 +180,7 @@ export interface Task {
   approved: boolean;
   assignee?: string;
   due_date?: string;
+  url?: string;
   position: number;
   created_at: string;
   updated_at: string;
@@ -197,6 +198,8 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   in_progress: "In progress",
   done: "Done",
 };
+
+export const TASK_ASSIGNEES = ["Kevin", "Xennith"] as const;
 
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   pending: "Planned",

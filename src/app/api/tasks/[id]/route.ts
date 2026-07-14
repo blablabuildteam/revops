@@ -7,7 +7,7 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const { title, description, status, milestone_id, assignee, due_date, approved } = await req.json();
+    const { title, description, status, milestone_id, assignee, due_date, url, approved, position } = await req.json();
     const { rows } = await sql`
       UPDATE tasks SET
         title = COALESCE(${title ?? null}, title),
@@ -16,7 +16,9 @@ export async function PUT(
         milestone_id = ${milestone_id ?? null},
         assignee = ${assignee ?? null},
         due_date = ${due_date ?? null},
+        url = ${url ?? null},
         approved = COALESCE(${approved ?? null}, approved),
+        position = COALESCE(${position ?? null}, position),
         updated_at = now()
       WHERE id = ${id}
       RETURNING *

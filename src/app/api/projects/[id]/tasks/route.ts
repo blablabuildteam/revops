@@ -8,13 +8,13 @@ export async function POST(
   const { id: project_id } = await params;
   try {
     await ensureTables();
-    const { title, description, milestone_id, assignee, due_date, created_by, position } = await req.json();
+    const { title, description, milestone_id, assignee, due_date, url, created_by, position } = await req.json();
     const isClient = created_by === "client";
     const { rows } = await sql`
-      INSERT INTO tasks (project_id, milestone_id, title, description, assignee, due_date, created_by, approved, position)
+      INSERT INTO tasks (project_id, milestone_id, title, description, assignee, due_date, url, created_by, approved, position)
       VALUES (
         ${project_id}, ${milestone_id ?? null}, ${title}, ${description ?? null},
-        ${assignee ?? null}, ${due_date ?? null}, ${created_by ?? "team"},
+        ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, ${created_by ?? "team"},
         ${!isClient}, ${position ?? 0}
       )
       RETURNING *

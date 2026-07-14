@@ -4,10 +4,34 @@ export const dynamic = "force-dynamic";
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Check, X, Copy, CheckCircle2, Circle, Clock, Trash2 } from "lucide-react";
+import {
+  ArrowLeft, Plus, Check, X, Copy, CheckCircle2, Circle, Clock, Trash2, GripVertical, Link2,
+} from "lucide-react";
 import Link from "next/link";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getProject, createMilestone, createTask, updateTask, deleteTask, updateMilestone, deleteMilestone, deleteProject } from "@/lib/api";
-import { Project, Milestone, Task } from "@/lib/types";
+import { Project, Milestone, Task, TASK_STATUS_LABELS, TASK_ASSIGNEES } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
 const taskStatusIcon = {
@@ -32,49 +56,248 @@ const milestoneStatusColors = {
   completed: "text-emerald-400 bg-emerald-950",
 };
 
-function TaskRow({
+function sortByPosition(tasks: Task[]) {
+  return [...tasks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
+}
+
+function TaskDetailDialog({
   task,
-  onUpdate,
+  open,
+  onClose,
+  onSave,
+}: {
+  task: Task | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (t: Task) => void;
+}) {
+  const [form, setForm] = useState({
+    due_date: "",
+    assignee: "",
+    description: "",
+    url: "",
+    status: "open" as Task["status"],
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (task && open) {
+      setForm({
+        due_date: task.due_date ? task.due_date.slice(0, 10) : "",
+        assignee: task.assignee ?? "",
+        description: task.description ?? "",
+        url: task.url ?? "",
+        status: task.status,
+      });
+    }
+  }, [task, open]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!task) return;
+    setLoading(true);
+    try {
+      const updated = await updateTask(task.id, {
+        due_date: form.due_date || undefined,
+        assignee: form.assignee || undefined,
+        description: form.description || undefined,
+        url: form.url || undefined,
+        status: form.status,
+      });
+      onSave(updated);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!task) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-neutral-100 pr-6">{task.title}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-neutral-400 text-xs">Date</Label>
+              <Input
+                type="date"
+                value={form.due_date}
+                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                className="bg-neutral-800 border-neutral-700 text-neutral-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-neutral-400 text-xs">Responsible</Label>
+              <Select
+                value={form.assignee || "none"}
+                onValueChange={(v) => setForm((f) => ({ ...f, assignee: v === "none" ? "" : (v ?? "") }))}
+              >
+                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                  <SelectValue placeholder="Choose person">
+                    {form.assignee || "Nobody"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-800 border-neutral-700">
+                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
+                  {TASK_ASSIGNEES.map((name) => (
+                    <SelectItem key={name} value={name} className="text-neutral-100">{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">Status</Label>
+            <Select
+              value={form.status}
+              onValueChange={(v) => setForm((f) => ({ ...f, status: (v ?? "open") as Task["status"] }))}
+            >
+              <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-neutral-800 border-neutral-700">
+                {(Object.keys(TASK_STATUS_LABELS) as Task["status"][]).map((s) => (
+                  <SelectItem key={s} value={s} className="text-neutral-100">
+                    {TASK_STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">URL</Label>
+            <Input
+              type="url"
+              value={form.url}
+              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="https://..."
+              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">Notes</Label>
+            <Textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Add notes or details..."
+              rows={4}
+              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none"
+            />
+          </div>
+          <DialogFooter className="bg-transparent border-neutral-800 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onClose}
+              disabled={loading}
+              className="text-neutral-400 hover:text-neutral-200"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950"
+            >
+              {loading ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PendingTaskRow({
+  task,
   onDelete,
   onApprove,
 }: {
   task: Task;
-  onUpdate: (t: Task) => void;
   onDelete: (id: string) => void;
   onApprove: (id: string) => void;
 }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-950/30 border border-orange-900/40 rounded-lg mx-2 my-1">
+      <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-orange-200">{task.title}</p>
+        {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate">{task.description}</p>}
+        <p className="text-xs text-orange-600 mt-0.5">Client request</p>
+      </div>
+      <button onClick={() => onApprove(task.id)}
+        className="flex items-center gap-1 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-900 transition-colors">
+        <Check className="w-3 h-3" /> Approve
+      </button>
+      <button onClick={() => onDelete(task.id)}
+        className="text-neutral-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function SortableTaskRow({
+  task,
+  onUpdate,
+  onDelete,
+  onClick,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
   const statuses: Task["status"][] = ["open", "in_progress", "done"];
 
-  function cycleStatus() {
-    if (!task.approved) return;
+  function cycleStatus(e: React.MouseEvent) {
+    e.stopPropagation();
     const next = statuses[(statuses.indexOf(task.status) + 1) % statuses.length];
     updateTask(task.id, { status: next }).then(onUpdate);
   }
 
-  if (!task.approved) {
-    return (
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-950/30 border border-orange-900/40 rounded-lg">
-        <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-orange-200">{task.title}</p>
-          {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate">{task.description}</p>}
-          <p className="text-xs text-orange-600 mt-0.5">Client request</p>
-        </div>
-        <button onClick={() => onApprove(task.id)}
-          className="flex items-center gap-1 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-900 transition-colors">
-          <Check className="w-3 h-3" /> Approve
-        </button>
-        <button onClick={() => onDelete(task.id)}
-          className="text-neutral-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    );
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    onDelete(task.id);
   }
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-neutral-900/50 transition-colors group">
-      <button onClick={cycleStatus} className="shrink-0">
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={() => onClick(task)}
+      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-pointer"
+    >
+      <button
+        type="button"
+        className="shrink-0 text-neutral-700 hover:text-neutral-500 cursor-grab active:cursor-grabbing touch-none p-0.5"
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
+      </button>
+      <button type="button" onClick={cycleStatus} className="shrink-0">
         {taskStatusIcon[task.status]}
       </button>
       <div className="flex-1 min-w-0">
@@ -88,11 +311,26 @@ function TaskRow({
       {task.assignee && (
         <span className="text-xs text-neutral-600 font-mono shrink-0">{task.assignee}</span>
       )}
+      {task.url && (
+        <a
+          href={task.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-neutral-600 hover:text-[#e8ff47] transition-colors shrink-0"
+          aria-label="Open link"
+        >
+          <Link2 className="w-3.5 h-3.5" />
+        </a>
+      )}
       {task.due_date && (
         <span className="text-xs text-neutral-700 font-mono shrink-0">{formatDate(task.due_date)}</span>
       )}
-      <button onClick={() => onDelete(task.id)}
-        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded">
+      <button
+        type="button"
+        onClick={handleDelete}
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded"
+      >
         <Trash2 className="w-3 h-3" />
       </button>
     </div>
@@ -158,28 +396,60 @@ function MilestoneSection({
   onUpdate: (m: Milestone & { tasks: Task[] }) => void;
   onDelete: (id: string) => void;
 }) {
-  const [tasks, setTasks] = useState<Task[]>(milestone.tasks || []);
-  const done = tasks.filter((t) => t.approved && t.status === "done").length;
-  const total = tasks.filter((t) => t.approved).length;
-  const pending = tasks.filter((t) => !t.approved).length;
+  const [tasks, setTasks] = useState<Task[]>(() => sortByPosition(milestone.tasks || []));
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const pendingTasks = tasks.filter((t) => !t.approved);
+  const approvedTasks = sortByPosition(tasks.filter((t) => t.approved));
+  const done = approvedTasks.filter((t) => t.status === "done").length;
+  const total = approvedTasks.length;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   function handleTaskUpdate(updated: Task) {
-    setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    setTasks((prev) => sortByPosition(prev.map((t) => (t.id === updated.id ? updated : t))));
   }
 
   function handleTaskDelete(id: string) {
     deleteTask(id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
+    if (selectedTask?.id === id) {
+      setDetailOpen(false);
+      setSelectedTask(null);
+    }
   }
 
   function handleApprove(id: string) {
     updateTask(id, { approved: true }).then((updated) => {
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      setTasks((prev) => sortByPosition(prev.map((t) => (t.id === updated.id ? updated : t))));
     });
   }
 
   function handleAddTask(task: Task) {
-    setTasks((prev) => [...prev, task]);
+    setTasks((prev) => sortByPosition([...prev, task]));
+  }
+
+  function openTaskDetail(task: Task) {
+    setSelectedTask(task);
+    setDetailOpen(true);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = approvedTasks.findIndex((t) => t.id === active.id);
+    const newIndex = approvedTasks.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(approvedTasks, oldIndex, newIndex).map((t, i) => ({ ...t, position: i }));
+    setTasks([...pendingTasks, ...reordered]);
+
+    await Promise.all(reordered.map((t) => updateTask(t.id, { position: t.position })));
   }
 
   function cycleStatus() {
@@ -199,8 +469,8 @@ function MilestoneSection({
         </button>
         <h3 className="font-medium text-neutral-200 flex-1">{milestone.name}</h3>
         <div className="flex items-center gap-3">
-          {pending > 0 && (
-            <span className="text-xs text-orange-400">{pending} request{pending !== 1 ? "s" : ""}</span>
+          {pendingTasks.length > 0 && (
+            <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
           )}
           <span className="text-xs text-neutral-600 font-mono">{done}/{total}</span>
           {milestone.due_date && (
@@ -213,19 +483,39 @@ function MilestoneSection({
         </div>
       </div>
 
-      <div className="divide-y divide-neutral-800/40">
-        {tasks.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            onUpdate={handleTaskUpdate}
-            onDelete={handleTaskDelete}
-            onApprove={handleApprove}
-          />
-        ))}
-      </div>
+      {pendingTasks.map((task) => (
+        <PendingTaskRow
+          key={task.id}
+          task={task}
+          onDelete={handleTaskDelete}
+          onApprove={handleApprove}
+        />
+      ))}
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={approvedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="divide-y divide-neutral-800/40">
+            {approvedTasks.map((task) => (
+              <SortableTaskRow
+                key={task.id}
+                task={task}
+                onUpdate={handleTaskUpdate}
+                onDelete={handleTaskDelete}
+                onClick={openTaskDetail}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <AddTaskInline onAdd={handleAddTask} projectId={projectId} milestoneId={milestone.id} />
+
+      <TaskDetailDialog
+        task={selectedTask}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onSave={handleTaskUpdate}
+      />
     </div>
   );
 }
