@@ -3,22 +3,10 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, use } from "react";
-import { CheckCircle2, Circle, Clock, Plus, X, Check, Send } from "lucide-react";
+import { Plus, X, Check, Send } from "lucide-react";
 import { getPublicProject, submitClientTask } from "@/lib/api";
-import { Project, Milestone, Task } from "@/lib/types";
+import { Project, Milestone, Task, resolvePhaseColor } from "@/lib/types";
 import { formatDate } from "@/lib/format";
-
-const taskStatusIcon = {
-  open: <Circle className="w-4 h-4 text-neutral-500" />,
-  in_progress: <Clock className="w-4 h-4 text-blue-400" />,
-  done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-};
-
-const milestoneStatusBar: Record<string, string> = {
-  pending: "bg-neutral-700",
-  in_progress: "bg-blue-500",
-  completed: "bg-emerald-500",
-};
 
 type PublicProject = Project & {
   milestones: (Milestone & { tasks: Task[] })[];
@@ -86,7 +74,9 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
     ...(project.unassigned_tasks || []).filter((t) => !t.approved && t.created_by === "client"),
   ];
 
-  const totalDone = allApprovedTasks.filter((t) => t.status === "done").length;
+  const totalDone = project.milestones
+    .filter((m) => m.name.toLowerCase() === "done")
+    .reduce((sum, m) => sum + (m.tasks || []).filter((t) => t.approved).length, 0);
   const totalTasks = allApprovedTasks.length;
   const progress = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
 
@@ -129,24 +119,23 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
         {/* Milestones */}
         {project.milestones.map((milestone) => {
           const milestoneTasks = (milestone.tasks || []).filter((t) => t.approved);
-          const milestoneDone = milestoneTasks.filter((t) => t.status === "done").length;
+          const titleColor = resolvePhaseColor(milestone.name, milestone.color);
 
           return (
             <div key={milestone.id} className="space-y-2">
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full shrink-0 ${milestoneStatusBar[milestone.status]}`} />
-                <h2 className="font-medium text-neutral-200">{milestone.name}</h2>
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: titleColor }} />
+                <h2 className="font-medium" style={{ color: titleColor }}>{milestone.name}</h2>
                 <div className="flex-1 h-px bg-neutral-800" />
                 <span className="text-xs font-mono text-neutral-600">
-                  {milestoneDone}/{milestoneTasks.length}
+                  {milestoneTasks.length} task{milestoneTasks.length !== 1 ? "s" : ""}
                 </span>
               </div>
 
               <div className="ml-5 space-y-1">
                 {milestoneTasks.map((task) => (
                   <div key={task.id} className="flex items-center gap-3 py-1.5">
-                    {taskStatusIcon[task.status]}
-                    <span className={`text-sm ${task.status === "done" ? "line-through text-neutral-600" : "text-neutral-300"}`}>
+                    <span className="text-sm text-neutral-300">
                       {task.title}
                     </span>
                     {task.due_date && (

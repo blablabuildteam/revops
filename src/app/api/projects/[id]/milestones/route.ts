@@ -8,10 +8,10 @@ export async function POST(
   const { id: project_id } = await params;
   try {
     await ensureTables();
-    const { name, description, due_date, position } = await req.json();
+    const { name, description, due_date, position, color } = await req.json();
     const { rows } = await sql`
-      INSERT INTO milestones (project_id, name, description, due_date, position)
-      VALUES (${project_id}, ${name}, ${description ?? null}, ${due_date ?? null}, ${position ?? 0})
+      INSERT INTO milestones (project_id, name, description, due_date, position, color)
+      VALUES (${project_id}, ${name}, ${description ?? null}, ${due_date ?? null}, ${position ?? 0}, ${color ?? null})
       RETURNING *
     `;
     return NextResponse.json(rows[0], { status: 201 });

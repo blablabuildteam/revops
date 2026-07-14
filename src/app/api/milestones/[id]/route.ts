@@ -7,7 +7,7 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const { name, description, status, due_date, position } = await req.json();
+    const { name, description, status, due_date, position, color } = await req.json();
     const { rows } = await sql`
       UPDATE milestones SET
         name = COALESCE(${name ?? null}, name),
@@ -15,6 +15,7 @@ export async function PUT(
         status = COALESCE(${status ?? null}, status),
         due_date = ${due_date ?? null},
         position = COALESCE(${position ?? null}, position),
+        color = ${color ?? null},
         updated_at = now()
       WHERE id = ${id}
       RETURNING *

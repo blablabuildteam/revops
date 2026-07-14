@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { DEFAULT_PROJECT_MILESTONES } from "@/lib/types";
+import { DEFAULT_PROJECT_MILESTONES, DEFAULT_PHASE_COLORS } from "@/lib/types";
 
 export async function GET() {
   try {
@@ -10,7 +10,9 @@ export async function GET() {
         p.*,
         json_build_object('id', c.id, 'name', c.name, 'industry', c.industry) AS company,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.approved = true) AS task_count,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done' AND t.approved = true) AS done_count,
+        (SELECT COUNT(*) FROM tasks t
+          INNER JOIN milestones m ON m.id = t.milestone_id
+          WHERE t.project_id = p.id AND t.approved = true AND LOWER(m.name) = 'done') AS done_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.created_by = 'client' AND t.approved = false) AS pending_requests
       FROM projects p
       LEFT JOIN companies c ON c.id = p.company_id
@@ -45,9 +47,10 @@ export async function POST(req: NextRequest) {
     const project = rows[0];
 
     for (let i = 0; i < DEFAULT_PROJECT_MILESTONES.length; i++) {
+      const name = DEFAULT_PROJECT_MILESTONES[i];
       await sql`
-        INSERT INTO milestones (project_id, name, position, status)
-        VALUES (${project.id}, ${DEFAULT_PROJECT_MILESTONES[i]}, ${i}, 'pending')
+        INSERT INTO milestones (project_id, name, position, status, color)
+        VALUES (${project.id}, ${name}, ${i}, 'pending', ${DEFAULT_PHASE_COLORS[name]})
       `;
     }
 

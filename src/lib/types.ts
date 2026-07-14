@@ -164,6 +164,7 @@ export interface Milestone {
   position: number;
   status: MilestoneStatus;
   due_date?: string;
+  color?: string;
   tasks: Task[];
   created_at: string;
   updated_at: string;
@@ -214,6 +215,34 @@ export const DEFAULT_PROJECT_MILESTONES = [
   "On Hold",
   "Done",
 ] as const;
+
+export const DEFAULT_PHASE_COLORS: Record<(typeof DEFAULT_PROJECT_MILESTONES)[number], string> = {
+  Open: "#60a5fa",
+  "Up Next": "#c084fc",
+  "In Progress": "#e8ff47",
+  "On Hold": "#f87171",
+  Done: "#4ade80",
+};
+
+export const CUSTOM_PHASE_DEFAULT_COLOR = "#e5e5e5";
+
+export const PHASE_COLOR_PRESETS = [
+  { label: "White", value: CUSTOM_PHASE_DEFAULT_COLOR },
+  { label: "Blue", value: DEFAULT_PHASE_COLORS.Open },
+  { label: "Purple", value: DEFAULT_PHASE_COLORS["Up Next"] },
+  { label: "Volt", value: DEFAULT_PHASE_COLORS["In Progress"] },
+  { label: "Red", value: DEFAULT_PHASE_COLORS["On Hold"] },
+  { label: "Green", value: DEFAULT_PHASE_COLORS.Done },
+] as const;
+
+export function resolvePhaseColor(name: string, color?: string | null): string {
+  if (color) return color;
+  return DEFAULT_PHASE_COLORS[name as (typeof DEFAULT_PROJECT_MILESTONES)[number]] ?? CUSTOM_PHASE_DEFAULT_COLOR;
+}
+
+export function defaultColorForPhaseName(name: string): string {
+  return DEFAULT_PHASE_COLORS[name as (typeof DEFAULT_PROJECT_MILESTONES)[number]] ?? CUSTOM_PHASE_DEFAULT_COLOR;
+}
 
 export const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {
   not_sent: "Not sent",

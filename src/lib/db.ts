@@ -40,6 +40,12 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
+      await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
+      await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
+      await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
+      await sql`UPDATE milestones SET color = '#e8ff47' WHERE name = 'In Progress' AND color IS NULL`;
+      await sql`UPDATE milestones SET color = '#f87171' WHERE name = 'On Hold' AND color IS NULL`;
+      await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
       await sql`
@@ -153,6 +159,7 @@ async function _init() {
       status TEXT DEFAULT 'pending'
         CHECK (status IN ('pending', 'in_progress', 'completed')),
       due_date DATE,
+      color TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )

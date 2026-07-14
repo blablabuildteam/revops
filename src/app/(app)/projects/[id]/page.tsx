@@ -2,20 +2,22 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, CheckCircle2, Circle, Clock, Trash2, GripVertical, Link2,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, GripVertical,
 } from "lucide-react";
 import Link from "next/link";
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
   type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -41,14 +43,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getProject, createMilestone, createTask, updateTask, deleteTask, updateMilestone, deleteMilestone, deleteProject } from "@/lib/api";
-import { Project, Milestone, Task, TASK_STATUS_LABELS, TASK_ASSIGNEES } from "@/lib/types";
+import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR, PHASE_COLOR_PRESETS } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 
-const taskStatusIcon = {
-  open: <Circle className="w-4 h-4 text-neutral-600" />,
-  in_progress: <Clock className="w-4 h-4 text-blue-400" />,
-  done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-};
+const TASK_ROW_GRID =
+  "grid grid-cols-[24px_minmax(0,1fr)_140px_150px_150px_32px] items-center gap-x-4 gap-y-2";
 
 const milestoneStatusColors = {
   pending: "text-neutral-500 bg-neutral-800",
@@ -56,8 +55,85 @@ const milestoneStatusColors = {
   completed: "text-emerald-400 bg-emerald-950",
 };
 
+type TasksByMilestone = Record<string, Task[]>;
+type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
+
 function sortByPosition(tasks: Task[]) {
   return [...tasks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
+}
+
+function buildTasksByMilestone(milestones: (Milestone & { tasks: Task[] })[]): TasksByMilestone {
+  const map: TasksByMilestone = {};
+  for (const m of milestones) {
+    map[m.id] = sortByPosition(m.tasks || []);
+  }
+  return map;
+}
+
+function findContainer(
+  id: string,
+  tasksByMilestone: TasksByMilestone,
+  milestoneIds: string[],
+): string | null {
+  if (milestoneIds.includes(id)) return id;
+  for (const [milestoneId, tasks] of Object.entries(tasksByMilestone)) {
+    if (tasks.some((t) => t.id === id)) return milestoneId;
+  }
+  return null;
+}
+
+function PhaseColorPicker({
+  value,
+  onChange,
+  compact,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-1.5 ${compact ? "" : "shrink-0"}`} onClick={(e) => e.stopPropagation()}>
+      {PHASE_COLOR_PRESETS.map((preset) => (
+        <button
+          key={preset.value}
+          type="button"
+          title={preset.label}
+          onClick={() => onChange(preset.value)}
+          className={`rounded-full border-2 transition-transform hover:scale-110 ${compact ? "w-3.5 h-3.5" : "w-5 h-5"} ${value === preset.value ? "border-white" : "border-neutral-700"}`}
+          style={{ backgroundColor: preset.value }}
+        />
+      ))}
+      <label
+        title="Custom color"
+        className={`relative rounded-full border-2 border-neutral-600 overflow-hidden cursor-pointer hover:scale-110 transition-transform ${compact ? "w-3.5 h-3.5" : "w-5 h-5"}`}
+        style={{
+          background: value && !PHASE_COLOR_PRESETS.some((p) => p.value === value)
+            ? value
+            : "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)",
+        }}
+      >
+        <input
+          type="color"
+          value={value.startsWith("#") && value.length >= 7 ? value : CUSTOM_PHASE_DEFAULT_COLOR}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+        />
+      </label>
+    </div>
+  );
+}
+
+function TaskColumnHeader() {
+  return (
+    <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
+      <span />
+      <span>Task</span>
+      <span>Responsible</span>
+      <span>Date</span>
+      <span>Phase</span>
+      <span />
+    </div>
+  );
 }
 
 function TaskDetailDialog({
@@ -76,7 +152,6 @@ function TaskDetailDialog({
     assignee: "",
     description: "",
     url: "",
-    status: "open" as Task["status"],
   });
   const [loading, setLoading] = useState(false);
 
@@ -87,7 +162,6 @@ function TaskDetailDialog({
         assignee: task.assignee ?? "",
         description: task.description ?? "",
         url: task.url ?? "",
-        status: task.status,
       });
     }
   }, [task, open]);
@@ -102,7 +176,6 @@ function TaskDetailDialog({
         assignee: form.assignee || undefined,
         description: form.description || undefined,
         url: form.url || undefined,
-        status: form.status,
       });
       onSave(updated);
       onClose();
@@ -149,24 +222,6 @@ function TaskDetailDialog({
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Status</Label>
-            <Select
-              value={form.status}
-              onValueChange={(v) => setForm((f) => ({ ...f, status: (v ?? "open") as Task["status"] }))}
-            >
-              <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-neutral-800 border-neutral-700">
-                {(Object.keys(TASK_STATUS_LABELS) as Task["status"][]).map((s) => (
-                  <SelectItem key={s} value={s} className="text-neutral-100">
-                    {TASK_STATUS_LABELS[s]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">URL</Label>
@@ -241,16 +296,149 @@ function PendingTaskRow({
   );
 }
 
-function SortableTaskRow({
+function cancelDrag(e: React.PointerEvent) {
+  e.stopPropagation();
+}
+
+function InlineAssigneeSelect({
   task,
   onUpdate,
-  onDelete,
-  onClick,
 }: {
   task: Task;
   onUpdate: (t: Task) => void;
+}) {
+  return (
+    <Select
+      value={task.assignee || "none"}
+      onValueChange={(v) => {
+        if (!v || v === "none") {
+          updateTask(task.id, { assignee: undefined }).then(onUpdate);
+        } else {
+          updateTask(task.id, { assignee: v }).then(onUpdate);
+        }
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <SelectValue placeholder="—">
+          {task.assignee || "—"}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="bg-neutral-800 border-neutral-700">
+        <SelectItem value="none" className="text-neutral-500 text-xs">—</SelectItem>
+        {TASK_ASSIGNEES.map((name) => (
+          <SelectItem key={name} value={name} className="text-neutral-100 text-xs">{name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function InlineDateInput({
+  task,
+  onUpdate,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+}) {
+  const value = task.due_date ? task.due_date.slice(0, 10) : "";
+
+  return (
+    <Input
+      type="date"
+      value={value}
+      onChange={(e) => {
+        updateTask(task.id, { due_date: e.target.value || undefined }).then(onUpdate);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={cancelDrag}
+      className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2 font-mono"
+    />
+  );
+}
+
+function InlinePhaseSelect({
+  task,
+  currentMilestoneId,
+  milestones,
+  onPhaseChange,
+}: {
+  task: Task;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+}) {
+  const current = milestones.find((m) => m.id === currentMilestoneId);
+  const currentColor = current ? resolvePhaseColor(current.name, current.color) : undefined;
+
+  return (
+    <Select
+      value={currentMilestoneId}
+      onValueChange={(v) => {
+        if (!v || v === currentMilestoneId) return;
+        onPhaseChange(task.id, currentMilestoneId, v);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 px-2 gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <SelectValue placeholder="Phase">
+          {current && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: currentColor }}
+              />
+              <span className="truncate" style={{ color: currentColor }}>
+                {current.name}
+              </span>
+            </span>
+          )}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="bg-neutral-800 border-neutral-700">
+        {milestones.map((m) => {
+          const color = resolvePhaseColor(m.name, m.color);
+          return (
+            <SelectItem key={m.id} value={m.id} className="text-xs">
+              <span className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span style={{ color }}>{m.name}</span>
+              </span>
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function SortableTaskRow({
+  task,
+  currentMilestoneId,
+  milestones,
+  onUpdate,
+  onDelete,
+  onClick,
+  onPhaseChange,
+}: {
+  task: Task;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onUpdate: (t: Task) => void;
   onDelete: (id: string) => void;
   onClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
 }) {
   const {
     attributes,
@@ -259,21 +447,13 @@ function SortableTaskRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.id, data: { type: "task", milestoneId: task.milestone_id } });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.4 : 1,
   };
-
-  const statuses: Task["status"][] = ["open", "in_progress", "done"];
-
-  function cycleStatus(e: React.MouseEvent) {
-    e.stopPropagation();
-    const next = statuses[(statuses.indexOf(task.status) + 1) % statuses.length];
-    updateTask(task.id, { status: next }).then(onUpdate);
-  }
 
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -284,52 +464,42 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onClick(task)}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-pointer"
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-grab active:cursor-grabbing touch-none`}
+      {...attributes}
+      {...listeners}
     >
+      <div className="shrink-0 text-neutral-700 p-0.5 pointer-events-none">
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+
       <button
         type="button"
-        className="shrink-0 text-neutral-700 hover:text-neutral-500 cursor-grab active:cursor-grabbing touch-none p-0.5"
-        {...attributes}
-        {...listeners}
-        onClick={(e) => e.stopPropagation()}
-        aria-label="Drag to reorder"
+        onClick={() => onClick(task)}
+        className="min-w-0 text-left"
       >
-        <GripVertical className="w-3.5 h-3.5" />
-      </button>
-      <button type="button" onClick={cycleStatus} className="shrink-0">
-        {taskStatusIcon[task.status]}
-      </button>
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm ${task.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"}`}>
+        <p className="text-sm truncate text-neutral-200">
           {task.title}
         </p>
         {task.description && (
           <p className="text-xs text-neutral-600 truncate">{task.description}</p>
         )}
-      </div>
-      {task.assignee && (
-        <span className="text-xs text-neutral-600 font-mono shrink-0">{task.assignee}</span>
-      )}
-      {task.url && (
-        <a
-          href={task.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="text-neutral-600 hover:text-[#e8ff47] transition-colors shrink-0"
-          aria-label="Open link"
-        >
-          <Link2 className="w-3.5 h-3.5" />
-        </a>
-      )}
-      {task.due_date && (
-        <span className="text-xs text-neutral-700 font-mono shrink-0">{formatDate(task.due_date)}</span>
-      )}
+      </button>
+
+      <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} />
+
+      <InlinePhaseSelect
+        task={task}
+        currentMilestoneId={currentMilestoneId}
+        milestones={milestones}
+        onPhaseChange={onPhaseChange}
+      />
+
       <button
         type="button"
         onClick={handleDelete}
-        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded"
+        onPointerDown={cancelDrag}
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded justify-self-end cursor-pointer"
       >
         <Trash2 className="w-3 h-3" />
       </button>
@@ -387,92 +557,69 @@ function AddTaskInline({
 
 function MilestoneSection({
   milestone,
+  milestones,
   projectId,
-  onUpdate,
+  tasks,
   onDelete,
+  onCycleStatus,
+  onTaskUpdate,
+  onTaskDelete,
+  onTaskAdd,
+  onTaskClick,
+  onPhaseChange,
+  onColorChange,
 }: {
-  milestone: Milestone & { tasks: Task[] };
+  milestone: Milestone;
+  milestones: Milestone[];
   projectId: string;
-  onUpdate: (m: Milestone & { tasks: Task[] }) => void;
+  tasks: Task[];
   onDelete: (id: string) => void;
+  onCycleStatus: () => void;
+  onTaskUpdate: (t: Task) => void;
+  onTaskDelete: (id: string) => void;
+  onTaskAdd: (t: Task) => void;
+  onTaskClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  onColorChange: (milestoneId: string, color: string) => void;
 }) {
-  const [tasks, setTasks] = useState<Task[]>(() => sortByPosition(milestone.tasks || []));
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const { setNodeRef, isOver } = useDroppable({ id: milestone.id });
+  const [colorOpen, setColorOpen] = useState(false);
 
   const pendingTasks = tasks.filter((t) => !t.approved);
   const approvedTasks = sortByPosition(tasks.filter((t) => t.approved));
-  const done = approvedTasks.filter((t) => t.status === "done").length;
   const total = approvedTasks.length;
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  function handleTaskUpdate(updated: Task) {
-    setTasks((prev) => sortByPosition(prev.map((t) => (t.id === updated.id ? updated : t))));
-  }
-
-  function handleTaskDelete(id: string) {
-    deleteTask(id);
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-    if (selectedTask?.id === id) {
-      setDetailOpen(false);
-      setSelectedTask(null);
-    }
-  }
+  const titleColor = resolvePhaseColor(milestone.name, milestone.color);
+  const pickerValue = milestone.color ?? titleColor;
 
   function handleApprove(id: string) {
-    updateTask(id, { approved: true }).then((updated) => {
-      setTasks((prev) => sortByPosition(prev.map((t) => (t.id === updated.id ? updated : t))));
-    });
-  }
-
-  function handleAddTask(task: Task) {
-    setTasks((prev) => sortByPosition([...prev, task]));
-  }
-
-  function openTaskDetail(task: Task) {
-    setSelectedTask(task);
-    setDetailOpen(true);
-  }
-
-  async function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = approvedTasks.findIndex((t) => t.id === active.id);
-    const newIndex = approvedTasks.findIndex((t) => t.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const reordered = arrayMove(approvedTasks, oldIndex, newIndex).map((t, i) => ({ ...t, position: i }));
-    setTasks([...pendingTasks, ...reordered]);
-
-    await Promise.all(reordered.map((t) => updateTask(t.id, { position: t.position })));
-  }
-
-  function cycleStatus() {
-    const statuses: Milestone["status"][] = ["pending", "in_progress", "completed"];
-    const next = statuses[(statuses.indexOf(milestone.status) + 1) % statuses.length];
-    updateMilestone(milestone.id, { status: next }).then((m) => {
-      onUpdate({ ...milestone, ...m, tasks });
-    });
+    updateTask(id, { approved: true }).then(onTaskUpdate);
   }
 
   return (
-    <div className="border border-neutral-800 rounded-lg overflow-hidden">
+    <div className={`border border-neutral-800 rounded-lg overflow-hidden transition-colors ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
       <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800">
-        <button onClick={cycleStatus}
+        <button onClick={onCycleStatus}
           className={`text-xs px-2 py-0.5 rounded font-mono cursor-pointer ${milestoneStatusColors[milestone.status]}`}>
           {milestone.status === "pending" ? "Planned" : milestone.status === "in_progress" ? "In progress" : "Completed"}
         </button>
-        <h3 className="font-medium text-neutral-200 flex-1">{milestone.name}</h3>
+        <div className="flex-1">
+          <button
+            type="button"
+            onClick={() => setColorOpen((open) => !open)}
+            className="flex items-center gap-2 font-medium text-left hover:opacity-80 transition-opacity"
+          >
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: titleColor }}
+            />
+            <span style={{ color: titleColor }}>{milestone.name}</span>
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           {pendingTasks.length > 0 && (
             <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
           )}
-          <span className="text-xs text-neutral-600 font-mono">{done}/{total}</span>
+          <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
           {milestone.due_date && (
             <span className="text-xs text-neutral-700 font-mono">{formatDate(milestone.due_date)}</span>
           )}
@@ -483,39 +630,55 @@ function MilestoneSection({
         </div>
       </div>
 
+      {colorOpen && (
+        <div
+          className="flex items-center gap-2 px-4 py-2 bg-neutral-900/40 border-b border-neutral-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-[10px] uppercase tracking-wide text-neutral-600 shrink-0">Color</span>
+          <PhaseColorPicker
+            compact
+            value={pickerValue}
+            onChange={(color) => {
+              onColorChange(milestone.id, color);
+              setColorOpen(false);
+            }}
+          />
+        </div>
+      )}
+
       {pendingTasks.map((task) => (
         <PendingTaskRow
           key={task.id}
           task={task}
-          onDelete={handleTaskDelete}
+          onDelete={onTaskDelete}
           onApprove={handleApprove}
         />
       ))}
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <div ref={setNodeRef} className="min-h-[2rem]">
         <SortableContext items={approvedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="divide-y divide-neutral-800/40">
             {approvedTasks.map((task) => (
               <SortableTaskRow
                 key={task.id}
                 task={task}
-                onUpdate={handleTaskUpdate}
-                onDelete={handleTaskDelete}
-                onClick={openTaskDetail}
+                currentMilestoneId={milestone.id}
+                milestones={milestones}
+                onUpdate={onTaskUpdate}
+                onDelete={onTaskDelete}
+                onClick={onTaskClick}
+                onPhaseChange={onPhaseChange}
               />
             ))}
           </div>
         </SortableContext>
-      </DndContext>
+        {approvedTasks.length === 0 && pendingTasks.length === 0 && (
+          <p className="text-xs text-neutral-700 px-4 py-3">Drop tasks here</p>
+        )}
+      </div>
 
-      <AddTaskInline onAdd={handleAddTask} projectId={projectId} milestoneId={milestone.id} />
-
-      <TaskDetailDialog
-        task={selectedTask}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        onSave={handleTaskUpdate}
-      />
+      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={milestone.id} />
     </div>
   );
 }
@@ -523,19 +686,208 @@ function MilestoneSection({
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [tasksByMilestone, setTasksByMilestone] = useState<TasksByMilestone>({});
   const [loading, setLoading] = useState(true);
   const [newMilestoneName, setNewMilestoneName] = useState("");
+  const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const tasksRef = useRef<TasksByMilestone>({});
+
+  const milestoneIds = project?.milestones.map((m) => m.id) ?? [];
 
   useEffect(() => {
-    getProject(id).then((p) => { setProject(p as ProjectDetail); setLoading(false); });
+    tasksRef.current = tasksByMilestone;
+  }, [tasksByMilestone]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    getProject(id).then((p) => {
+      const detail = p as ProjectDetail;
+      setProject(detail);
+      setTasksByMilestone(buildTasksByMilestone(detail.milestones));
+      setLoading(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const persistContainer = useCallback(async (milestoneId: string, tasks: Task[]) => {
+    await Promise.all(
+      tasks.map((t, i) =>
+        updateTask(t.id, {
+          milestone_id: milestoneId,
+          position: i,
+        }),
+      ),
+    );
+  }, []);
+
+  function handleTaskUpdate(updated: Task) {
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      for (const milestoneId of Object.keys(next)) {
+        const idx = next[milestoneId].findIndex((t) => t.id === updated.id);
+        if (idx !== -1) {
+          const newMilestoneId = updated.milestone_id ?? milestoneId;
+          if (newMilestoneId !== milestoneId) {
+            next[milestoneId] = next[milestoneId].filter((t) => t.id !== updated.id);
+            next[newMilestoneId] = sortByPosition([...(next[newMilestoneId] || []), updated]);
+          } else {
+            next[milestoneId] = sortByPosition(
+              next[milestoneId].map((t) => (t.id === updated.id ? updated : t)),
+            );
+          }
+          break;
+        }
+      }
+      return next;
+    });
+    if (selectedTask?.id === updated.id) setSelectedTask(updated);
+  }
+
+  function handleTaskDelete(taskId: string) {
+    deleteTask(taskId);
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      for (const milestoneId of Object.keys(next)) {
+        next[milestoneId] = next[milestoneId].filter((t) => t.id !== taskId);
+      }
+      return next;
+    });
+    if (selectedTask?.id === taskId) {
+      setDetailOpen(false);
+      setSelectedTask(null);
+    }
+  }
+
+  function handleTaskAdd(milestoneId: string, task: Task) {
+    setTasksByMilestone((prev) => ({
+      ...prev,
+      [milestoneId]: sortByPosition([...(prev[milestoneId] || []), task]),
+    }));
+  }
+
+  async function handleTaskPhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
+    const current = tasksRef.current;
+    const targetApproved = (current[toMilestoneId] || []).filter((t) => t.approved);
+    const newPosition = targetApproved.length;
+
+    const updated = await updateTask(taskId, {
+      milestone_id: toMilestoneId,
+      position: newPosition,
+    });
+
+    setTasksByMilestone((prev) => {
+      const fromPending = (prev[fromMilestoneId] || []).filter((t) => !t.approved);
+      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => t.approved && t.id !== taskId);
+      const toPending = (prev[toMilestoneId] || []).filter((t) => !t.approved);
+      const toApproved = [...targetApproved, updated];
+
+      const next = {
+        ...prev,
+        [fromMilestoneId]: [...fromPending, ...fromApproved],
+        [toMilestoneId]: [...toPending, ...toApproved],
+      };
+      tasksRef.current = next;
+      return next;
+    });
+
+    const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter((t) => t.approved);
+    const toApproved = (tasksRef.current[toMilestoneId] || []).filter((t) => t.approved);
+    await Promise.all([
+      persistContainer(fromMilestoneId, fromApproved),
+      persistContainer(toMilestoneId, toApproved),
+    ]);
+
+    if (selectedTask?.id === taskId) setSelectedTask(updated);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeContainer = findContainer(String(active.id), tasksByMilestone, milestoneIds);
+    const overContainer = findContainer(String(over.id), tasksByMilestone, milestoneIds);
+    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+
+    setTasksByMilestone((prev) => {
+      const activeItems = prev[activeContainer].filter((t) => t.approved);
+      const overItems = prev[overContainer].filter((t) => t.approved);
+      const activeIndex = activeItems.findIndex((t) => t.id === active.id);
+      if (activeIndex === -1) return prev;
+
+      const overIndex = milestoneIds.includes(String(over.id))
+        ? overItems.length
+        : overItems.findIndex((t) => t.id === over.id);
+
+      const task = activeItems[activeIndex];
+      const pendingInActive = prev[activeContainer].filter((t) => !t.approved);
+      const pendingInOver = prev[overContainer].filter((t) => !t.approved);
+
+      const newActiveApproved = activeItems.filter((t) => t.id !== active.id);
+      const newOverApproved = [
+        ...overItems.slice(0, overIndex >= 0 ? overIndex : overItems.length),
+        { ...task, milestone_id: overContainer },
+        ...overItems.slice(overIndex >= 0 ? overIndex : overItems.length),
+      ];
+
+      const next = {
+        ...prev,
+        [activeContainer]: [...pendingInActive, ...newActiveApproved],
+        [overContainer]: [...pendingInOver, ...newOverApproved],
+      };
+      tasksRef.current = next;
+      return next;
+    });
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const current = tasksRef.current;
+    const activeContainer = findContainer(String(active.id), current, milestoneIds);
+    const overContainer = findContainer(String(over.id), current, milestoneIds);
+    if (!activeContainer || !overContainer) return;
+
+    let nextState = current;
+
+    if (activeContainer === overContainer) {
+      const approved = sortByPosition(current[activeContainer].filter((t) => t.approved));
+      const oldIndex = approved.findIndex((t) => t.id === active.id);
+      const newIndex = approved.findIndex((t) => t.id === over.id);
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        const pending = current[activeContainer].filter((t) => !t.approved);
+        const reordered = arrayMove(approved, oldIndex, newIndex);
+        nextState = {
+          ...current,
+          [activeContainer]: [...pending, ...reordered],
+        };
+        setTasksByMilestone(nextState);
+      }
+    }
+
+    const activeApproved = sortByPosition(
+      (nextState[activeContainer] || []).filter((t) => t.approved),
+    );
+    const overApproved = sortByPosition(
+      (nextState[overContainer] || []).filter((t) => t.approved),
+    );
+
+    await Promise.all([
+      persistContainer(activeContainer, activeApproved),
+      activeContainer !== overContainer ? persistContainer(overContainer, overApproved) : Promise.resolve(),
+    ]);
+  }
 
   async function handleAddMilestone(e: React.FormEvent) {
     e.preventDefault();
@@ -544,13 +896,25 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const milestone = await createMilestone(project.id, {
       name: newMilestoneName.trim(),
       position: project.milestones.length,
+      color: newMilestoneColor || defaultColorForPhaseName(newMilestoneName.trim()),
     });
     setProject((prev) => prev ? {
       ...prev,
       milestones: [...prev.milestones, { ...milestone, tasks: [] }],
     } : prev);
+    setTasksByMilestone((prev) => ({ ...prev, [milestone.id]: [] }));
     setNewMilestoneName("");
+    setNewMilestoneColor(CUSTOM_PHASE_DEFAULT_COLOR);
     setAddingMilestone(false);
+  }
+
+  function handleMilestoneColorChange(milestoneId: string, color: string) {
+    updateMilestone(milestoneId, { color }).then((m) => {
+      setProject((prev) => prev ? {
+        ...prev,
+        milestones: prev.milestones.map((ms) => ms.id === milestoneId ? { ...ms, ...m } : ms),
+      } : prev);
+    });
   }
 
   function copyShareLink() {
@@ -583,14 +947,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
 
-  const allTasks = [
-    ...project.milestones.flatMap((m) => m.tasks || []),
-    ...(project.unassigned_tasks || []),
-  ];
+  const allTasks = Object.values(tasksByMilestone).flat();
   const pendingRequests = allTasks.filter((t) => !t.approved).length;
+  const hasApprovedTasks = allTasks.some((t) => t.approved);
 
   return (
-    <div className="p-8 space-y-6 max-w-3xl">
+    <div className="w-full p-6 lg:p-8 space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors">
           <ArrowLeft className="w-4 h-4" />
@@ -658,33 +1020,75 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      <div className="space-y-3">
-        {project.milestones.map((milestone) => (
-          <MilestoneSection
-            key={milestone.id}
-            milestone={milestone}
-            projectId={project.id}
-            onUpdate={(m) => setProject((prev) => prev ? {
-              ...prev,
-              milestones: prev.milestones.map((ms) => ms.id === m.id ? m : ms),
-            } : prev)}
-            onDelete={(mid) => {
-              deleteMilestone(mid);
-              setProject((prev) => prev ? {
-                ...prev,
-                milestones: prev.milestones.filter((ms) => ms.id !== mid),
-              } : prev);
-            }}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="space-y-3">
+          {hasApprovedTasks && (
+            <div className="px-3">
+              <TaskColumnHeader />
+            </div>
+          )}
+          {project.milestones.map((milestone) => (
+            <MilestoneSection
+              key={milestone.id}
+              milestone={milestone}
+              milestones={project.milestones}
+              projectId={project.id}
+              tasks={tasksByMilestone[milestone.id] || []}
+              onDelete={(mid) => {
+                deleteMilestone(mid);
+                setProject((prev) => prev ? {
+                  ...prev,
+                  milestones: prev.milestones.filter((ms) => ms.id !== mid),
+                } : prev);
+                setTasksByMilestone((prev) => {
+                  const next = { ...prev };
+                  delete next[mid];
+                  return next;
+                });
+              }}
+              onCycleStatus={() => {
+                const statuses: Milestone["status"][] = ["pending", "in_progress", "completed"];
+                const next = statuses[(statuses.indexOf(milestone.status) + 1) % statuses.length];
+                updateMilestone(milestone.id, { status: next }).then((m) => {
+                  setProject((prev) => prev ? {
+                    ...prev,
+                    milestones: prev.milestones.map((ms) => ms.id === milestone.id ? { ...ms, ...m } : ms),
+                  } : prev);
+                });
+              }}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDelete}
+              onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
+              onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
+              onPhaseChange={handleTaskPhaseChange}
+              onColorChange={handleMilestoneColorChange}
+            />
+          ))}
+        </div>
+      </DndContext>
 
-      <form onSubmit={handleAddMilestone} className="flex gap-2">
+      <TaskDetailDialog
+        task={selectedTask}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onSave={handleTaskUpdate}
+      />
+
+      <form onSubmit={handleAddMilestone} className="flex items-center gap-3">
+        <PhaseColorPicker
+          value={newMilestoneColor}
+          onChange={setNewMilestoneColor}
+        />
         <Input
           value={newMilestoneName}
           onChange={(e) => setNewMilestoneName(e.target.value)}
           placeholder="Add new phase... (e.g. Discovery, Design, Build)"
-          className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
+          className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1"
         />
         <Button type="submit" disabled={addingMilestone || !newMilestoneName.trim()}
           className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 shrink-0">
