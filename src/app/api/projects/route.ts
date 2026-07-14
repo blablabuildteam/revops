@@ -8,7 +8,7 @@ export async function GET() {
     const { rows } = await sql`
       SELECT
         p.*,
-        json_build_object('id', c.id, 'name', c.name, 'industry', c.industry) AS company,
+        json_build_object('id', c.id, 'name', c.name, 'industry', c.industry, 'logo_url', c.logo_url) AS company,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.approved = true) AS task_count,
         (SELECT COUNT(*) FROM tasks t
           INNER JOIN milestones m ON m.id = t.milestone_id

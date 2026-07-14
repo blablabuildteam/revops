@@ -9,7 +9,7 @@ export async function GET(
   try {
     await ensureTables();
     const { rows: projectRows } = await sql`
-      SELECT p.*, json_build_object('id', c.id, 'name', c.name) AS company
+      SELECT p.*, json_build_object('id', c.id, 'name', c.name, 'logo_url', c.logo_url) AS company
       FROM projects p
       LEFT JOIN companies c ON c.id = p.company_id
       WHERE p.id = ${id}

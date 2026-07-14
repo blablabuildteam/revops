@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
+import { CompanyAvatar } from "@/components/company-avatar";
 
 type ProjectWithStats = Project & {
   task_count: number;
@@ -322,7 +323,16 @@ export default function ProjectsPage() {
               <Link key={project.id} href={`/projects/${project.id}`}
                 className="block border border-neutral-800 rounded-lg p-5 hover:border-neutral-700 transition-colors bg-neutral-900/20 group">
                 <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {(project.company as { logo_url?: string; name?: string })?.name && (
+                      <CompanyAvatar
+                        name={(project.company as { name?: string }).name!}
+                        logoUrl={(project.company as { logo_url?: string }).logo_url}
+                        size="md"
+                        className="mt-0.5"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs px-2 py-0.5 rounded font-mono ${statusColors[project.status]}`}>
                         {PROJECT_STATUS_LABELS[project.status]}
@@ -341,6 +351,7 @@ export default function ProjectsPage() {
                       {(project.company as { name?: string })?.name || "—"}
                       {project.client_name && ` · ${project.client_name}`}
                     </p>
+                  </div>
                   </div>
                   <ExternalLink className="w-3.5 h-3.5 text-neutral-700 group-hover:text-neutral-500 shrink-0 ml-2 mt-1" />
                 </div>

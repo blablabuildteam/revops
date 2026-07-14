@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { getCompanies, getProjects } from "@/lib/api";
 import { Company, Project } from "@/lib/types";
-import { formatDate } from "@/lib/format";
+import { formatDate, toDateInputValue } from "@/lib/format";
 
 interface TodoUser { id: string; email: string; name: string }
 interface Todo {
@@ -86,18 +86,20 @@ const statusFilterLabels: Record<string, string> = {
 // New Task Dialog (full form)
 // ---------------------------------------------------------------------------
 
-function NewTodoDialog({
-  open, onClose, onSave, users, companies, projects, currentUser, defaultProjectId,
+function TodoFormDialog({
+  open, onClose, onSave, todo, users, companies, projects, currentUser, defaultProjectId,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (t: Todo) => void;
+  todo?: Todo | null;
   users: TodoUser[];
   companies: Company[];
   projects: Project[];
   currentUser: TodoUser | null;
   defaultProjectId?: string;
 }) {
+  const isEdit = !!todo;
   const [form, setForm] = useState({
     title: "", description: "", priority: "medium",
     assignee_id: "",
@@ -109,15 +111,26 @@ function NewTodoDialog({
   const people = assigneeOptions(users, currentUser);
 
   useEffect(() => {
-    if (open && currentUser) {
-      setForm((f) => ({
-        ...f,
-        assignee_id: currentUser.id,
-        project_id: defaultProjectId ?? "",
-      }));
-      setError("");
+    if (!open) return;
+    setError("");
+    if (todo) {
+      setForm({
+        title: todo.title,
+        description: todo.description ?? "",
+        priority: todo.priority,
+        assignee_id: todo.assignee_id ?? "",
+        company_id: todo.company_id ?? "",
+        project_id: todo.project_id ?? "",
+        due_date: toDateInputValue(todo.due_date),
+      });
+      return;
     }
-  }, [open, currentUser, defaultProjectId]);
+    setForm({
+      title: "", description: "", priority: "medium",
+      assignee_id: currentUser?.id ?? "",
+      company_id: "", project_id: defaultProjectId ?? "", due_date: "",
+    });
+  }, [open, todo, currentUser, defaultProjectId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,32 +138,28 @@ function NewTodoDialog({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/todos", {
-        method: "POST",
+      const payload = {
+        ...form,
+        assignee_id:
+          form.assignee_id === ""
+            ? null
+            : (form.assignee_id || currentUser?.id || null),
+        company_id: form.company_id || null,
+        project_id: form.project_id || null,
+        due_date: form.due_date || null,
+      };
+      const res = await fetch(isEdit ? `/api/todos/${todo!.id}` : "/api/todos", {
+        method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          assignee_id:
-            form.assignee_id === ""
-              ? null
-              : (form.assignee_id || currentUser?.id || null),
-          company_id: form.company_id || null,
-          project_id: form.project_id || null,
-          due_date: form.due_date || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data?.error ?? "Failed to create task");
+        setError(data?.error ?? (isEdit ? "Failed to update task" : "Failed to create task"));
         return;
       }
       onSave(data);
       onClose();
-      setForm({
-        title: "", description: "", priority: "medium",
-        assignee_id: currentUser?.id ?? "",
-        company_id: "", project_id: "", due_date: "",
-      });
     } finally {
       setLoading(false);
     }
@@ -162,7 +171,7 @@ function NewTodoDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
         <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit task" : "New task"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -252,7 +261,7 @@ function NewTodoDialog({
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-              {loading ? "Adding..." : "Add"}
+              {loading ? (isEdit ? "Saving..." : "Adding...") : (isEdit ? "Save" : "Add")}
             </Button>
             </div>
           </DialogFooter>
@@ -332,10 +341,11 @@ function QuickAddTodo({ onAdd, currentUser }: {
 // Compact todo row for the checklist
 // ---------------------------------------------------------------------------
 
-function TodoRow({ todo, onUpdate, onDelete }: {
+function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
   todo: Todo;
   onUpdate: (t: Todo) => void;
   onDelete: (id: string) => void;
+  onEdit: (t: Todo) => void;
 }) {
   const statuses: Todo["status"][] = ["open", "in_progress", "done"];
 
@@ -361,11 +371,17 @@ function TodoRow({ todo, onUpdate, onDelete }: {
         {statusIcon[todo.status]}
       </button>
       <div className="flex-1 min-w-0 flex items-center gap-3">
-        <p className={`text-sm leading-snug truncate ${
-          todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
-        }`}>
-          <BinaryText text={todo.title} id={todo.id} />
-        </p>
+        <button
+          type="button"
+          onClick={() => onEdit(todo)}
+          className={`flex-1 min-w-0 text-left cursor-pointer hover:text-neutral-100 transition-colors ${
+            todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
+          }`}
+        >
+          <p className="text-sm leading-snug truncate">
+            <BinaryText text={todo.title} id={todo.id} />
+          </p>
+        </button>
         <div className="flex items-center gap-2 shrink-0">
           {todo.assignee_name && (
             <span className="flex items-center gap-1 text-xs text-neutral-500">
@@ -395,10 +411,11 @@ function TodoRow({ todo, onUpdate, onDelete }: {
 // Expanded todo card (used in project groups for more detail)
 // ---------------------------------------------------------------------------
 
-function TodoCard({ todo, onUpdate, onDelete }: {
+function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
   todo: Todo;
   onUpdate: (t: Todo) => void;
   onDelete: (id: string) => void;
+  onEdit: (t: Todo) => void;
 }) {
   const statuses: Todo["status"][] = ["open", "in_progress", "done"];
 
@@ -422,11 +439,17 @@ function TodoCard({ todo, onUpdate, onDelete }: {
         {statusIcon[todo.status]}
       </button>
       <div className="flex-1 min-w-0">
-        <p className={`text-sm leading-snug ${
-          todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
-        }`}>
-          <BinaryText text={todo.title} id={todo.id} />
-        </p>
+        <button
+          type="button"
+          onClick={() => onEdit(todo)}
+          className={`w-full text-left cursor-pointer hover:text-neutral-100 transition-colors ${
+            todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
+          }`}
+        >
+          <p className="text-sm leading-snug">
+            <BinaryText text={todo.title} id={todo.id} />
+          </p>
+        </button>
         {todo.description && (
           <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">
             <BinaryText text={todo.description} id={`${todo.id}-desc`} />
@@ -468,13 +491,14 @@ function TodoCard({ todo, onUpdate, onDelete }: {
 // ---------------------------------------------------------------------------
 
 function ProjectGroup({
-  projectId, projectName, todos, onUpdate, onDelete, onNewTask,
+  projectId, projectName, todos, onUpdate, onDelete, onEdit, onNewTask,
 }: {
   projectId: string;
   projectName: string;
   todos: Todo[];
   onUpdate: (t: Todo) => void;
   onDelete: (id: string) => void;
+  onEdit: (t: Todo) => void;
   onNewTask: (projectId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -516,7 +540,7 @@ function ProjectGroup({
       {expanded && (
         <div className="divide-y divide-neutral-800/40">
           {active.map((t) => (
-            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} />
+            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} onEdit={onEdit} />
           ))}
           {done.length > 0 && active.length > 0 && (
             <div className="px-4 py-1.5">
@@ -524,7 +548,7 @@ function ProjectGroup({
             </div>
           )}
           {done.map((t) => (
-            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} />
+            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} onEdit={onEdit} />
           ))}
           {todos.length === 0 && (
             <p className="text-xs text-neutral-700 px-4 py-3">No tasks yet</p>
@@ -562,33 +586,46 @@ export default function TodosPage() {
   const [currentUser, setCurrentUser] = useState<TodoUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [formDefaultProject, setFormDefaultProject] = useState<string | undefined>();
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterCompany, setFilterCompany] = useState("all");
   const [filterStatus, setFilterStatus] = useState("active");
+  const [filtersReady, setFiltersReady] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((data) => {
+        const user = data.user ?? null;
+        setCurrentUser(user);
+        if (user?.id) setFilterAssignee(user.id);
+        setFiltersReady(true);
+      })
+      .catch(() => setFiltersReady(true));
+  }, []);
 
   const load = useCallback(async () => {
+    if (!filtersReady) return;
     setLoading(true);
     const params = new URLSearchParams();
     if (filterAssignee !== "all") params.set("assignee", filterAssignee);
     if (filterCompany !== "all") params.set("company", filterCompany);
     if (filterStatus !== "all") params.set("status", filterStatus === "active" ? "" : filterStatus);
 
-    const [todoData, userData, companyData, projectData, meData] = await Promise.all([
+    const [todoData, userData, companyData, projectData] = await Promise.all([
       fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/users").then((r) => r.json()).catch(() => []),
       getCompanies(),
       getProjects(),
-      fetch("/api/auth/me").then((r) => r.json()),
     ]);
 
     setTodos(todoData);
     setUsers(userData);
     setCompanies(companyData);
     setProjects(projectData as Project[]);
-    setCurrentUser(meData.user ?? null);
     setLoading(false);
-  }, [filterAssignee, filterCompany, filterStatus]);
+  }, [filterAssignee, filterCompany, filterStatus, filtersReady]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -603,13 +640,27 @@ export default function TodosPage() {
   }
 
   function openNewTaskForProject(projectId: string) {
+    setEditingTodo(null);
     setFormDefaultProject(projectId);
     setFormOpen(true);
   }
 
   function openNewTask() {
+    setEditingTodo(null);
     setFormDefaultProject(undefined);
     setFormOpen(true);
+  }
+
+  function openEditTask(todo: Todo) {
+    setEditingTodo(todo);
+    setFormDefaultProject(undefined);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditingTodo(null);
+    setFormDefaultProject(undefined);
   }
 
   const people = assigneeOptions(users, currentUser);
@@ -730,7 +781,7 @@ export default function TodosPage() {
                 currentUser={currentUser}
               />
               {personalActive.map((t) => (
-                <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} />
+                <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} onEdit={openEditTask} />
               ))}
               {personalDone.length > 0 && (
                 <>
@@ -742,7 +793,7 @@ export default function TodosPage() {
                     <div className="flex-1 border-t border-neutral-800/60" />
                   </div>
                   {personalDone.map((t) => (
-                    <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} />
+                    <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} onEdit={openEditTask} />
                   ))}
                 </>
               )}
@@ -780,6 +831,7 @@ export default function TodosPage() {
                       todos={group.todos}
                       onUpdate={handleUpdate}
                       onDelete={handleDelete}
+                      onEdit={openEditTask}
                       onNewTask={openNewTaskForProject}
                     />
                   ))}
@@ -796,10 +848,11 @@ export default function TodosPage() {
         </div>
       )}
 
-      <NewTodoDialog
+      <TodoFormDialog
         open={formOpen}
-        onClose={() => { setFormOpen(false); setFormDefaultProject(undefined); }}
-        onSave={(t) => { setTodos((prev) => [t, ...prev]); load(); }}
+        onClose={closeForm}
+        onSave={() => { load(); }}
+        todo={editingTodo}
         users={users}
         companies={companies}
         projects={projects as Project[]}

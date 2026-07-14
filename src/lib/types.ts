@@ -44,6 +44,7 @@ export interface Company {
   industry?: string;
   website?: string;
   country?: string;
+  logo_url?: string | null;
   retainer_type?: RetainerType;
   retainer_amount?: number;
   commission_pct?: number;

@@ -39,6 +39,7 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
+      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
@@ -93,6 +94,7 @@ async function _init() {
         CHECK (retainer_type IN ('none', 'fixed', 'commission')),
       retainer_amount NUMERIC(12,2) DEFAULT 0,
       commission_pct NUMERIC(5,2) DEFAULT 0,
+      logo_url TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
@@ -102,6 +104,7 @@ async function _init() {
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS opportunities (

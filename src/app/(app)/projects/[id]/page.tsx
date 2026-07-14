@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BinaryText } from "@/components/binary-text";
+import { CompanyAvatar } from "@/components/company-avatar";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -540,8 +541,16 @@ function TaskNameCell({
   }
 
   return (
-    <div className={`min-w-0 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}>
-      <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
+    <div
+      className={`min-w-0 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}
+      onPointerDown={cancelDrag}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        onPointerDown={cancelDrag}
+        className="flex-1 min-w-0 text-left cursor-pointer"
+      >
         <p className="text-sm truncate text-neutral-200">
           <BinaryText text={task.title} id={task.id} />
         </p>
@@ -1663,6 +1672,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </Link>
+        {(project.company as { logo_url?: string; name?: string })?.name && (
+          <CompanyAvatar
+            name={(project.company as { name?: string }).name!}
+            logoUrl={(project.company as { logo_url?: string }).logo_url}
+            size="lg"
+          />
+        )}
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-neutral-100">{project.name}</h1>
           <p className="text-sm text-neutral-600 mt-0.5">

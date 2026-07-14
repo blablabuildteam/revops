@@ -7,6 +7,7 @@ import { Plus, ExternalLink, Building2, Settings2, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CompanyAvatar } from "@/components/company-avatar";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -211,6 +212,12 @@ export default function CompaniesPage() {
     setEditing(null);
   }
 
+  function handleLogoChange(companyId: string, logoUrl: string) {
+    setCompanies((prev) =>
+      prev.map((c) => (c.id === companyId ? { ...c, logo_url: logoUrl } : c))
+    );
+  }
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -243,9 +250,13 @@ export default function CompaniesPage() {
                 className="border border-neutral-800 rounded-lg p-5 hover:border-neutral-700 transition-colors bg-neutral-900/20">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center shrink-0">
-                      <Building2 className="w-4 h-4 text-neutral-500" />
-                    </div>
+                    <CompanyAvatar
+                      id={company.id}
+                      name={company.name}
+                      logoUrl={company.logo_url}
+                      uploadable
+                      onLogoChange={(logoUrl) => handleLogoChange(company.id, logoUrl)}
+                    />
                     <div>
                       <h3 className="font-medium text-neutral-200">{company.name}</h3>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
