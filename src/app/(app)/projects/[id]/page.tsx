@@ -45,6 +45,7 @@ import {
 import { BinaryText } from "@/components/binary-text";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
+import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -1299,6 +1300,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const { requestDelete, confirmDialog } = useConfirmDelete();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [editStatusesOpen, setEditStatusesOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const tasksRef = useRef<TasksByMilestone>({});
