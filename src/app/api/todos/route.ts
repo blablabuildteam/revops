@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       VALUES (
         ${title.trim()},
         ${description?.trim() || null},
-        ${priority ?? "medium"},
+        ${priority ?? "low"},
         ${resolvedAssignee},
         ${company_id ?? null},
         ${project_id ?? null},
