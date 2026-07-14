@@ -25,6 +25,7 @@ export async function PUT(
     const due_date = "due_date" in body ? body.due_date : current.due_date;
     const url = "url" in body ? body.url : current.url;
     const approved = "approved" in body ? body.approved : current.approved;
+    const priority = "priority" in body ? body.priority : (current.priority ?? "low");
     const position = "position" in body ? body.position : current.position;
 
     if (project_id !== current.project_id) {
@@ -48,6 +49,7 @@ export async function PUT(
         due_date = ${due_date},
         url = ${url},
         approved = ${approved},
+        priority = ${priority},
         position = ${position},
         updated_at = now()
       WHERE id = ${id}

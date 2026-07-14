@@ -7,12 +7,14 @@ async function fetchTodo(id: string) {
     SELECT
       t.*,
       u.name AS assignee_name, u.email AS assignee_email,
-      c.name AS company_name,
-      p.name AS project_name
+      c.name AS company_name, c.logo_url AS company_logo_url,
+      p.name AS project_name,
+      pc.name AS project_company_name, pc.logo_url AS project_company_logo_url
     FROM todos t
     LEFT JOIN users u ON u.id = t.assignee_id
     LEFT JOIN companies c ON c.id = t.company_id
     LEFT JOIN projects p ON p.id = t.project_id
+    LEFT JOIN companies pc ON pc.id = p.company_id
     WHERE t.id = ${id}
   `;
   return rows[0] ?? null;
@@ -30,12 +32,14 @@ export async function GET(req: NextRequest) {
       SELECT
         t.*,
         u.name AS assignee_name, u.email AS assignee_email,
-        c.name AS company_name,
-        p.name AS project_name
+        c.name AS company_name, c.logo_url AS company_logo_url,
+        p.name AS project_name,
+        pc.name AS project_company_name, pc.logo_url AS project_company_logo_url
       FROM todos t
       LEFT JOIN users u ON u.id = t.assignee_id
       LEFT JOIN companies c ON c.id = t.company_id
       LEFT JOIN projects p ON p.id = t.project_id
+      LEFT JOIN companies pc ON pc.id = p.company_id
       WHERE
         (COALESCE(${assignee}, '') = '' OR u.id::text = ${assignee})
         AND (COALESCE(${status}, '') = '' OR t.status = ${status})

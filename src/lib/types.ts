@@ -171,6 +171,8 @@ export interface Milestone {
   updated_at: string;
 }
 
+export type TaskPriority = "low" | "medium" | "high";
+
 export interface Task {
   id: string;
   project_id: string;
@@ -184,6 +186,7 @@ export interface Task {
   assignee?: string | null;
   due_date?: string | null;
   url?: string | null;
+  priority: TaskPriority;
   position: number;
   created_at: string;
   updated_at: string;

@@ -5,11 +5,13 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Plus, CheckCircle2, Circle, Clock, Trash2,
-  Flag, User, Building2, FolderKanban, Calendar,
+  User, Building2, FolderKanban, Calendar,
   ChevronDown, ChevronRight, ListTodo,
 } from "lucide-react";
 import Link from "next/link";
 import { BinaryText } from "@/components/binary-text";
+import { PriorityFlag, type Priority } from "@/components/priority-flag";
+import { CompanyAvatar } from "@/components/company-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,15 +39,34 @@ interface Todo {
   company_name?: string;
   project_id?: string;
   project_name?: string;
+  project_company_name?: string;
+  project_company_logo_url?: string;
   due_date?: string;
   created_at: string;
+  _source: "todo";
 }
 
-const priorityColors = {
-  high: "text-red-400",
-  medium: "text-amber-400",
-  low: "text-neutral-500",
-};
+interface ProjectBoardTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: "open" | "in_progress" | "done";
+  priority: Priority;
+  assignee?: string;
+  due_date?: string;
+  project_id: string;
+  project_name: string;
+  company_name?: string;
+  company_id?: string;
+  company_logo_url?: string;
+  milestone_name?: string;
+  milestone_color?: string;
+  created_at: string;
+  _source: "task";
+}
+
+type UnifiedTask = Todo | ProjectBoardTask;
+
 const statusIcon = {
   open: <Circle className="w-4 h-4 text-neutral-600" />,
   in_progress: <Clock className="w-4 h-4 text-blue-400" />,
@@ -355,7 +376,7 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
-    }).then((r) => r.json()).then(onUpdate);
+    }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
   }
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
@@ -396,8 +417,17 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <Flag className={`w-3 h-3 ${priorityColors[todo.priority]}`} />
+      <div className="flex items-center shrink-0">
+        <PriorityFlag
+          priority={todo.priority}
+          onChange={(next) => {
+            fetch(`/api/todos/${todo.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ priority: next }),
+            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
+          }}
+        />
         <button onClick={() => onDelete(todo.id)}
           className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
           <Trash2 className="w-3.5 h-3.5" />
@@ -425,7 +455,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
-    }).then((r) => r.json()).then(onUpdate);
+    }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
   }
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
@@ -475,8 +505,17 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
           )}
         </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <Flag className={`w-3 h-3 ${priorityColors[todo.priority]}`} />
+      <div className="flex items-center shrink-0">
+        <PriorityFlag
+          priority={todo.priority}
+          onChange={(next) => {
+            fetch(`/api/todos/${todo.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ priority: next }),
+            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
+          }}
+        />
         <button onClick={() => onDelete(todo.id)}
           className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
           <Trash2 className="w-3.5 h-3.5" />
@@ -487,25 +526,125 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
 }
 
 // ---------------------------------------------------------------------------
+// Project board task card (from the tasks table, read-only status cycle)
+// ---------------------------------------------------------------------------
+
+function ProjectTaskCard({ task, onStatusChange }: {
+  task: ProjectBoardTask;
+  onStatusChange: (t: ProjectBoardTask) => void;
+}) {
+  const statuses: ProjectBoardTask["status"][] = ["open", "in_progress", "done"];
+
+  function cycleStatus() {
+    const next = statuses[(statuses.indexOf(task.status) + 1) % statuses.length];
+    fetch(`/api/tasks/${task.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    }).then((r) => r.json()).then((d) => onStatusChange({ ...d, _source: "task", project_name: task.project_name, company_name: task.company_name, milestone_name: task.milestone_name, milestone_color: task.milestone_color }));
+  }
+
+  const isOverdue = task.due_date && task.status !== "done" &&
+    new Date(task.due_date) < new Date();
+
+  const phaseColor = task.milestone_color || undefined;
+
+  return (
+    <div className={`flex items-start gap-3 px-3.5 py-2.5 transition-all group ${
+      task.status === "done" ? "opacity-50" : ""
+    }`}>
+      <button onClick={cycleStatus} className="shrink-0 mt-0.5">
+        {statusIcon[task.status]}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm leading-snug ${
+          task.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
+        }`}>
+          <BinaryText text={task.title} id={task.id} />
+        </p>
+        {task.description && (
+          <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">
+            <BinaryText text={task.description} id={`${task.id}-desc`} />
+          </p>
+        )}
+        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+          {task.assignee && (
+            <span className="flex items-center gap-1 text-xs text-neutral-500">
+              <User className="w-3 h-3" /> {task.assignee}
+            </span>
+          )}
+          {task.milestone_name && (
+            <span className="flex items-center gap-1 text-xs" style={{ color: phaseColor ?? "#a3a3a3" }}>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: phaseColor ?? "#a3a3a3" }} />
+              {task.milestone_name}
+            </span>
+          )}
+          {task.company_name && (
+            <span className="flex items-center gap-1 text-xs text-neutral-500">
+              <Building2 className="w-3 h-3" /> {task.company_name}
+            </span>
+          )}
+          {task.due_date && (
+            <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-500"}`}>
+              <Calendar className={`w-3 h-3 ${isOverdue ? "text-red-400" : ""}`} />
+              {formatDate(task.due_date)}
+              {isOverdue && " · overdue"}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center shrink-0">
+        <PriorityFlag
+          priority={task.priority ?? "low"}
+          onChange={(next) => {
+            fetch(`/api/tasks/${task.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ priority: next }),
+            }).then((r) => r.json()).then((d) => onStatusChange({ ...d, _source: "task", project_name: task.project_name, company_name: task.company_name, milestone_name: task.milestone_name, milestone_color: task.milestone_color }));
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Collapsible project group
 // ---------------------------------------------------------------------------
 
 function ProjectGroup({
-  projectId, projectName, todos, onUpdate, onDelete, onEdit, onNewTask,
+  projectId, projectName, companyName, companyLogoUrl,
+  todos, boardTasks,
+  onTodoUpdate, onTodoDelete, onTodoEdit,
+  onBoardTaskUpdate, onNewTask,
 }: {
   projectId: string;
   projectName: string;
+  companyName?: string;
+  companyLogoUrl?: string;
   todos: Todo[];
-  onUpdate: (t: Todo) => void;
-  onDelete: (id: string) => void;
-  onEdit: (t: Todo) => void;
+  boardTasks: ProjectBoardTask[];
+  onTodoUpdate: (t: Todo) => void;
+  onTodoDelete: (id: string) => void;
+  onTodoEdit: (t: Todo) => void;
+  onBoardTaskUpdate: (t: ProjectBoardTask) => void;
   onNewTask: (projectId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const active = todos.filter((t) => t.status !== "done");
-  const done = todos.filter((t) => t.status === "done");
-  const total = todos.length;
+
+  const allItems: UnifiedTask[] = [...todos, ...boardTasks];
+  const active = allItems.filter((t) => t.status !== "done");
+  const done = allItems.filter((t) => t.status === "done");
+  const total = allItems.length;
   const doneCount = done.length;
+
+  function renderItem(item: UnifiedTask) {
+    if (item._source === "todo") {
+      return <TodoCard key={`todo-${item.id}`} todo={item} onUpdate={onTodoUpdate} onDelete={onTodoDelete} onEdit={onTodoEdit} />;
+    }
+    return <ProjectTaskCard key={`task-${item.id}`} task={item} onStatusChange={onBoardTaskUpdate} />;
+  }
 
   return (
     <div className="border border-neutral-800 rounded-lg overflow-hidden">
@@ -517,7 +656,11 @@ function ProjectGroup({
           ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
           : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />
         }
-        <FolderKanban className="w-4 h-4 text-neutral-500 shrink-0" />
+        {companyName ? (
+          <CompanyAvatar name={companyName} logoUrl={companyLogoUrl} size="sm" />
+        ) : (
+          <FolderKanban className="w-4 h-4 text-neutral-500 shrink-0" />
+        )}
         <span className="flex-1 min-w-0">
           <span className="text-sm font-medium text-neutral-200 truncate">{projectName}</span>
         </span>
@@ -539,18 +682,14 @@ function ProjectGroup({
 
       {expanded && (
         <div className="divide-y divide-neutral-800/40">
-          {active.map((t) => (
-            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} onEdit={onEdit} />
-          ))}
+          {active.map(renderItem)}
           {done.length > 0 && active.length > 0 && (
             <div className="px-4 py-1.5">
               <span className="text-[10px] text-neutral-600 uppercase tracking-widest">Completed</span>
             </div>
           )}
-          {done.map((t) => (
-            <TodoCard key={t.id} todo={t} onUpdate={onUpdate} onDelete={onDelete} onEdit={onEdit} />
-          ))}
-          {todos.length === 0 && (
+          {done.map(renderItem)}
+          {allItems.length === 0 && (
             <p className="text-xs text-neutral-700 px-4 py-3">No tasks yet</p>
           )}
           <div className="px-3 py-2 flex items-center gap-2">
@@ -580,6 +719,7 @@ function ProjectGroup({
 
 export default function TodosPage() {
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [boardTasks, setBoardTasks] = useState<ProjectBoardTask[]>([]);
   const [users, setUsers] = useState<TodoUser[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -613,6 +753,10 @@ export default function TodosPage() {
     if (filterCompany !== "all") params.set("company", filterCompany);
     if (filterStatus !== "all") params.set("status", filterStatus === "active" ? "" : filterStatus);
 
+    // Build params for project board tasks (uses name-based assignee)
+    const boardParams = new URLSearchParams();
+    if (filterStatus !== "all") boardParams.set("status", filterStatus === "active" ? "" : filterStatus);
+
     const [todoData, userData, companyData, projectData] = await Promise.all([
       fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/users").then((r) => r.json()).catch(() => []),
@@ -620,17 +764,40 @@ export default function TodosPage() {
       getProjects(),
     ]);
 
-    setTodos(todoData);
     setUsers(userData);
     setCompanies(companyData);
     setProjects(projectData as Project[]);
+
+    // Resolve the assignee name for board tasks filter
+    // The assignee filter uses user IDs; board tasks use text names
+    let assigneeName: string | null = null;
+    if (filterAssignee !== "all") {
+      const matchedUser = userData.find((u: TodoUser) => u.id === filterAssignee);
+      if (matchedUser) assigneeName = matchedUser.name;
+    }
+    if (assigneeName) boardParams.set("assignee_name", assigneeName);
+
+    const boardData = await fetch(`/api/tasks/assigned?${boardParams}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => []);
+
+    setTodos(todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })));
+    setBoardTasks(boardData.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })));
+    setCurrentUser((prev) => {
+      const me = userData.find((u: TodoUser) => u.id === prev?.id) ?? prev;
+      return me;
+    });
     setLoading(false);
   }, [filterAssignee, filterCompany, filterStatus, filtersReady]);
 
   useEffect(() => { load(); }, [load]);
 
-  function handleUpdate(updated: Todo) {
+  function handleTodoUpdate(updated: Todo) {
     setTodos((prev) => prev.map((x) => x.id === updated.id ? { ...x, ...updated } : x));
+  }
+
+  function handleBoardTaskUpdate(updated: ProjectBoardTask) {
+    setBoardTasks((prev) => prev.map((x) => x.id === updated.id ? { ...x, ...updated } : x));
   }
 
   function handleDelete(id: string) {
@@ -665,18 +832,48 @@ export default function TodosPage() {
 
   const people = assigneeOptions(users, currentUser);
 
-  // Split into personal to-dos vs project tasks
+  // Split todos into personal vs project-linked
   const personalTodos = todos.filter((t) => !t.project_id);
   const projectTodos = todos.filter((t) => !!t.project_id);
 
-  // Group project tasks by project
-  const projectGroups = new Map<string, { name: string; todos: Todo[] }>();
+  // Build unified project groups: combine todo-based and board-based tasks
+  const projectGroups = new Map<string, {
+    name: string;
+    companyName?: string;
+    companyLogoUrl?: string;
+    todos: Todo[];
+    boardTasks: ProjectBoardTask[];
+  }>();
+
   for (const t of projectTodos) {
     const pid = t.project_id!;
     if (!projectGroups.has(pid)) {
-      projectGroups.set(pid, { name: t.project_name || "Unknown project", todos: [] });
+      projectGroups.set(pid, {
+        name: t.project_name || "Unknown project",
+        companyName: t.project_company_name,
+        companyLogoUrl: t.project_company_logo_url,
+        todos: [], boardTasks: [],
+      });
     }
     projectGroups.get(pid)!.todos.push(t);
+  }
+
+  for (const t of boardTasks) {
+    const pid = t.project_id;
+    if (!projectGroups.has(pid)) {
+      projectGroups.set(pid, {
+        name: t.project_name || "Unknown project",
+        companyName: t.company_name,
+        companyLogoUrl: t.company_logo_url,
+        todos: [], boardTasks: [],
+      });
+    }
+    const group = projectGroups.get(pid)!;
+    if (!group.companyName && t.company_name) {
+      group.companyName = t.company_name;
+      group.companyLogoUrl = t.company_logo_url;
+    }
+    group.boardTasks.push(t);
   }
 
   // Further split personal to-dos
@@ -685,10 +882,12 @@ export default function TodosPage() {
     ? personalTodos
     : personalTodos.filter((t) => t.status === "done");
 
-  // Stats
-  const totalOpen = todos.filter((t) => t.status === "open").length;
-  const totalInProgress = todos.filter((t) => t.status === "in_progress").length;
-  const totalOverdue = todos.filter((t) => t.due_date && t.status !== "done" && new Date(t.due_date) < new Date()).length;
+  // Stats (include both sources)
+  const allItems: UnifiedTask[] = [...todos, ...boardTasks];
+  const totalOpen = allItems.filter((t) => t.status === "open").length;
+  const totalInProgress = allItems.filter((t) => t.status === "in_progress").length;
+  const totalOverdue = allItems.filter((t) => t.due_date && t.status !== "done" && new Date(t.due_date) < new Date()).length;
+  const totalProjectItems = Array.from(projectGroups.values()).reduce((sum, g) => sum + g.todos.length + g.boardTasks.length, 0);
 
   return (
     <div className="p-8 space-y-6">
@@ -777,11 +976,11 @@ export default function TodosPage() {
 
             <div className="space-y-1.5">
               <QuickAddTodo
-                onAdd={(t) => { setTodos((prev) => [t, ...prev]); }}
+                onAdd={(t) => { setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]); }}
                 currentUser={currentUser}
               />
               {personalActive.map((t) => (
-                <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
               ))}
               {personalDone.length > 0 && (
                 <>
@@ -793,7 +992,7 @@ export default function TodosPage() {
                     <div className="flex-1 border-t border-neutral-800/60" />
                   </div>
                   {personalDone.map((t) => (
-                    <TodoRow key={t.id} todo={t} onUpdate={handleUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                    <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
                   ))}
                 </>
               )}
@@ -817,7 +1016,7 @@ export default function TodosPage() {
                   Project Tasks
                 </h2>
                 <span className="text-xs text-neutral-600 font-mono ml-1">
-                  {projectTodos.length}
+                  {totalProjectItems}
                 </span>
               </div>
 
@@ -828,10 +1027,14 @@ export default function TodosPage() {
                       key={pid}
                       projectId={pid}
                       projectName={group.name}
+                      companyName={group.companyName}
+                      companyLogoUrl={group.companyLogoUrl}
                       todos={group.todos}
-                      onUpdate={handleUpdate}
-                      onDelete={handleDelete}
-                      onEdit={openEditTask}
+                      boardTasks={group.boardTasks}
+                      onTodoUpdate={handleTodoUpdate}
+                      onTodoDelete={handleDelete}
+                      onTodoEdit={openEditTask}
+                      onBoardTaskUpdate={handleBoardTaskUpdate}
                       onNewTask={openNewTaskForProject}
                     />
                   ))}

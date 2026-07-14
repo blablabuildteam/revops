@@ -49,6 +49,8 @@ async function _init() {
       await sql`UPDATE milestones SET color = '#e8ff47' WHERE name = 'In Progress' AND color IS NULL`;
       await sql`UPDATE milestones SET color = '#f87171' WHERE name = 'On Hold' AND color IS NULL`;
       await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
+      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
+      await sql`ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'low'`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
       await sql`
@@ -187,6 +189,8 @@ async function _init() {
       assignee TEXT,
       due_date DATE,
       url TEXT,
+      priority TEXT DEFAULT 'low'
+        CHECK (priority IN ('low', 'medium', 'high')),
       position INTEGER DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()

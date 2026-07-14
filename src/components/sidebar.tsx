@@ -56,7 +56,7 @@ export function Sidebar() {
             blablabuild
           </p>
           <p className="text-[10px] text-neutral-600 tracking-widest uppercase">
-            Revenue ops
+            Workspace
           </p>
         </div>
       </div>

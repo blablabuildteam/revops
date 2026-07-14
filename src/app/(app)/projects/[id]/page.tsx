@@ -5,8 +5,9 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, GripVertical,
 } from "lucide-react";
+import { PriorityFlag } from "@/components/priority-flag";
 import Link from "next/link";
 import {
   DndContext,
@@ -49,7 +50,7 @@ import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultCol
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[20px_minmax(0,1fr)_140px_150px_150px_32px] items-center gap-x-4 gap-y-2";
+  "grid grid-cols-[14px_20px_minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 type TasksByMilestone = Record<string, Task[]>;
 type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
@@ -159,7 +160,9 @@ function TaskColumnHeader() {
   return (
     <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
       <span />
+      <span />
       <span>Task</span>
+      <span />
       <span>Responsible</span>
       <span>Date</span>
       <span>Phase</span>
@@ -642,6 +645,13 @@ function SubtaskRow({
         onRename={(title) => onRename(task.id, title)}
       />
 
+      <PriorityFlag
+        priority={task.priority ?? "low"}
+        onChange={(next) => {
+          updateTask(task.id, { priority: next }).then(onUpdate);
+        }}
+      />
+
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
       <InlineDateInput task={task} onUpdate={onUpdate} />
       <span className="text-xs text-neutral-700">—</span>
@@ -737,6 +747,13 @@ function SortableTaskRow({
         onOpen={() => onClick(task)}
         onRename={(title) => onRename(task.id, title)}
         onAddSubtask={onAddSubtask}
+      />
+
+      <PriorityFlag
+        priority={task.priority ?? "low"}
+        onChange={(next) => {
+          updateTask(task.id, { priority: next }).then(onUpdate);
+        }}
       />
 
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
@@ -845,6 +862,7 @@ function TaskWithSubtasks({
             onPointerDown={cancelDrag}
             className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 ml-5 flex-1 min-w-0"
           />
+          <span />
           <span />
           <span />
           <span />
@@ -1262,7 +1280,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }, [tasksByMilestone]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
