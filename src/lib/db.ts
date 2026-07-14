@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import { backfillMissingStandardPhases } from "@/lib/milestones";
 export { sql };
 
 let initialized = false;
@@ -71,6 +72,7 @@ async function _init() {
         )
       `;
       await migrateOpportunityTypes();
+      await backfillMissingStandardPhases();
       initialized = true;
       return;
     }
@@ -282,6 +284,7 @@ async function _init() {
   `;
 
   await migrateOpportunityTypes();
+  await backfillMissingStandardPhases();
 
   initialized = true;
 }

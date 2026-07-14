@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { DEFAULT_PROJECT_MILESTONES, DEFAULT_PHASE_COLORS } from "@/lib/types";
+import { ensureDefaultMilestones } from "@/lib/milestones";
 
 export async function GET() {
   try {
@@ -45,14 +45,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const project = rows[0];
-
-    for (let i = 0; i < DEFAULT_PROJECT_MILESTONES.length; i++) {
-      const name = DEFAULT_PROJECT_MILESTONES[i];
-      await sql`
-        INSERT INTO milestones (project_id, name, position, status, color)
-        VALUES (${project.id}, ${name}, ${i}, 'pending', ${DEFAULT_PHASE_COLORS[name]})
-      `;
-    }
+    await ensureDefaultMilestones(project.id);
 
     return NextResponse.json(project, { status: 201 });
   } catch (err) {

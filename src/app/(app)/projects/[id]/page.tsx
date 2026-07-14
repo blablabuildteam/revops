@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -42,7 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getProject, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
+import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
@@ -911,20 +911,36 @@ function TaskWithSubtasks({
   );
 }
 
+function findTaskInState(tasksByMilestone: TasksByMilestone, taskId: string): Task | null {
+  for (const tasks of Object.values(tasksByMilestone)) {
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) return task;
+  }
+  return null;
+}
+
 function BulkActionsBar({
   count,
   milestones,
+  projects,
+  currentProjectId,
   onBulkPhaseChange,
+  onBulkProjectMove,
   onBulkUpdate,
   onClear,
 }: {
   count: number;
   milestones: Milestone[];
+  projects: Project[];
+  currentProjectId: string;
   onBulkPhaseChange: (milestoneId: string) => void;
+  onBulkProjectMove: (projectId: string) => void;
   onBulkUpdate: (patch: Partial<Task>) => void;
   onClear: () => void;
 }) {
   if (count === 0) return null;
+
+  const otherProjects = projects.filter((p) => p.id !== currentProjectId);
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
@@ -957,6 +973,26 @@ function BulkActionsBar({
           })}
         </SelectContent>
       </Select>
+
+      {otherProjects.length > 0 && (
+        <Select onValueChange={(v: string | null) => { if (v) onBulkProjectMove(v); }}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-auto min-w-[140px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+            onPointerDown={cancelDrag}
+          >
+            <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+            <SelectValue placeholder="Move to project" />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700 max-h-60">
+            {otherProjects.map((p) => (
+              <SelectItem key={p.id} value={p.id} className="text-xs text-neutral-100">
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       <Select
         onValueChange={(v: string | null) =>
@@ -1217,6 +1253,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
   const tasksRef = useRef<TasksByMilestone>({});
 
   const milestoneIds = [
@@ -1240,6 +1277,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setTasksByMilestone(buildTasksByMilestone(detail.milestones, detail.unassigned_tasks || []));
       setLoading(false);
     });
+    getProjects().then(setAllProjects);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -1575,6 +1613,63 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setSelectedIds(new Set());
   }
 
+  async function handleBulkProjectMove(targetProjectId: string) {
+    if (!project) return;
+
+    const target = (await getProject(targetProjectId)) as ProjectDetail;
+    const targetMilestoneByName = new Map(
+      target.milestones.map((m) => [m.name.toLowerCase(), m.id]),
+    );
+    const sourceMilestoneById = new Map(project.milestones.map((m) => [m.id, m]));
+
+    const idsToMove = new Set<string>();
+    for (const taskId of selectedIds) {
+      idsToMove.add(taskId);
+      const task = findTaskInState(tasksRef.current, taskId);
+      if (task && !task.parent_id) {
+        for (const child of getChildTasks(tasksRef.current, taskId)) {
+          idsToMove.add(child.id);
+        }
+      }
+    }
+
+    const resolveTargetMilestone = (task: Task): string | null => {
+      if (!task.milestone_id) return null;
+      const sourceName = sourceMilestoneById.get(task.milestone_id)?.name;
+      if (!sourceName) return null;
+      return targetMilestoneByName.get(sourceName.toLowerCase()) ?? null;
+    };
+
+    await Promise.all(
+      Array.from(idsToMove).map((taskId) => {
+        const task = findTaskInState(tasksRef.current, taskId);
+        if (!task) return Promise.resolve();
+        return updateTask(taskId, {
+          project_id: targetProjectId,
+          milestone_id: resolveTargetMilestone(task),
+        });
+      }),
+    );
+
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      for (const milestoneId of Object.keys(next)) {
+        next[milestoneId] = next[milestoneId].filter((t) => !idsToMove.has(t.id));
+        if (next[milestoneId].length === 0 && milestoneId === UNASSIGNED_ID) {
+          delete next[milestoneId];
+        }
+      }
+      return next;
+    });
+
+    if (selectedTask && idsToMove.has(selectedTask.id)) {
+      setDetailOpen(false);
+      setSelectedTask(null);
+    }
+
+    setSelectedIds(new Set());
+  }
+
   return (
     <div className="w-full p-6 lg:p-8 space-y-6">
       <div className="flex items-center gap-4">
@@ -1745,7 +1840,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <BulkActionsBar
         count={selectedIds.size}
         milestones={project.milestones}
+        projects={allProjects}
+        currentProjectId={id}
         onBulkPhaseChange={handleBulkPhaseChange}
+        onBulkProjectMove={handleBulkProjectMove}
         onBulkUpdate={handleBulkUpdate}
         onClear={() => setSelectedIds(new Set())}
       />
