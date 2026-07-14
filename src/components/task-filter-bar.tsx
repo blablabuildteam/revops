@@ -470,6 +470,10 @@ export function TaskFilterBar({
 }) {
   const activeCount = filters.filter((f) => f.value).length;
 
+  if (filters.length === 0) {
+    return <FieldPicker onSelect={onAddFilter} />;
+  }
+
   return (
     <div className="space-y-2">
       {filters.map((rule) => (
