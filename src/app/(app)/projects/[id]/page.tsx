@@ -178,6 +178,7 @@ function TaskDetailDialog({
   onSave: (t: Task) => void;
 }) {
   const [form, setForm] = useState({
+    title: "",
     due_date: "",
     assignee: "",
     description: "",
@@ -188,6 +189,7 @@ function TaskDetailDialog({
   useEffect(() => {
     if (task && open) {
       setForm({
+        title: task.title,
         due_date: toDateInputValue(task.due_date),
         assignee: task.assignee ?? "",
         description: task.description ?? "",
@@ -199,9 +201,12 @@ function TaskDetailDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!task) return;
+    const title = form.title.trim();
+    if (!title) return;
     setLoading(true);
     try {
       const updated = await updateTask(task.id, {
+        title,
         due_date: form.due_date || null,
         assignee: form.assignee || null,
         description: form.description || null,
@@ -220,9 +225,19 @@ function TaskDetailDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-neutral-100 pr-6">{task.title}</DialogTitle>
+          <DialogTitle className="text-neutral-100 pr-6">Edit task</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">Title</Label>
+            <Input
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Task title..."
+              required
+              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Date</Label>
@@ -285,7 +300,7 @@ function TaskDetailDialog({
             </Button>
             <Button
               type="submit"
-              disabled={loading}
+              disabled={loading || !form.title.trim()}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950"
             >
               {loading ? "Saving..." : "Save"}
