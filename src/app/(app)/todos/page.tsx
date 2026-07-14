@@ -14,6 +14,7 @@ import { PriorityFlag, type Priority } from "@/components/priority-flag";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -303,8 +304,11 @@ function TodoFormDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Due date</Label>
-            <Input type="date" value={form.due_date} onChange={(e) => s("due_date", e.target.value)}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
+            <DatePicker
+              value={form.due_date}
+              onChange={(v) => s("due_date", v)}
+              className="bg-neutral-800 border-neutral-700 text-neutral-100"
+            />
           </div>
           <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col sm:items-stretch">
             {error && <p className="text-sm text-red-400">{error}</p>}

@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, toDateInputValue } from "@/lib/format";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
@@ -885,19 +886,17 @@ export default function FinancePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Start date</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={editForm.start_date ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, start_date: e.target.value }))}
+                    onChange={(v) => setEditForm((f) => ({ ...f, start_date: v }))}
                     className={fc}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">End date</Label>
-                  <Input
-                    type="date"
+                  <DatePicker
                     value={editForm.end_date ?? ""}
-                    onChange={(e) => setEditForm((f) => ({ ...f, end_date: e.target.value }))}
+                    onChange={(v) => setEditForm((f) => ({ ...f, end_date: v }))}
                     className={fc}
                   />
                 </div>
@@ -988,10 +987,9 @@ export default function FinancePage() {
                         <div className="space-y-2">
                           {payments.map((payment, index) => (
                             <div key={index} className="flex items-center gap-2">
-                              <Input
-                                type="date"
+                              <DatePicker
                                 value={payment.date}
-                                onChange={(e) => updatePayment(index, "date", e.target.value)}
+                                onChange={(v) => updatePayment(index, "date", v)}
                                 className={`${fc} flex-1`}
                               />
                               <Input

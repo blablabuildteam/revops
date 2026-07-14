@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import {
-  Plus, Check, X, Trash2, Pencil,
+  Plus, Check, X, Trash2, Pencil, Filter,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import { BinaryText } from "@/components/binary-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, createTask, updateTask } from "@/lib/api";
 import {
   Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor,
@@ -147,10 +149,9 @@ function TaskDetailDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Date</Label>
-              <Input
-                type="date"
+              <DatePicker
                 value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, due_date: v }))}
                 className="bg-neutral-800 border-neutral-700 text-neutral-100"
               />
             </div>
@@ -250,15 +251,15 @@ function InlineDateInput({
   onUpdate: (t: Task) => void;
 }) {
   return (
-    <Input
-      type="date"
+    <DatePicker
       value={toDateInputValue(task.due_date)}
-      onChange={(e) => {
-        updateTask(task.id, { due_date: e.target.value || null }).then(onUpdate);
+      onChange={(v) => {
+        updateTask(task.id, { due_date: v || null }).then(onUpdate);
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
-      className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2 font-mono"
+      size="sm"
+      className="h-7 w-full bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
     />
   );
 }
@@ -803,15 +804,29 @@ export function ProjectTaskBoardPanel({
   return (
     <>
       <div className="px-3 py-3 space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <TaskFilterBar
-            filters={filters}
-            milestones={milestones}
-            onAddFilter={addFilter}
-            onUpdateFilter={updateFilter}
-            onRemoveFilter={removeFilter}
-            onClearFilters={clearFilters}
-          />
+        <div className="flex items-center justify-end gap-2 px-1">
+          <Popover>
+            <PopoverTrigger
+              className={`flex items-center gap-1.5 text-xs py-1 px-2 rounded transition-colors cursor-pointer ${
+                filters.length > 0
+                  ? "text-[#e8ff47]"
+                  : "text-neutral-600 hover:text-neutral-300"
+              }`}
+            >
+              <Filter className="w-3 h-3" />
+              Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto min-w-[320px] p-3">
+              <TaskFilterBar
+                filters={filters}
+                milestones={milestones}
+                onAddFilter={addFilter}
+                onUpdateFilter={updateFilter}
+                onRemoveFilter={removeFilter}
+                onClearFilters={clearFilters}
+              />
+            </PopoverContent>
+          </Popover>
           <button
             onClick={() => setEditStatusesOpen(true)}
             className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 transition-colors shrink-0"

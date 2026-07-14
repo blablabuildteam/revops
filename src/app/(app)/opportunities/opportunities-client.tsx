@@ -10,6 +10,7 @@ import {
   ArrowUpDown,
   Columns3,
   ListFilter,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,11 +28,8 @@ import { getOpportunities, deleteOpportunity, updateOpportunity, getFinanceDeals
 import {
   Opportunity,
   Stage,
-  OpportunityType,
   STAGE_LABELS,
   STAGE_ORDER,
-  TYPE_LABELS,
-  normalizeOpportunityType,
 } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -69,19 +67,32 @@ function InlineProbability({
   onSave: (value: number) => void;
 }) {
   const [local, setLocal] = useState(value);
+  const [text, setText] = useState(String(value));
 
   useEffect(() => {
     setLocal(value);
+    setText(String(value));
   }, [value]);
 
   function commit(next: number) {
-    const clamped = Math.min(100, Math.max(0, next));
+    const clamped = Math.min(100, Math.max(0, Math.round(next)));
+    setLocal(clamped);
+    setText(String(clamped));
     if (clamped !== value) onSave(clamped);
+  }
+
+  function commitText() {
+    const parsed = Number.parseInt(text, 10);
+    if (Number.isNaN(parsed)) {
+      setText(String(local));
+      return;
+    }
+    commit(parsed);
   }
 
   return (
     <div
-      className="flex items-center gap-2 w-full min-w-[140px]"
+      className="flex items-center gap-1.5 w-full min-w-0"
       onClick={(e) => e.stopPropagation()}
     >
       <input
@@ -90,14 +101,28 @@ function InlineProbability({
         max={100}
         step={5}
         value={local}
-        onChange={(e) => setLocal(Number(e.target.value))}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setLocal(next);
+          setText(String(next));
+        }}
         onPointerUp={() => commit(local)}
-        onBlur={() => commit(local)}
-        className="flex-1 h-2.5 min-w-[60px] cursor-pointer accent-[#e8ff47]"
+        className="flex-1 h-2.5 min-w-0 cursor-pointer accent-[#e8ff47]"
       />
-      <span className="text-sm text-neutral-300 font-mono w-8 text-right shrink-0">
-        {local}
-      </span>
+      <input
+        type="number"
+        min={0}
+        max={100}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commitText}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-10 shrink-0 bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1 py-0.5 text-sm font-mono text-neutral-300 text-right outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
       <span className="text-sm text-neutral-500 shrink-0">%</span>
     </div>
   );
@@ -170,19 +195,25 @@ function InlineMonth({
   }
 
   return (
-    <input
-      type="month"
-      value={local}
-      onChange={(e) => {
-        setLocal(e.target.value);
-        commit(e.target.value);
-      }}
-      onClick={(e) => e.stopPropagation()}
-      className={cn(
-        "bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-1.5 py-1 text-xs font-mono text-neutral-400 outline-none transition-colors min-w-0 w-[118px]",
-        className
-      )}
-    />
+    <div className="relative shrink-0 w-[140px]">
+      <input
+        type="month"
+        value={local}
+        onChange={(e) => {
+          setLocal(e.target.value);
+          commit(e.target.value);
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "month-picker-input relative w-full bg-neutral-900/50 border border-transparent hover:border-neutral-700 focus:border-neutral-600 rounded px-2 py-1 pr-7 text-xs font-mono text-neutral-400 outline-none transition-colors",
+          className
+        )}
+      />
+      <Calendar
+        aria-hidden
+        className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-neutral-300"
+      />
+    </div>
   );
 }
 
@@ -199,7 +230,7 @@ function InlinePeriod({
 }) {
   return (
     <div
-      className="flex items-center gap-1 min-w-0"
+      className="flex items-center gap-1.5 whitespace-nowrap"
       onClick={(e) => e.stopPropagation()}
     >
       <InlineMonth value={startDate} onSave={onSaveStart} />
@@ -383,8 +414,14 @@ export default function OpportunitiesPageClient() {
     await handleStageChange(id, stage);
   }
 
-  const totalExpected = filtered.reduce((s, o) => s + o.expected_value, 0);
-  const totalWeighted = filtered.reduce((s, o) => s + o.weighted_value, 0);
+  const totalExpected = filtered.reduce(
+    (s, o) => s + (Number(o.expected_value) || 0),
+    0
+  );
+  const totalWeighted = filtered.reduce(
+    (s, o) => s + (Number(o.weighted_value) || 0),
+    0
+  );
 
   const SortBtn = ({ col }: { col: SortKey }) => (
     <button
@@ -486,14 +523,13 @@ export default function OpportunitiesPageClient() {
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
             <colgroup>
-              <col className="w-[11%]" />
-              <col className="w-[18%]" />
-              <col className="w-[8%]" />
-              <col className="w-[12%]" />
+              <col className="w-[10%]" />
               <col className="w-[16%]" />
+              <col className="w-[11%]" />
+              <col className="w-[28%]" />
+              <col className="w-[9%]" />
               <col className="w-[8%]" />
-              <col className="w-[8%]" />
-              <col className="w-[15%]" />
+              <col className="w-[14%]" />
               <col className="w-[4%]" />
             </colgroup>
             <thead>
@@ -507,9 +543,6 @@ export default function OpportunitiesPageClient() {
                   </div>
                 </th>
                 <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
-                  Type
-                </th>
-                <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium">
                   <div className="flex items-center gap-1">
                     Stage <SortBtn col="stage" />
                   </div>
@@ -519,11 +552,11 @@ export default function OpportunitiesPageClient() {
                 </th>
                 <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1">
-                    Deal Order <span className="text-neutral-600 font-normal">excl. VAT</span> <SortBtn col="expected_value" />
+                    Deal Order <SortBtn col="expected_value" />
                   </div>
                 </th>
                 <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  Committed <span className="text-neutral-600 font-normal">excl. VAT</span>
+                  Committed
                 </th>
                 <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1">
@@ -537,7 +570,7 @@ export default function OpportunitiesPageClient() {
               {loading
                 ? [...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      {[...Array(9)].map((_, j) => (
+                      {[...Array(8)].map((_, j) => (
                         <td key={j} className="px-4 py-4">
                           <div className="h-5 bg-neutral-800 rounded animate-pulse" />
                         </td>
@@ -557,32 +590,6 @@ export default function OpportunitiesPageClient() {
                         <p className="text-neutral-400 truncate text-sm">
                           {opp.name}
                         </p>
-                      </td>
-                      <td className="px-2 py-4 overflow-hidden" onPointerDown={(e) => e.stopPropagation()}>
-                        <Select
-                          value={normalizeOpportunityType(opp.type)}
-                          onValueChange={(v) =>
-                            patchOpp(opp.id, { type: v as OpportunityType })
-                          }
-                        >
-                          <SelectTrigger
-                            className={cn(
-                              selectTriggerClass,
-                              "w-full max-w-full rounded font-mono text-neutral-500"
-                            )}
-                          >
-                            <SelectValue>
-                              {TYPE_LABELS[normalizeOpportunityType(opp.type)]}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className="bg-neutral-800 border-neutral-700">
-                            {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                              <SelectItem key={k} value={k} className="text-neutral-100">
-                                {v}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                       </td>
                       <td className="px-2 py-4 overflow-hidden" onPointerDown={(e) => e.stopPropagation()}>
                         <Select
@@ -607,7 +614,7 @@ export default function OpportunitiesPageClient() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-4 overflow-hidden">
+                      <td className="px-2 py-4">
                         <InlinePeriod
                           startDate={opp.start_date}
                           endDate={opp.end_date}

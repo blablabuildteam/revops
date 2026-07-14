@@ -17,6 +17,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -151,13 +152,19 @@ function NewProjectDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Start date</Label>
-              <Input type="date" value={form.start_date} onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
+              <DatePicker
+                value={form.start_date}
+                onChange={(v) => setForm((f) => ({ ...f, start_date: v }))}
+                className="bg-neutral-800 border-neutral-700 text-neutral-100"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">End date</Label>
-              <Input type="date" value={form.end_date} onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100 font-mono" />
+              <DatePicker
+                value={form.end_date}
+                onChange={(v) => setForm((f) => ({ ...f, end_date: v }))}
+                className="bg-neutral-800 border-neutral-700 text-neutral-100"
+              />
             </div>
           </div>
           <div className="space-y-1.5">

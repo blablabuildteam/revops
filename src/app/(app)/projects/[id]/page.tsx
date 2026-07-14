@@ -30,6 +30,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -280,10 +281,9 @@ function TaskDetailDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Date</Label>
-              <Input
-                type="date"
+              <DatePicker
                 value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                onChange={(v) => setForm((f) => ({ ...f, due_date: v }))}
                 className="bg-neutral-800 border-neutral-700 text-neutral-100"
               />
             </div>
@@ -432,15 +432,15 @@ function InlineDateInput({
   const value = toDateInputValue(task.due_date);
 
   return (
-    <Input
-      type="date"
+    <DatePicker
       value={value}
-      onChange={(e) => {
-        updateTask(task.id, { due_date: e.target.value || null }).then(onUpdate);
+      onChange={(v) => {
+        updateTask(task.id, { due_date: v || null }).then(onUpdate);
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
-      className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2 font-mono"
+      size="sm"
+      className="h-7 w-full bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
     />
   );
 }
@@ -1065,16 +1065,16 @@ function BulkActionsBar({
         </SelectContent>
       </Select>
 
-      <label className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 cursor-pointer hover:border-neutral-600 transition-colors">
-        <Calendar className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-        <input
-          type="date"
-          className="bg-transparent border-none outline-none text-xs text-neutral-300 cursor-pointer w-[110px] font-mono"
-          onChange={(e) => {
-            if (e.target.value) onBulkUpdate({ due_date: e.target.value });
+      <div className="flex items-center h-8 px-2.5 rounded-md bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors">
+        <DatePicker
+          placeholder="Set date"
+          size="sm"
+          onChange={(v) => {
+            if (v) onBulkUpdate({ due_date: v });
           }}
+          className="h-auto min-w-[110px] border-0 bg-transparent px-0 text-xs text-neutral-300 shadow-none hover:bg-transparent"
         />
-      </label>
+      </div>
 
       <div className="w-px h-5 bg-neutral-700" />
 

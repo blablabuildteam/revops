@@ -128,3 +128,23 @@ body {
     opacity: 0;
   }
 }
+
+/* Native month inputs — readable text + visible calendar icon in dark UI */
+.month-picker-input {
+  color-scheme: dark;
+}
+
+html.light .month-picker-input {
+  color-scheme: light;
+}
+
+.month-picker-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}

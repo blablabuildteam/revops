@@ -142,7 +142,7 @@ export function OpportunityPipelineView({
   const stageTotal = (stage: Stage) =>
     opps
       .filter((o) => o.stage === stage)
-      .reduce((s, o) => s + o.expected_value, 0);
+      .reduce((s, o) => s + (Number(o.expected_value) || 0), 0);
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">

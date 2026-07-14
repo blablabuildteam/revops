@@ -199,9 +199,12 @@ export default function CompaniesPage() {
   }, []);
 
   const companyOpps = (id: string) => opps.filter((o) => o.company_id === id);
-  const companyRevenue = (id: string) => companyOpps(id).reduce((s, o) => s + o.actual_value, 0);
+  const companyRevenue = (id: string) =>
+    companyOpps(id).reduce((s, o) => s + (Number(o.actual_value) || 0), 0);
   const companyPipeline = (id: string) =>
-    companyOpps(id).filter((o) => !["won", "lost"].includes(o.stage)).reduce((s, o) => s + o.expected_value, 0);
+    companyOpps(id)
+      .filter((o) => !["won", "lost"].includes(o.stage))
+      .reduce((s, o) => s + (Number(o.expected_value) || 0), 0);
 
   function handleSave(updated: Company) {
     setCompanies((prev) =>

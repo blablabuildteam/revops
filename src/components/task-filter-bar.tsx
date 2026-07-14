@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo } from "react";
 import {
   Plus,
   X,
-  Filter,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -13,6 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Calendar } from "@/components/ui/date-picker";
 import { Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -333,7 +333,7 @@ function ValueSelect({
         </span>
         <ChevronDown className="w-3 h-3 shrink-0" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-48">
+      <PopoverContent align="start" className={isDateField ? "w-auto p-2" : "w-48"}>
         {options.map((opt) => (
           <button
             key={opt.value}
@@ -357,14 +357,12 @@ function ValueSelect({
         {isDateField && (
           <>
             <div className="border-t border-neutral-800 my-1" />
-            <div className="px-2 py-1">
-              <Input
-                type="date"
+            <div className="px-1 py-1">
+              <Calendar
                 value={isCustomDate ? value : ""}
-                onChange={(e) => {
-                  if (e.target.value) onChange(e.target.value);
+                onSelect={(v) => {
+                  if (v) onChange(v);
                 }}
-                className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 font-mono"
               />
             </div>
           </>
@@ -473,7 +471,7 @@ export function TaskFilterBar({
   const activeCount = filters.filter((f) => f.value).length;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-2">
       {filters.map((rule) => (
         <FilterRow
           key={rule.id}
@@ -484,28 +482,29 @@ export function TaskFilterBar({
         />
       ))}
 
-      <Popover>
-        <PopoverTrigger
-          className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/50 transition-colors cursor-pointer"
-        >
-          {filters.length === 0 && <Filter className="w-3 h-3" />}
-          <Plus className="w-3 h-3" />
-          Filter
-        </PopoverTrigger>
-        <PopoverContent align="start" className="p-0 w-48">
-          <FieldPicker onSelect={onAddFilter} />
-        </PopoverContent>
-      </Popover>
+      <div className="flex items-center justify-between">
+        <Popover>
+          <PopoverTrigger
+            className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 py-1 rounded hover:bg-neutral-800/50 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3 h-3" />
+            Add filter
+          </PopoverTrigger>
+          <PopoverContent align="start" className="p-0 w-48">
+            <FieldPicker onSelect={onAddFilter} />
+          </PopoverContent>
+        </Popover>
 
-      {activeCount > 0 && (
-        <button
-          type="button"
-          onClick={onClearFilters}
-          className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors ml-1"
-        >
-          Clear all
-        </button>
-      )}
+        {activeCount > 0 && (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
     </div>
   );
 }

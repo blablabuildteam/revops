@@ -54,9 +54,9 @@ export default function DashboardPage() {
 
   const active = opps.filter((o) => !["won", "lost"].includes(o.stage));
   const won = opps.filter((o) => o.stage === "won");
-  const pipeline = active.reduce((s, o) => s + o.expected_value, 0);
-  const weighted = active.reduce((s, o) => s + o.weighted_value, 0);
-  const actualRevenue = won.reduce((s, o) => s + o.actual_value, 0);
+  const pipeline = active.reduce((s, o) => s + (Number(o.expected_value) || 0), 0);
+  const weighted = active.reduce((s, o) => s + (Number(o.weighted_value) || 0), 0);
+  const actualRevenue = won.reduce((s, o) => s + (Number(o.actual_value) || 0), 0);
   const winRate =
     opps.filter((o) => ["won", "lost"].includes(o.stage)).length > 0
       ? Math.round(
