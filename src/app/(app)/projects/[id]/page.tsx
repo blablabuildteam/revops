@@ -2,10 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, use, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban, Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -88,6 +88,32 @@ function findContainer(
     if (tasks.some((t) => t.id === id)) return milestoneId;
   }
   return null;
+}
+
+function isTopLevelTask(task: Task) {
+  return isApprovedTask(task) && !task.parent_id;
+}
+
+function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
+  const map = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!isApprovedTask(task) || !task.parent_id) continue;
+    const list = map.get(task.parent_id) ?? [];
+    list.push(task);
+    map.set(task.parent_id, list);
+  }
+  for (const [parentId, list] of map) {
+    map.set(parentId, sortByPosition(list));
+  }
+  return map;
+}
+
+function getChildTasks(tasksByMilestone: TasksByMilestone, parentId: string): Task[] {
+  return sortByPosition(
+    Object.values(tasksByMilestone)
+      .flat()
+      .filter((t) => t.parent_id === parentId),
+  );
 }
 
 function containerToMilestoneId(containerId: string): string | null {
@@ -430,13 +456,18 @@ function InlinePhaseSelect({
   );
 }
 
-function BinaryText({ text, className }: { text: string; className?: string }) {
-  const [display, setDisplay] = useState(text);
-  const frameRef = useRef(0);
+const animatedTaskIds = new Set<string>();
 
-  const id = useMemo(() => text, [text]);
+function BinaryText({ text, taskId, className }: { text: string; taskId: string; className?: string }) {
+  const [display, setDisplay] = useState(text);
 
   useEffect(() => {
+    if (animatedTaskIds.has(taskId)) {
+      setDisplay(text);
+      return;
+    }
+
+    animatedTaskIds.add(taskId);
     const chars = text.length;
     if (chars === 0) {
       setDisplay("");
@@ -469,15 +500,190 @@ function BinaryText({ text, className }: { text: string; className?: string }) {
       );
 
       if (progress < 1) {
-        frameRef.current = requestAnimationFrame(tick);
+        requestAnimationFrame(tick);
       }
     }
 
-    frameRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, [id, text]);
+    const frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [taskId, text]);
 
   return <span className={className}>{display}</span>;
+}
+
+function TaskNameCell({
+  task,
+  onOpen,
+  onRename,
+  allowSubtasks,
+  onAddSubtask,
+  indent = false,
+}: {
+  task: Task;
+  onOpen: () => void;
+  onRename: (title: string) => Promise<void>;
+  allowSubtasks?: boolean;
+  onAddSubtask?: () => void;
+  indent?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(task.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setValue(task.title);
+  }, [task.title, editing]);
+
+  function startEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditing(true);
+    requestAnimationFrame(() => inputRef.current?.select());
+  }
+
+  async function commit() {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setValue(task.title);
+      setEditing(false);
+      return;
+    }
+    if (trimmed !== task.title) {
+      await onRename(trimmed);
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => { void commit(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commit();
+          }
+          if (e.key === "Escape") {
+            setValue(task.title);
+            setEditing(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+        className={`h-7 text-xs bg-neutral-800 border-neutral-600 text-neutral-100 flex-1 min-w-0 ${indent ? "ml-5" : ""}`}
+      />
+    );
+  }
+
+  return (
+    <div className={`min-w-0 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}>
+      <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
+        <p className="text-sm truncate text-neutral-200">
+          <BinaryText text={task.title} taskId={task.id} />
+        </p>
+        {task.description && !indent && (
+          <p className="text-xs text-neutral-600 truncate">{task.description}</p>
+        )}
+      </button>
+      <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          title="Rename"
+          onClick={startEdit}
+          onPointerDown={cancelDrag}
+          className="p-1.5 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        {allowSubtasks && onAddSubtask && (
+          <button
+            type="button"
+            title="Add subtask"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddSubtask();
+            }}
+            onPointerDown={cancelDrag}
+            className="p-1.5 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SubtaskRow({
+  task,
+  onUpdate,
+  onDelete,
+  onClick,
+  onRename,
+  selected,
+  onToggleSelect,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+}) {
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    onDelete(task.id);
+  }
+
+  return (
+    <div
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
+    >
+      <label
+        className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(task.id)}
+          className="sr-only"
+        />
+        <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+          selected
+            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+        }`}>
+          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+        </span>
+      </label>
+
+      <TaskNameCell
+        task={task}
+        indent
+        onOpen={() => onClick(task)}
+        onRename={(title) => onRename(task.id, title)}
+      />
+
+      <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} />
+      <span className="text-xs text-neutral-700">—</span>
+
+      <button
+        type="button"
+        onClick={handleDelete}
+        onPointerDown={cancelDrag}
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1.5 rounded justify-self-end cursor-pointer"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
 }
 
 function SortableTaskRow({
@@ -488,6 +694,8 @@ function SortableTaskRow({
   onDelete,
   onClick,
   onPhaseChange,
+  onRename,
+  onAddSubtask,
   selected,
   onToggleSelect,
 }: {
@@ -498,6 +706,8 @@ function SortableTaskRow({
   onDelete: (id: string) => void;
   onClick: (t: Task) => void;
   onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  onAddSubtask: () => void;
   selected: boolean;
   onToggleSelect: (id: string) => void;
 }) {
@@ -549,18 +759,13 @@ function SortableTaskRow({
         </span>
       </label>
 
-      <button
-        type="button"
-        onClick={() => onClick(task)}
-        className="min-w-0 text-left"
-      >
-        <p className="text-sm truncate text-neutral-200">
-          <BinaryText text={task.title} />
-        </p>
-        {task.description && (
-          <p className="text-xs text-neutral-600 truncate">{task.description}</p>
-        )}
-      </button>
+      <TaskNameCell
+        task={task}
+        allowSubtasks
+        onOpen={() => onClick(task)}
+        onRename={(title) => onRename(task.id, title)}
+        onAddSubtask={onAddSubtask}
+      />
 
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
       <InlineDateInput task={task} onUpdate={onUpdate} />
@@ -576,10 +781,117 @@ function SortableTaskRow({
         type="button"
         onClick={handleDelete}
         onPointerDown={cancelDrag}
-        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded justify-self-end cursor-pointer"
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1.5 rounded justify-self-end cursor-pointer"
       >
-        <Trash2 className="w-3 h-3" />
+        <Trash2 className="w-4 h-4" />
       </button>
+    </div>
+  );
+}
+
+function TaskWithSubtasks({
+  task,
+  subtasks,
+  projectId,
+  currentMilestoneId,
+  milestones,
+  onUpdate,
+  onDelete,
+  onClick,
+  onPhaseChange,
+  onRename,
+  onTaskAdd,
+  selectedIds,
+  onToggleSelect,
+}: {
+  task: Task;
+  subtasks: Task[];
+  projectId: string;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  onTaskAdd: (t: Task) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subtaskTitle, setSubtaskTitle] = useState("");
+
+  async function submitSubtask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!subtaskTitle.trim()) return;
+    const newTask = await createTask(projectId, {
+      title: subtaskTitle.trim(),
+      parent_id: task.id,
+      milestone_id: task.milestone_id ?? undefined,
+      position: subtasks.length,
+    });
+    onTaskAdd(newTask);
+    setSubtaskTitle("");
+    setAddingSubtask(false);
+  }
+
+  return (
+    <div>
+      <SortableTaskRow
+        task={task}
+        currentMilestoneId={currentMilestoneId}
+        milestones={milestones}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        onClick={onClick}
+        onPhaseChange={onPhaseChange}
+        onRename={onRename}
+        onAddSubtask={() => setAddingSubtask(true)}
+        selected={selectedIds.has(task.id)}
+        onToggleSelect={onToggleSelect}
+      />
+      {subtasks.map((subtask) => (
+        <SubtaskRow
+          key={subtask.id}
+          task={subtask}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          onClick={onClick}
+          onRename={onRename}
+          selected={selectedIds.has(subtask.id)}
+          onToggleSelect={onToggleSelect}
+        />
+      ))}
+      {addingSubtask && (
+        <form onSubmit={submitSubtask} className={`${TASK_ROW_GRID} px-3 py-1.5 items-center`}>
+          <span />
+          <Input
+            autoFocus
+            value={subtaskTitle}
+            onChange={(e) => setSubtaskTitle(e.target.value)}
+            placeholder="Subtask name..."
+            onPointerDown={cancelDrag}
+            className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 ml-5 flex-1 min-w-0"
+          />
+          <span />
+          <span />
+          <span />
+          <div className="flex items-center gap-1 justify-self-end">
+            <Button type="submit" size="sm" className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
+              <Check className="w-3 h-3" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-neutral-600 hover:text-neutral-400 px-2"
+              onClick={() => { setAddingSubtask(false); setSubtaskTitle(""); }}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -739,6 +1051,7 @@ function MilestoneSection({
   selectedIds,
   onToggleSelect,
   onTogglePhase,
+  onRename,
 }: {
   milestone: Milestone;
   milestones: Milestone[];
@@ -754,12 +1067,15 @@ function MilestoneSection({
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onTogglePhase: (taskIds: string[]) => void;
+  onRename: (id: string, title: string) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: milestone.id });
 
   const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
   const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
-  const total = approvedTasks.length;
+  const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
+  const subtasksByParent = groupSubtasksByParent(tasks);
+  const total = approvedTopLevel.length;
   const titleColor = isUnassigned
     ? "#a3a3a3"
     : resolvePhaseColor(milestone.name, milestone.color);
@@ -839,25 +1155,29 @@ function MilestoneSection({
       ))}
 
       <div ref={setNodeRef} className="min-h-[2rem]">
-        <SortableContext items={approvedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={approvedTopLevel.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="divide-y divide-neutral-800/40">
-            {approvedTasks.map((task) => (
-              <SortableTaskRow
+            {approvedTopLevel.map((task) => (
+              <TaskWithSubtasks
                 key={task.id}
                 task={task}
+                subtasks={subtasksByParent.get(task.id) ?? []}
+                projectId={projectId}
                 currentMilestoneId={milestone.id}
                 milestones={milestones}
                 onUpdate={onTaskUpdate}
                 onDelete={onTaskDelete}
                 onClick={onTaskClick}
                 onPhaseChange={onPhaseChange}
-                selected={selectedIds.has(task.id)}
+                onRename={onRename}
+                onTaskAdd={onTaskAdd}
+                selectedIds={selectedIds}
                 onToggleSelect={onToggleSelect}
               />
             ))}
           </div>
         </SortableContext>
-        {approvedTasks.length === 0 && pendingTasks.length === 0 && (
+        {approvedTopLevel.length === 0 && pendingTasks.length === 0 && (
           <p className="text-xs text-neutral-700 px-4 py-3">Drop tasks here</p>
         )}
       </div>
@@ -909,14 +1229,24 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }, [id]);
 
   const persistContainer = useCallback(async (containerId: string, tasks: Task[]) => {
-    await Promise.all(
-      tasks.map((t, i) =>
+    const approved = sortByPosition(tasks.filter(isApprovedTask));
+    const topLevel = approved.filter((t) => !t.parent_id);
+    const subtasks = approved.filter((t) => t.parent_id);
+    const milestoneId = containerToMilestoneId(containerId);
+
+    await Promise.all([
+      ...topLevel.map((t, i) =>
         updateTask(t.id, {
-          milestone_id: containerToMilestoneId(containerId),
+          milestone_id: milestoneId,
           position: i,
         }),
       ),
-    );
+      ...subtasks.map((t) =>
+        updateTask(t.id, {
+          milestone_id: milestoneId,
+        }),
+      ),
+    ]);
   }, []);
 
   function handleTaskUpdate(updated: Task) {
@@ -954,15 +1284,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   function handleTaskDelete(taskId: string) {
+    const childIds = getChildTasks(tasksRef.current, taskId).map((c) => c.id);
+    const idsToRemove = new Set([taskId, ...childIds]);
     deleteTask(taskId);
     setTasksByMilestone((prev) => {
       const next = { ...prev };
       for (const milestoneId of Object.keys(next)) {
-        next[milestoneId] = next[milestoneId].filter((t) => t.id !== taskId);
+        next[milestoneId] = next[milestoneId].filter((t) => !idsToRemove.has(t.id));
       }
       return next;
     });
-    if (selectedTask?.id === taskId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of idsToRemove) next.delete(id);
+      return next;
+    });
+    if (selectedTask && idsToRemove.has(selectedTask.id)) {
       setDetailOpen(false);
       setSelectedTask(null);
     }
@@ -978,19 +1315,30 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   async function handleTaskPhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
     const current = tasksRef.current;
-    const targetApproved = (current[toMilestoneId] || []).filter(isApprovedTask);
+    const childTasks = getChildTasks(current, taskId);
+    const targetApproved = (current[toMilestoneId] || []).filter(isTopLevelTask);
     const newPosition = targetApproved.length;
 
     const updated = await updateTask(taskId, {
       milestone_id: toMilestoneId,
       position: newPosition,
     });
+    const updatedChildren = await Promise.all(
+      childTasks.map((child) =>
+        updateTask(child.id, { milestone_id: toMilestoneId }),
+      ),
+    );
 
     setTasksByMilestone((prev) => {
+      const movingIds = new Set([taskId, ...childTasks.map((c) => c.id)]);
       const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
-      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && t.id !== taskId);
+      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id));
       const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
-      const toApproved = [...targetApproved, updated];
+      const toApproved = [
+        ...targetApproved,
+        updated,
+        ...updatedChildren,
+      ];
 
       const next = {
         ...prev,
@@ -1011,6 +1359,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (selectedTask?.id === taskId) setSelectedTask(updated);
   }
 
+  async function handleRename(taskId: string, title: string) {
+    const updated = await updateTask(taskId, { title });
+    handleTaskUpdate(updated);
+  }
+
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -1025,20 +1378,37 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       const activeIndex = activeItems.findIndex((t) => t.id === active.id);
       if (activeIndex === -1) return prev;
 
-      const overIndex = milestoneIds.includes(String(over.id))
-        ? overItems.length
-        : overItems.findIndex((t) => t.id === over.id);
-
       const task = activeItems[activeIndex];
+      if (task.parent_id) return prev;
+
+      const childTasks = activeItems.filter((t) => t.parent_id === task.id);
+      const movingIds = new Set([task.id, ...childTasks.map((c) => c.id)]);
+      const overTopLevel = overItems.filter(isTopLevelTask);
+      const overIndexTop = milestoneIds.includes(String(over.id))
+        ? overTopLevel.length
+        : overTopLevel.findIndex((t) => t.id === over.id);
+
+      const newMilestoneId = containerToMilestoneId(overContainer);
+      const movingTasks = activeItems
+        .filter((t) => movingIds.has(t.id))
+        .map((t) => ({ ...t, milestone_id: newMilestoneId }));
+      const parentTask = movingTasks.find((t) => t.id === task.id)!;
+      const movedChildren = movingTasks.filter((t) => t.parent_id === task.id);
+
       const pendingInActive = prev[activeContainer].filter((t) => !isApprovedTask(t));
       const pendingInOver = prev[overContainer].filter((t) => !isApprovedTask(t));
+      const newActiveApproved = activeItems.filter((t) => !movingIds.has(t.id));
 
-      const newActiveApproved = activeItems.filter((t) => t.id !== active.id);
-      const newOverApproved = [
-        ...overItems.slice(0, overIndex >= 0 ? overIndex : overItems.length),
-        { ...task, milestone_id: containerToMilestoneId(overContainer) },
-        ...overItems.slice(overIndex >= 0 ? overIndex : overItems.length),
+      const remainingOver = overItems.filter((t) => !movingIds.has(t.id));
+      const remainingOverTop = remainingOver.filter(isTopLevelTask);
+      const remainingOverSub = remainingOver.filter((t) => t.parent_id);
+      const insertAt = overIndexTop >= 0 ? overIndexTop : remainingOverTop.length;
+      const newOverTop = [
+        ...remainingOverTop.slice(0, insertAt),
+        parentTask,
+        ...remainingOverTop.slice(insertAt),
       ];
+      const newOverApproved = [...newOverTop, ...remainingOverSub, ...movedChildren];
 
       const next = {
         ...prev,
@@ -1062,15 +1432,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     let nextState = current;
 
     if (activeContainer === overContainer) {
-      const approved = sortByPosition(current[activeContainer].filter(isApprovedTask));
-      const oldIndex = approved.findIndex((t) => t.id === active.id);
-      const newIndex = approved.findIndex((t) => t.id === over.id);
+      const topLevel = sortByPosition(current[activeContainer].filter(isTopLevelTask));
+      const oldIndex = topLevel.findIndex((t) => t.id === active.id);
+      const newIndex = topLevel.findIndex((t) => t.id === over.id);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
         const pending = current[activeContainer].filter((t) => !isApprovedTask(t));
-        const reordered = arrayMove(approved, oldIndex, newIndex);
+        const subtasks = current[activeContainer].filter((t) => isApprovedTask(t) && t.parent_id);
+        const reorderedTop = arrayMove(topLevel, oldIndex, newIndex);
+        const rebuilt = reorderedTop.flatMap((t) => [
+          t,
+          ...sortByPosition(subtasks.filter((s) => s.parent_id === t.id)),
+        ]);
         nextState = {
           ...current,
-          [activeContainer]: [...pending, ...reordered],
+          [activeContainer]: [...pending, ...rebuilt],
         };
         setTasksByMilestone(nextState);
       }
@@ -1292,6 +1667,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
               onTogglePhase={togglePhaseSelect}
+              onRename={handleRename}
             />
           )}
           {project.milestones.map((milestone) => (
@@ -1321,6 +1697,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               selectedIds={selectedIds}
               onToggleSelect={toggleSelect}
               onTogglePhase={togglePhaseSelect}
+              onRename={handleRename}
             />
           ))}
         </div>

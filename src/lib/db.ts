@@ -40,6 +40,7 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
+      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
       await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
       await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
       await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
@@ -170,6 +171,7 @@ async function _init() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       milestone_id UUID REFERENCES milestones(id) ON DELETE SET NULL,
+      parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'open'

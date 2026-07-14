@@ -19,6 +19,7 @@ export async function PUT(
     const description = "description" in body ? body.description : current.description;
     const status = "status" in body ? body.status : current.status;
     const milestone_id = "milestone_id" in body ? body.milestone_id : current.milestone_id;
+    const parent_id = "parent_id" in body ? body.parent_id : current.parent_id;
     const assignee = "assignee" in body ? body.assignee : current.assignee;
     const due_date = "due_date" in body ? body.due_date : current.due_date;
     const url = "url" in body ? body.url : current.url;
@@ -31,6 +32,7 @@ export async function PUT(
         description = ${description},
         status = ${status},
         milestone_id = ${milestone_id},
+        parent_id = ${parent_id},
         assignee = ${assignee},
         due_date = ${due_date},
         url = ${url},
