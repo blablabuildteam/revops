@@ -140,6 +140,27 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
     end_date: f.end_date ? f.end_date + "-01" : undefined,
   }), []);
 
+  const flushSave = useCallback(async (): Promise<boolean> => {
+    if (!initial) return true;
+
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+
+    try {
+      setSaveStatus("saving");
+      const saved = await updateOpportunity(initial.id, buildPayload(form));
+      onSave(saved);
+      setSaveStatus("saved");
+      return true;
+    } catch (err) {
+      setSaveStatus("idle");
+      setError(err instanceof Error ? err.message : "Failed to save changes");
+      return false;
+    }
+  }, [initial, form, buildPayload, onSave]);
+
   useEffect(() => {
     if (!initial || !open) return;
     if (isInitialLoad.current) {
@@ -155,8 +176,9 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         onSave(saved);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 1500);
-      } catch {
+      } catch (err) {
         setSaveStatus("idle");
+        setError(err instanceof Error ? err.message : "Failed to save changes");
       }
     }, 800);
 
@@ -184,10 +206,18 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
     }
   }
 
+  async function handleClose() {
+    if (initial) {
+      const saved = await flushSave();
+      if (!saved) return;
+    }
+    onClose();
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (initial) {
-      onClose();
+      await handleClose();
       return;
     }
     setLoading(true);
@@ -224,7 +254,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && void handleClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-5xl w-[92vw] p-0 overflow-hidden">
         <div className="px-6 pt-6 pb-2">
           <DialogHeader>
@@ -423,7 +453,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
               )}
               {initial ? (
                 <Button
-                  type="button" onClick={onClose}
+                  type="button" onClick={() => void handleClose()}
                   className="bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium"
                 >
                   Done
@@ -431,7 +461,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
               ) : (
                 <>
                   <Button
-                    type="button" variant="ghost" onClick={onClose}
+                    type="button" variant="ghost" onClick={() => void handleClose()}
                     className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
                   >
                     Cancel

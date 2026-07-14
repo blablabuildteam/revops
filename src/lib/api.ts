@@ -18,8 +18,21 @@ async function req<T>(
 ): Promise<T> {
   const res = await fetch(`${base}${path}`, {
     headers: { "Content-Type": "application/json" },
+    redirect: "manual",
     ...options,
   });
+
+  if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+    throw new Error("Session expired. Please log in again.");
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      res.ok ? "Unexpected response from server" : `Request failed (${res.status})`
+    );
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error ?? "Request failed");

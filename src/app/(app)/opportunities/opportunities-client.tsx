@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -50,6 +50,16 @@ const stageStyles: Record<Stage, string> = {
 
 const selectTriggerClass =
   "h-9 border-0 bg-transparent shadow-none px-2 text-sm focus:ring-0";
+
+const STAGE_PROBABILITY: Record<Stage, number> = {
+  prospect: 20,
+  qualified: 40,
+  proposal: 60,
+  negotiation: 80,
+  won: 100,
+  lost: 0,
+  on_hold: 25,
+};
 
 function InlineProbability({
   value,
@@ -218,6 +228,8 @@ export default function OpportunitiesPageClient() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [activatingOpp, setActivatingOpp] = useState<Opportunity | null>(null);
   const [activatedOpportunityIds, setActivatedOpportunityIds] = useState<Set<string>>(new Set());
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const patchQueues = useRef(new Map<string, Promise<void>>());
 
   async function load() {
     setLoading(true);
@@ -237,15 +249,70 @@ export default function OpportunitiesPageClient() {
   }, []);
 
   const patchOpp = useCallback(async (id: string, updates: Partial<Opportunity>) => {
-    const updated = await updateOpportunity(id, updates);
-    setOpps((prev) =>
-      prev.map((o) => {
-        if (o.id !== id) return o;
-        const company = updated.company?.name ? updated.company : o.company;
-        return { ...o, ...updated, company };
-      })
-    );
-  }, []);
+    let snapshot: Opportunity | undefined;
+    setOpps((prev) => {
+      snapshot = prev.find((o) => o.id === id);
+      return prev.map((o) => (o.id === id ? { ...o, ...updates } : o));
+    });
+    setEditingOpp((prev) => (prev?.id === id ? { ...prev, ...updates } : prev));
+
+    if (updates.stage && stageFilter !== "all" && updates.stage !== stageFilter) {
+      setStageFilter("all");
+    }
+
+    const applyServer = (updated: Opportunity) => {
+      setOpps((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          const company = updated.company?.name ? updated.company : o.company;
+          return { ...o, ...updated, company };
+        })
+      );
+      setEditingOpp((prev) => {
+        if (!prev || prev.id !== id) return prev;
+        const company = updated.company?.name ? updated.company : prev.company;
+        return { ...prev, ...updated, company };
+      });
+      setSaveError(null);
+    };
+
+    const rollback = () => {
+      if (snapshot) {
+        setOpps((prev) => prev.map((o) => (o.id === id ? snapshot! : o)));
+        setEditingOpp((prev) => (prev?.id === id ? snapshot! : prev));
+      }
+    };
+
+    const previous = patchQueues.current.get(id) ?? Promise.resolve();
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const updated = await updateOpportunity(id, updates);
+          applyServer(updated);
+        } catch (err) {
+          rollback();
+          const message = err instanceof Error ? err.message : "Failed to save changes";
+          setSaveError(message);
+          throw err;
+        }
+      });
+
+    patchQueues.current.set(id, next);
+    await next;
+  }, [stageFilter]);
+
+  async function handleStageChange(id: string, stage: Stage) {
+    await patchOpp(id, { stage, probability: STAGE_PROBABILITY[stage] });
+  }
+
+  function handleRowClick(e: React.MouseEvent, opp: Opportunity) {
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-slot="select-trigger"], [data-slot="select-content"], input, button')) {
+      return;
+    }
+    openEdit(opp);
+  }
 
   const filtered = useMemo(() => {
     return opps
@@ -313,16 +380,7 @@ export default function OpportunitiesPageClient() {
   }
 
   async function handlePipelineStageChange(id: string, stage: Stage) {
-    const probMap: Record<Stage, number> = {
-      prospect: 20,
-      qualified: 40,
-      proposal: 60,
-      negotiation: 80,
-      won: 100,
-      lost: 0,
-      on_hold: 25,
-    };
-    await patchOpp(id, { stage, probability: probMap[stage] });
+    await handleStageChange(id, stage);
   }
 
   const totalExpected = filtered.reduce((s, o) => s + o.expected_value, 0);
@@ -339,6 +397,11 @@ export default function OpportunitiesPageClient() {
 
   return (
     <div className="p-8 space-y-6">
+      {saveError && (
+        <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+          {saveError}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-neutral-100">Opportunities</h1>
@@ -484,7 +547,7 @@ export default function OpportunitiesPageClient() {
                 : filtered.map((opp) => (
                     <tr
                       key={opp.id}
-                      onClick={() => openEdit(opp)}
+                      onClick={(e) => handleRowClick(e, opp)}
                       className="hover:bg-neutral-900/50 transition-colors cursor-pointer"
                     >
                       <td className="px-4 py-4 text-neutral-300 text-sm truncate font-medium">
@@ -495,7 +558,7 @@ export default function OpportunitiesPageClient() {
                           {opp.name}
                         </p>
                       </td>
-                      <td className="px-2 py-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-4 overflow-hidden" onPointerDown={(e) => e.stopPropagation()}>
                         <Select
                           value={normalizeOpportunityType(opp.type)}
                           onValueChange={(v) =>
@@ -521,12 +584,10 @@ export default function OpportunitiesPageClient() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-4 overflow-hidden" onPointerDown={(e) => e.stopPropagation()}>
                         <Select
                           value={opp.stage}
-                          onValueChange={(v) =>
-                            patchOpp(opp.id, { stage: v as Stage })
-                          }
+                          onValueChange={(v) => void handleStageChange(opp.id, v as Stage)}
                         >
                           <SelectTrigger
                             className={cn(

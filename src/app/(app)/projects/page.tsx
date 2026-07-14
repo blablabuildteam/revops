@@ -2,12 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Plus, Copy, Check, ExternalLink, AlertCircle, FolderKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getProjects, getCompanies, createProject } from "@/lib/api";
 import { Company, Project, PROJECT_STATUS_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -183,15 +184,62 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectWithStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
+  const [companyFilter, setCompanyFilter] = useState<string>("all");
 
   useEffect(() => {
     getProjects().then((p) => { setProjects(p as ProjectWithStats[]); setLoading(false); });
   }, []);
 
-  const active = projects.filter((p) => p.status === "active");
-  const totalTasks = projects.reduce((s, p) => s + Number(p.task_count), 0);
-  const totalDone = projects.reduce((s, p) => s + Number(p.done_count), 0);
-  const pendingRequests = projects.reduce((s, p) => s + Number(p.pending_requests), 0);
+  const { companyChips, unassignedCount } = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    let unassigned = 0;
+
+    for (const project of projects) {
+      const companyId = project.company_id ?? project.company?.id;
+      const companyName = project.company?.name;
+      if (companyId && companyName) {
+        const existing = map.get(companyId);
+        if (existing) existing.count += 1;
+        else map.set(companyId, { id: companyId, name: companyName, count: 1 });
+      } else {
+        unassigned += 1;
+      }
+    }
+
+    return {
+      companyChips: Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name)),
+      unassignedCount: unassigned,
+    };
+  }, [projects]);
+
+  const filteredProjects = useMemo(() => {
+    if (companyFilter === "all") return projects;
+    if (companyFilter === "none") {
+      return projects.filter((p) => !(p.company_id ?? p.company?.id));
+    }
+    return projects.filter(
+      (p) => (p.company_id ?? p.company?.id) === companyFilter
+    );
+  }, [projects, companyFilter]);
+
+  const active = filteredProjects.filter((p) => p.status === "active");
+  const totalTasks = filteredProjects.reduce((s, p) => s + Number(p.task_count), 0);
+  const totalDone = filteredProjects.reduce((s, p) => s + Number(p.done_count), 0);
+  const pendingRequests = filteredProjects.reduce((s, p) => s + Number(p.pending_requests), 0);
+
+  const showCompanyFilters = companyChips.length > 0 || unassignedCount > 0;
+
+  function toggleCompanyFilter(value: string) {
+    setCompanyFilter((current) => (current === value ? "all" : value));
+  }
+
+  const chipClass = (active: boolean) =>
+    cn(
+      "px-3 py-1 rounded-full text-xs font-medium transition-colors border shrink-0",
+      active
+        ? "bg-[#e8ff47]/10 text-[#e8ff47] border-[#e8ff47]/30"
+        : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700 hover:text-neutral-300"
+    );
 
   return (
     <div className="p-8 space-y-8">
@@ -200,6 +248,12 @@ export default function ProjectsPage() {
           <h1 className="text-xl font-semibold text-neutral-100">Projects</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {active.length} active · {totalDone}/{totalTasks} tasks done
+            {companyFilter !== "all" && (
+              <span className="text-neutral-600">
+                {" "}
+                · {filteredProjects.length} of {projects.length} shown
+              </span>
+            )}
             {pendingRequests > 0 && (
               <span className="ml-2 text-orange-400 font-medium">· {pendingRequests} request{pendingRequests !== 1 ? "s" : ""} pending</span>
             )}
@@ -212,20 +266,53 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
+      {!loading && showCompanyFilters && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setCompanyFilter("all")}
+            className={chipClass(companyFilter === "all")}
+          >
+            All ({projects.length})
+          </button>
+          {companyChips.map((company) => (
+            <button
+              key={company.id}
+              type="button"
+              onClick={() => toggleCompanyFilter(company.id)}
+              className={chipClass(companyFilter === company.id)}
+            >
+              {company.name} ({company.count})
+            </button>
+          ))}
+          {unassignedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => toggleCompanyFilter("none")}
+              className={chipClass(companyFilter === "none")}
+            >
+              No company ({unassignedCount})
+            </button>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="grid grid-cols-2 gap-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="border border-neutral-800 rounded-lg h-40 animate-pulse bg-neutral-900/40" />
           ))}
         </div>
-      ) : projects.length === 0 ? (
+      ) : filteredProjects.length === 0 ? (
         <div className="border border-neutral-800 rounded-lg py-20 text-center">
           <FolderKanban className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
-          <p className="text-neutral-600 text-sm">No projects yet</p>
+          <p className="text-neutral-600 text-sm">
+            {projects.length === 0 ? "No projects yet" : "No projects match this filter"}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {projects.map((project) => {
+          {filteredProjects.map((project) => {
             const taskCount = Number(project.task_count);
             const doneCount = Number(project.done_count);
             const pendingReqs = Number(project.pending_requests);

@@ -3,6 +3,7 @@ import { sql, ensureTables } from "@/lib/db";
 
 const asNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
+  if (v instanceof Date) return v.toISOString();
   return String(v);
 };
 
