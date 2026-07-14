@@ -1,3 +1,5 @@
+import { addVat } from "@/lib/vat";
+
 export type Stage =
   | "prospect"
   | "qualified"
@@ -367,7 +369,9 @@ export function forecastRevenueForMonth(opportunities: Opportunity[], month: str
     if (opp.stage === "won" || opp.stage === "lost") continue;
     if (!opp.start_date) continue;
     const startMonth = opp.start_date.slice(0, 7);
-    const weighted = (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100);
+    const weighted = addVat(
+      (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100)
+    );
 
     if (opp.type === "retainer") {
       const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;

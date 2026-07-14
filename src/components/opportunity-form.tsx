@@ -27,6 +27,7 @@ import {
   normalizeOpportunityType,
 } from "@/lib/types";
 import { createOpportunity, updateOpportunity, getCompanies, createCompany } from "@/lib/api";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 interface OpportunityFormProps {
   open: boolean;
@@ -238,10 +239,12 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
     }
   }
 
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   async function handleDelete() {
     if (!initial || !onDelete) return;
-    if (!confirm("Are you sure you want to delete this opportunity?")) return;
-    setLoading(true);
+    setDeleting(true);
     setError(null);
     try {
       onDelete(initial.id);
@@ -249,11 +252,13 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to delete");
     } finally {
-      setLoading(false);
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && void handleClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-5xl w-[92vw] p-0 overflow-hidden">
         <div className="px-6 pt-6 pb-2">
@@ -354,7 +359,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
               {/* Deal Order + Committed */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Deal Order (€)</Label>
+                  <Label className="text-neutral-400 text-xs">Deal Order (€, excl. VAT)</Label>
                   <Input
                     type="number" min="0"
                     value={form.expected_value}
@@ -363,7 +368,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Committed (€)</Label>
+                  <Label className="text-neutral-400 text-xs">Committed (€, excl. VAT)</Label>
                   <Input
                     type="number" min="0"
                     value={form.actual_value}
@@ -436,8 +441,8 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={handleDelete}
-                  disabled={loading}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={loading || deleting}
                   className="text-red-400 hover:text-red-300 hover:bg-red-950/30"
                 >
                   Delete opportunity
@@ -479,5 +484,22 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         </form>
       </DialogContent>
     </Dialog>
+
+      <ConfirmDeleteDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete opportunity"
+        description={
+          <>
+            Are you sure you want to delete{" "}
+            <span className="text-neutral-300">{initial?.name}</span>?
+            This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete opportunity"
+        deleting={deleting}
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }

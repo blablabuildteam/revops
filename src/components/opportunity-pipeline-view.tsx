@@ -79,8 +79,9 @@ function OpportunityCard({
           <p className="text-xs text-neutral-600 font-mono">
             {opp.probability}% chance ·{" "}
             <span className="text-neutral-500">
-              {formatCurrency(opp.weighted_value)}
+              {formatCurrency(opp.weighted_value)} wt.
             </span>
+            <span className="text-neutral-700"> · excl. VAT</span>
           </p>
         </div>
       </div>
@@ -160,9 +161,9 @@ export function OpportunityPipelineView({
                   {STAGE_LABELS[stage]}
                 </p>
                 <p className="text-xs text-neutral-600 font-mono mt-0.5">
-                  {formatCurrency(stageTotal(stage))} · {stageOpps.length}{" "}
-                  opportunities
-                </p>
+            {formatCurrency(stageTotal(stage))} excl. VAT · {stageOpps.length}{" "}
+            opportunities
+          </p>
               </div>
             </div>
 

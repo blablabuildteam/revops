@@ -105,18 +105,18 @@ export default function DashboardPage() {
           <KpiCard
             label="Total pipeline"
             value={formatCurrency(pipeline)}
-            sub={`${active.length} active opportunities`}
+            sub={`${active.length} active · excl. VAT`}
             accent
           />
           <KpiCard
             label="Weighted pipeline"
             value={formatCurrency(weighted)}
-            sub="Based on probability %"
+            sub="Based on probability · excl. VAT"
           />
           <KpiCard
             label="Realized revenue"
             value={formatCurrency(actualRevenue)}
-            sub={`${won.length} won`}
+            sub={`${won.length} won · excl. VAT`}
           />
           <KpiCard
             label="Win rate"

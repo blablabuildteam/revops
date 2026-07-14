@@ -38,19 +38,19 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BinaryText } from "@/components/binary-text";
 import { CompanyAvatar } from "@/components/company-avatar";
+import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[14px_20px_minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid grid-cols-[20px_minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 type TasksByMilestone = Record<string, Task[]>;
 type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
@@ -123,6 +123,38 @@ function containerToMilestoneId(containerId: string): string | null {
   return containerId === UNASSIGNED_ID ? null : containerId;
 }
 
+function reorderTopLevelInContainer(
+  containerTasks: Task[],
+  activeId: string,
+  overId: string,
+  milestoneIds: string[],
+): Task[] | null {
+  const pending = containerTasks.filter((t) => !isApprovedTask(t));
+  const approved = containerTasks.filter(isApprovedTask);
+  const topLevel = sortByPosition(approved.filter(isTopLevelTask));
+  const subtasks = approved.filter((t) => t.parent_id);
+
+  const oldIndex = topLevel.findIndex((t) => t.id === activeId);
+  if (oldIndex === -1) return null;
+
+  let newIndex: number;
+  if (milestoneIds.includes(overId)) {
+    newIndex = topLevel.length - 1;
+  } else {
+    newIndex = topLevel.findIndex((t) => t.id === overId);
+    if (newIndex === -1) return null;
+  }
+
+  if (oldIndex === newIndex) return null;
+
+  const reorderedTop = arrayMove(topLevel, oldIndex, newIndex);
+  const rebuilt = reorderedTop.flatMap((t) => [
+    t,
+    ...sortByPosition(subtasks.filter((s) => s.parent_id === t.id)),
+  ]);
+  return [...pending, ...rebuilt];
+}
+
 function PhaseColorInput({
   value,
   onChange,
@@ -159,7 +191,6 @@ function PhaseColorInput({
 function TaskColumnHeader() {
   return (
     <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
-      <span />
       <span />
       <span>Task</span>
       <span />
@@ -545,13 +576,11 @@ function TaskNameCell({
 
   return (
     <div
-      className={`min-w-0 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}
-      onPointerDown={cancelDrag}
+      className={`min-w-0 flex-1 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}
     >
       <button
         type="button"
         onClick={onOpen}
-        onPointerDown={cancelDrag}
         className="flex-1 min-w-0 text-left cursor-pointer"
       >
         <p className="text-sm truncate text-neutral-200">
@@ -703,9 +732,9 @@ function SortableTaskRow({
   } = useSortable({ id: task.id, data: { type: "task", milestoneId: task.milestone_id } });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
+    transform: isDragging ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0 : 1,
   };
 
   function handleDelete(e: React.MouseEvent) {
@@ -717,9 +746,7 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-grab active:cursor-grabbing touch-none ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
-      {...attributes}
-      {...listeners}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
     >
       <label
         className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -741,13 +768,20 @@ function SortableTaskRow({
         </span>
       </label>
 
-      <TaskNameCell
-        task={task}
-        allowSubtasks
-        onOpen={() => onClick(task)}
-        onRename={(title) => onRename(task.id, title)}
-        onAddSubtask={onAddSubtask}
-      />
+      <div
+        className="min-w-0 flex items-center gap-1 cursor-grab active:cursor-grabbing touch-none"
+        {...listeners}
+        {...attributes}
+      >
+        <GripVertical className="w-3.5 h-3.5 shrink-0 text-neutral-700 group-hover:text-neutral-500 transition-colors" />
+        <TaskNameCell
+          task={task}
+          allowSubtasks
+          onOpen={() => onClick(task)}
+          onRename={(title) => onRename(task.id, title)}
+          onAddSubtask={onAddSubtask}
+        />
+      </div>
 
       <PriorityFlag
         priority={task.priority ?? "low"}
@@ -1262,8 +1296,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const { requestDelete, confirmDialog } = useConfirmDelete();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1348,6 +1381,55 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       return next;
     });
     if (selectedTask?.id === updated.id) setSelectedTask(updated);
+  }
+
+  function confirmTaskDelete(taskId: string) {
+    const task = findTaskInState(tasksRef.current, taskId);
+    const childCount = getChildTasks(tasksRef.current, taskId).length;
+    requestDelete({
+      title: "Delete task",
+      description: (
+        <>
+          Are you sure you want to delete{" "}
+          <span className="text-neutral-300">{task?.title ?? "this task"}</span>?
+          {childCount > 0 && (
+            <> This will also delete {childCount} subtask{childCount !== 1 ? "s" : ""}.</>
+          )}
+        </>
+      ),
+      confirmLabel: "Delete task",
+      onConfirm: () => handleTaskDelete(taskId),
+    });
+  }
+
+  function confirmMilestoneDelete(milestoneId: string) {
+    const milestone = project?.milestones.find((m) => m.id === milestoneId);
+    const taskCount = (tasksByMilestone[milestoneId] || []).length;
+    requestDelete({
+      title: "Delete phase",
+      description: (
+        <>
+          Are you sure you want to delete{" "}
+          <span className="text-neutral-300">{milestone?.name ?? "this phase"}</span>?
+          {taskCount > 0 && (
+            <> This will permanently remove {taskCount} task{taskCount !== 1 ? "s" : ""} in this phase.</>
+          )}
+        </>
+      ),
+      confirmLabel: "Delete phase",
+      onConfirm: async () => {
+        await deleteMilestone(milestoneId);
+        setProject((prev) => prev ? {
+          ...prev,
+          milestones: prev.milestones.filter((ms) => ms.id !== milestoneId),
+        } : prev);
+        setTasksByMilestone((prev) => {
+          const next = { ...prev };
+          delete next[milestoneId];
+          return next;
+        });
+      },
+    });
   }
 
   function handleTaskDelete(taskId: string) {
@@ -1437,7 +1519,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
     const activeContainer = findContainer(String(active.id), tasksByMilestone, milestoneIds);
     const overContainer = findContainer(String(over.id), tasksByMilestone, milestoneIds);
-    if (!activeContainer || !overContainer || activeContainer === overContainer) return;
+    if (!activeContainer || !overContainer) return;
+
+    if (activeContainer === overContainer) {
+      setTasksByMilestone((prev) => {
+        const reordered = reorderTopLevelInContainer(
+          prev[activeContainer],
+          String(active.id),
+          String(over.id),
+          milestoneIds,
+        );
+        if (!reordered) return prev;
+        const next = { ...prev, [activeContainer]: reordered };
+        tasksRef.current = next;
+        return next;
+      });
+      return;
+    }
 
     setTasksByMilestone((prev) => {
       const activeItems = prev[activeContainer].filter(isApprovedTask);
@@ -1499,22 +1597,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     let nextState = current;
 
     if (activeContainer === overContainer) {
-      const topLevel = sortByPosition(current[activeContainer].filter(isTopLevelTask));
-      const oldIndex = topLevel.findIndex((t) => t.id === active.id);
-      const newIndex = topLevel.findIndex((t) => t.id === over.id);
-      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const pending = current[activeContainer].filter((t) => !isApprovedTask(t));
-        const subtasks = current[activeContainer].filter((t) => isApprovedTask(t) && t.parent_id);
-        const reorderedTop = arrayMove(topLevel, oldIndex, newIndex);
-        const rebuilt = reorderedTop.flatMap((t) => [
-          t,
-          ...sortByPosition(subtasks.filter((s) => s.parent_id === t.id)),
-        ]);
-        nextState = {
-          ...current,
-          [activeContainer]: [...pending, ...rebuilt],
-        };
+      const reordered = reorderTopLevelInContainer(
+        current[activeContainer],
+        String(active.id),
+        String(over.id),
+        milestoneIds,
+      );
+      if (reordered) {
+        nextState = { ...current, [activeContainer]: reordered };
         setTasksByMilestone(nextState);
+        tasksRef.current = nextState;
       }
     }
 
@@ -1557,16 +1649,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setTimeout(() => setCopied(false), 2000);
   }
 
-  async function handleDeleteProject() {
+  function requestDeleteProject() {
     if (!project) return;
-    setDeleting(true);
-    try {
-      await deleteProject(project.id);
-      router.push("/projects");
-    } finally {
-      setDeleting(false);
-      setDeleteOpen(false);
-    }
+    requestDelete({
+      title: "Delete project",
+      description: (
+        <>
+          Are you sure you want to delete <span className="text-neutral-300">{project.name}</span>?
+          This will permanently remove all phases, tasks, and the client share link.
+        </>
+      ),
+      confirmLabel: "Delete project",
+      onConfirm: async () => {
+        await deleteProject(project.id);
+        router.push("/projects");
+      },
+    });
   }
 
   if (loading) {
@@ -1713,7 +1811,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             {copied ? "Copied!" : "Share client link"}
           </button>
           <button
-            onClick={() => setDeleteOpen(true)}
+            onClick={requestDeleteProject}
             className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:border-red-900/50 transition-colors"
             aria-label="Delete project"
           >
@@ -1722,34 +1820,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-neutral-100">Delete project</DialogTitle>
-            <DialogDescription className="text-neutral-500">
-              Are you sure you want to delete <span className="text-neutral-300">{project.name}</span>?
-              This will permanently remove all phases, tasks, and the client share link.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="bg-transparent border-neutral-800">
-            <Button
-              variant="outline"
-              onClick={() => setDeleteOpen(false)}
-              disabled={deleting}
-              className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleDeleteProject}
-              disabled={deleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {deleting ? "Deleting..." : "Delete project"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {confirmDialog}
 
       {pendingRequests > 0 && (
         <div className="flex items-center gap-3 bg-orange-950/40 border border-orange-900/50 rounded-lg px-4 py-3">
@@ -1791,7 +1862,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               tasks={tasksByMilestone[UNASSIGNED_ID] || []}
               onDelete={() => {}}
               onTaskUpdate={handleTaskUpdate}
-              onTaskDelete={handleTaskDelete}
+              onTaskDelete={confirmTaskDelete}
               onTaskAdd={(t) => handleTaskAdd(UNASSIGNED_ID, t)}
               onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
               onPhaseChange={handleTaskPhaseChange}
@@ -1808,20 +1879,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               milestones={project.milestones}
               projectId={project.id}
               tasks={tasksByMilestone[milestone.id] || []}
-              onDelete={(mid) => {
-                deleteMilestone(mid);
-                setProject((prev) => prev ? {
-                  ...prev,
-                  milestones: prev.milestones.filter((ms) => ms.id !== mid),
-                } : prev);
-                setTasksByMilestone((prev) => {
-                  const next = { ...prev };
-                  delete next[mid];
-                  return next;
-                });
-              }}
+              onDelete={confirmMilestoneDelete}
               onTaskUpdate={handleTaskUpdate}
-              onTaskDelete={handleTaskDelete}
+              onTaskDelete={confirmTaskDelete}
               onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
               onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
               onPhaseChange={handleTaskPhaseChange}

@@ -26,6 +26,8 @@ import {
   Project,
 } from "@/lib/types";
 import { createFinanceDeal, createProject, updateProject, getCompanies, createCompany } from "@/lib/api";
+import { addVat } from "@/lib/vat";
+import { VatAmountPair } from "@/components/vat-amount-pair";
 import { cn } from "@/lib/utils";
 
 interface DealActivationWizardProps {
@@ -67,11 +69,14 @@ export function DealActivationWizard({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [addingCompany, setAddingCompany] = useState(false);
   const [dealType, setDealType] = useState<DealType>("project");
-  const [totalDealValue, setTotalDealValue] = useState("0");
+  const [totalDealValueExcl, setTotalDealValueExcl] = useState("0");
+  const [totalDealValueIncl, setTotalDealValueIncl] = useState("0");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [monthlyFee, setMonthlyFee] = useState("0");
-  const [monthlyRevshare, setMonthlyRevshare] = useState("0");
+  const [monthlyFeeExcl, setMonthlyFeeExcl] = useState("0");
+  const [monthlyFeeIncl, setMonthlyFeeIncl] = useState("0");
+  const [monthlyRevshareExcl, setMonthlyRevshareExcl] = useState("0");
+  const [monthlyRevshareIncl, setMonthlyRevshareIncl] = useState("0");
   const [paymentSchedule, setPaymentSchedule] = useState<PaymentScheduleEntry[]>([
     { month: "", percentage: 50 },
     { month: "", percentage: 50 },
@@ -92,11 +97,16 @@ export function DealActivationWizard({
       setCompanyName(opportunity.company?.name ?? "");
       setCompanyId(opportunity.company_id);
       setDealType(opportunity.type === "retainer" ? "retainer" : "project");
-      setTotalDealValue(String(opportunity.expected_value || 0));
+      const net = opportunity.expected_value || 0;
+      const gross = addVat(net);
+      setTotalDealValueExcl(String(net));
+      setTotalDealValueIncl(String(gross));
       setStartDate(opportunity.start_date ?? "");
       setEndDate(opportunity.end_date ?? opportunity.close_date ?? "");
-      setMonthlyFee(String(opportunity.expected_value || 0));
-      setMonthlyRevshare("0");
+      setMonthlyFeeExcl(String(net));
+      setMonthlyFeeIncl(String(gross));
+      setMonthlyRevshareExcl("0");
+      setMonthlyRevshareIncl("0");
       setPaymentSchedule([
         { month: monthInputValue(opportunity.start_date), percentage: 50 },
         { month: monthInputValue(opportunity.end_date ?? opportunity.close_date), percentage: 50 },
@@ -107,11 +117,14 @@ export function DealActivationWizard({
       setCompanyName("");
       setCompanyId(undefined);
       setDealType("project");
-      setTotalDealValue("0");
+      setTotalDealValueExcl("0");
+      setTotalDealValueIncl("0");
       setStartDate("");
       setEndDate("");
-      setMonthlyFee("0");
-      setMonthlyRevshare("0");
+      setMonthlyFeeExcl("0");
+      setMonthlyFeeIncl("0");
+      setMonthlyRevshareExcl("0");
+      setMonthlyRevshareIncl("0");
       setPaymentSchedule([
         { month: "", percentage: 50 },
         { month: "", percentage: 50 },
@@ -218,12 +231,12 @@ export function DealActivationWizard({
         company_name: companyName.trim(),
         project_name: projectName.trim(),
         deal_type: dealType,
-        total_deal_value: dealType === "project" ? Number(totalDealValue) || 0 : 0,
+        total_deal_value: dealType === "project" ? Number(totalDealValueIncl) || 0 : 0,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
         payment_schedule: dealType === "project" ? paymentSchedule.filter((e) => e.month) : [],
-        monthly_fee: dealType === "retainer" ? Number(monthlyFee) || 0 : 0,
-        monthly_revshare: dealType === "retainer" ? Number(monthlyRevshare) || 0 : 0,
+        monthly_fee: dealType === "retainer" ? Number(monthlyFeeIncl) || 0 : 0,
+        monthly_revshare: dealType === "retainer" ? Number(monthlyRevshareIncl) || 0 : 0,
         amount_paid: 0,
         payments: [],
       });
@@ -401,16 +414,16 @@ export function DealActivationWizard({
 
               {dealType === "project" ? (
                 <>
-                  <div className="space-y-1.5">
-                    <Label className="text-neutral-400 text-xs">Total deal value (€)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={totalDealValue}
-                      onChange={(e) => setTotalDealValue(e.target.value)}
-                      className={`${fc} font-mono`}
-                    />
-                  </div>
+                  <VatAmountPair
+                    exclLabel="Total deal value, excl. VAT (€)"
+                    inclLabel="Total deal value, incl. VAT (€)"
+                    exclValue={totalDealValueExcl}
+                    inclValue={totalDealValueIncl}
+                    onChange={(excl, incl) => {
+                      setTotalDealValueExcl(excl);
+                      setTotalDealValueIncl(incl);
+                    }}
+                  />
 
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -464,27 +477,27 @@ export function DealActivationWizard({
                   </div>
                 </>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-neutral-400 text-xs">Monthly fee (€)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={monthlyFee}
-                      onChange={(e) => setMonthlyFee(e.target.value)}
-                      className={`${fc} font-mono`}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-neutral-400 text-xs">Monthly revshare (€)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={monthlyRevshare}
-                      onChange={(e) => setMonthlyRevshare(e.target.value)}
-                      className={`${fc} font-mono`}
-                    />
-                  </div>
+                <div className="space-y-4">
+                  <VatAmountPair
+                    exclLabel="Monthly fee, excl. VAT (€)"
+                    inclLabel="Monthly fee, incl. VAT (€)"
+                    exclValue={monthlyFeeExcl}
+                    inclValue={monthlyFeeIncl}
+                    onChange={(excl, incl) => {
+                      setMonthlyFeeExcl(excl);
+                      setMonthlyFeeIncl(incl);
+                    }}
+                  />
+                  <VatAmountPair
+                    exclLabel="Monthly revshare, excl. VAT (€)"
+                    inclLabel="Monthly revshare, incl. VAT (€)"
+                    exclValue={monthlyRevshareExcl}
+                    inclValue={monthlyRevshareIncl}
+                    onChange={(excl, incl) => {
+                      setMonthlyRevshareExcl(excl);
+                      setMonthlyRevshareIncl(incl);
+                    }}
+                  />
                 </div>
               )}
 

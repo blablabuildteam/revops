@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, toDateInputValue } from "@/lib/format";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
+import { VatAmountPair } from "@/components/vat-amount-pair";
+import { removeVat } from "@/lib/vat";
 import { getFinanceDeals, updateFinanceDeal, getOpportunities } from "@/lib/api";
 import {
   DEAL_TYPE_LABELS,
@@ -236,7 +238,7 @@ export default function FinancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-neutral-100">Finance overview</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Finance deals, allocation & salary pot</p>
+          <p className="text-sm text-neutral-500 mt-0.5">Finance deals (incl. VAT), allocation & salary pot</p>
         </div>
         <Button
           onClick={() => setManualDealOpen(true)}
@@ -255,7 +257,7 @@ export default function FinancePage() {
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-3 border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
               <h2 className="text-sm font-medium text-neutral-300 mb-1">12-month revenue outlook</h2>
-              <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue and net after €9k salary</p>
+              <p className="text-xs text-neutral-600 mb-4">Expected vs actual revenue (incl. VAT) and net after €9k salary</p>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={insightSeries} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#262626" />
@@ -374,7 +376,7 @@ export default function FinancePage() {
                       {formatCurrency(insights.expected)}
                     </span>
                   </div>
-                  <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees</p>
+                  <p className="text-[10px] text-neutral-600">Based on payment terms &amp; retainer fees · incl. VAT</p>
                 </div>
 
                 <div className="border-t border-neutral-800" />
@@ -431,7 +433,7 @@ export default function FinancePage() {
                       {Math.min(100, Math.round((insights.expected / insights.salaryTarget) * 100))}%
                     </span>
                   </div>
-                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} salary · {formatCurrency(insights.expected)} expected</p>
+                  <p className="text-[10px] text-neutral-600">{formatCurrency(insights.salaryTarget)} salary · {formatCurrency(insights.expected)} expected incl. VAT</p>
                 </div>
             </div>
             </div>
@@ -452,7 +454,7 @@ export default function FinancePage() {
                         <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Company</th>
                         <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Project</th>
                         <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Type</th>
-                        <th className="text-right px-4 py-3 text-xs text-neutral-500 font-medium">Value / Outstanding</th>
+                        <th className="text-right px-4 py-3 text-xs text-neutral-500 font-medium">Value / Outstanding (incl. VAT)</th>
                         <th className="text-left px-4 py-3 text-xs text-neutral-500 font-medium">Period</th>
                       </tr>
                     </thead>
@@ -611,38 +613,35 @@ export default function FinancePage() {
               </div>
 
               {editForm.deal_type === "project" ? (
-                <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Total deal value (€)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={editForm.total_deal_value ?? 0}
-                    onChange={(e) => setEditForm((f) => ({ ...f, total_deal_value: Number(e.target.value) }))}
-                    className={`${fc} font-mono`}
-                  />
-                </div>
+                <VatAmountPair
+                  exclLabel="Total deal value, excl. VAT (€)"
+                  inclLabel="Total deal value, incl. VAT (€)"
+                  exclValue={String(removeVat(Number(editForm.total_deal_value ?? 0)))}
+                  inclValue={String(editForm.total_deal_value ?? 0)}
+                  onChange={(_, incl) =>
+                    setEditForm((f) => ({ ...f, total_deal_value: Number(incl) || 0 }))
+                  }
+                />
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-neutral-400 text-xs">Monthly fee (€)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.monthly_fee ?? 0}
-                      onChange={(e) => setEditForm((f) => ({ ...f, monthly_fee: Number(e.target.value) }))}
-                      className={`${fc} font-mono`}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-neutral-400 text-xs">Monthly revshare (€)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={editForm.monthly_revshare ?? 0}
-                      onChange={(e) => setEditForm((f) => ({ ...f, monthly_revshare: Number(e.target.value) }))}
-                      className={`${fc} font-mono`}
-                    />
-                  </div>
+                <div className="space-y-4">
+                  <VatAmountPair
+                    exclLabel="Monthly fee, excl. VAT (€)"
+                    inclLabel="Monthly fee, incl. VAT (€)"
+                    exclValue={String(removeVat(Number(editForm.monthly_fee ?? 0)))}
+                    inclValue={String(editForm.monthly_fee ?? 0)}
+                    onChange={(_, incl) =>
+                      setEditForm((f) => ({ ...f, monthly_fee: Number(incl) || 0 }))
+                    }
+                  />
+                  <VatAmountPair
+                    exclLabel="Monthly revshare, excl. VAT (€)"
+                    inclLabel="Monthly revshare, incl. VAT (€)"
+                    exclValue={String(removeVat(Number(editForm.monthly_revshare ?? 0)))}
+                    inclValue={String(editForm.monthly_revshare ?? 0)}
+                    onChange={(_, incl) =>
+                      setEditForm((f) => ({ ...f, monthly_revshare: Number(incl) || 0 }))
+                    }
+                  />
                 </div>
               )}
 
@@ -734,7 +733,7 @@ export default function FinancePage() {
                   <div className="border border-neutral-800 rounded-lg p-4 space-y-4 bg-neutral-900/40">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <Label className="text-neutral-400 text-xs">Payments received</Label>
+                        <Label className="text-neutral-400 text-xs">Payments received (incl. VAT)</Label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -781,15 +780,15 @@ export default function FinancePage() {
 
                     <div className="grid grid-cols-3 gap-3 text-sm">
                       <div>
-                        <p className="text-xs text-neutral-500">Contract value</p>
+                        <p className="text-xs text-neutral-500">Contract value (incl. VAT)</p>
                         <p className="font-mono text-neutral-200 mt-0.5">{formatCurrency(contractValue)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-neutral-500">Paid</p>
+                        <p className="text-xs text-neutral-500">Paid (incl. VAT)</p>
                         <p className="font-mono text-emerald-400 mt-0.5">{formatCurrency(amountPaid)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-neutral-500">Outstanding</p>
+                        <p className="text-xs text-neutral-500">Outstanding (incl. VAT)</p>
                         <p className={cn("font-mono mt-0.5", outstanding > 0 ? "text-orange-300" : "text-emerald-400")}>
                           {formatCurrency(outstanding)}
                         </p>

@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
       SELECT
         t.id, t.title, t.description, t.status, t.assignee,
         t.due_date, t.priority, t.position, t.created_at, t.updated_at,
-        t.project_id, t.milestone_id,
+        t.project_id, t.milestone_id, t.parent_id, t.approved, t.url,
+        t.created_by,
         p.name AS project_name,
         c.name AS company_name,
         c.id AS company_id,
@@ -32,12 +33,18 @@ export async function GET(req: NextRequest) {
       WHERE
         t.approved = true
         AND (COALESCE(${assigneeName}, '') = '' OR t.assignee = ${assigneeName})
-        AND (COALESCE(${status}, '') = '' OR t.status = ${status})
+        AND (
+          COALESCE(${status}, '') = ''
+          OR (${status} = 'active' AND (m.name IS NULL OR LOWER(m.name) != 'done'))
+          OR (${status} = 'done' AND LOWER(m.name) = 'done')
+          OR (${status} NOT IN ('active', 'done') AND t.status = ${status})
+        )
       ORDER BY
         p.name ASC,
-        CASE t.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
+        m.position ASC NULLS LAST,
+        t.position ASC,
         t.due_date ASC NULLS LAST,
-        t.position ASC
+        t.created_at ASC
     `;
     return NextResponse.json(rows);
   } catch (err) {

@@ -111,6 +111,16 @@ export function deleteMilestone(id: string): Promise<void> {
   return req(`/milestones/${id}`, { method: "DELETE" });
 }
 
+export function batchUpdateMilestones(
+  projectId: string,
+  milestones: { id?: string; name: string; color?: string | null; position: number }[]
+): Promise<Milestone[]> {
+  return req(`/projects/${projectId}/milestones/batch`, {
+    method: "PUT",
+    body: JSON.stringify({ milestones }),
+  });
+}
+
 // Tasks
 export function createTask(projectId: string, data: Partial<Task>): Promise<Task> {
   return req(`/projects/${projectId}/tasks`, { method: "POST", body: JSON.stringify(data) });

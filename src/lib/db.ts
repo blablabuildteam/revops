@@ -13,6 +13,42 @@ export async function ensureTables() {
   return initPromise;
 }
 
+async function migrateFinanceDealsToInclVat() {
+  const { rows } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'finance_deals_incl_vat'
+  `;
+  if (rows.length > 0 && rows[0].value === "true") return;
+
+  await sql`
+    UPDATE finance_deals SET
+      total_deal_value = ROUND(total_deal_value * 1.21, 2),
+      monthly_fee = ROUND(monthly_fee * 1.21, 2),
+      monthly_revshare = ROUND(monthly_revshare * 1.21, 2),
+      amount_paid = ROUND(amount_paid * 1.21, 2),
+      updated_at = now()
+  `;
+
+  await sql`
+    UPDATE finance_deals
+    SET payments = (
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'date', elem->>'date',
+          'amount', ROUND((elem->>'amount')::numeric * 1.21, 2)
+        )
+      ), '[]'::jsonb)
+      FROM jsonb_array_elements(payments) AS elem
+    )
+    WHERE jsonb_array_length(COALESCE(payments, '[]'::jsonb)) > 0
+  `;
+
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES ('finance_deals_incl_vat', 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
+}
+
 async function migrateOpportunityTypes() {
   // Drop the old constraint first — updates to 'new'/'retainer' fail while it still
   // only allows legacy values like 'new_business' and 'upsell'.
@@ -75,6 +111,7 @@ async function _init() {
         )
       `;
       await migrateOpportunityTypes();
+      await migrateFinanceDealsToInclVat();
       await backfillMissingStandardPhases();
       initialized = true;
       return;
@@ -291,6 +328,7 @@ async function _init() {
   `;
 
   await migrateOpportunityTypes();
+  await migrateFinanceDealsToInclVat();
   await backfillMissingStandardPhases();
 
   initialized = true;

@@ -281,13 +281,13 @@ export default function CompaniesPage() {
 
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div>
-                    <p className="text-xs text-neutral-600 mb-1">Revenue</p>
+                    <p className="text-xs text-neutral-600 mb-1">Revenue (excl. VAT)</p>
                     <p className="text-sm font-mono text-emerald-400 font-medium">
                       {revenue > 0 ? formatCurrency(revenue) : "—"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-neutral-600 mb-1">Pipeline</p>
+                    <p className="text-xs text-neutral-600 mb-1">Pipeline (excl. VAT)</p>
                     <p className="text-sm font-mono text-[#e8ff47] font-medium">
                       {pipeline > 0 ? formatCurrency(pipeline) : "—"}
                     </p>

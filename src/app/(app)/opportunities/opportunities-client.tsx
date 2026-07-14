@@ -407,7 +407,7 @@ export default function OpportunitiesPageClient() {
           <h1 className="text-xl font-semibold text-neutral-100">Opportunities</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {filtered.length} opportunities ·{" "}
-            <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order ·{" "}
+            <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order excl. VAT ·{" "}
             <span className="font-mono text-[#e8ff47]">
               {formatCurrency(totalWeighted)}
             </span>{" "}
@@ -519,11 +519,11 @@ export default function OpportunitiesPageClient() {
                 </th>
                 <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1">
-                    Deal Order <SortBtn col="expected_value" />
+                    Deal Order <span className="text-neutral-600 font-normal">excl. VAT</span> <SortBtn col="expected_value" />
                   </div>
                 </th>
                 <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  Committed
+                  Committed <span className="text-neutral-600 font-normal">excl. VAT</span>
                 </th>
                 <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1">
