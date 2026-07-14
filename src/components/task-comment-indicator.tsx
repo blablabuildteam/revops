@@ -9,11 +9,10 @@ export function TaskCommentIndicator({ count }: { count?: number }) {
 
   return (
     <div
-      className="flex items-center justify-center gap-0.5 text-neutral-500"
+      className="flex items-center justify-center text-neutral-500"
       title={`${count} comment${count === 1 ? "" : "s"}`}
     >
       <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-      <span className="text-[10px] font-medium leading-none tabular-nums">{count}</span>
     </div>
   );
 }

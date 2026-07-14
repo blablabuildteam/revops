@@ -1,4 +1,4 @@
-import { Milestone, Project, Task, TaskComment } from "./types";
+import { Milestone, Project, Task, TaskComment, TaskAttachment } from "./types";
 
 const base = "/api";
 
@@ -86,4 +86,40 @@ export function createEditBoardTaskComment(
     method: "POST",
     body: JSON.stringify({ body }),
   });
+}
+
+export function getEditBoardTaskAttachments(token: string, taskId: string): Promise<TaskAttachment[]> {
+  return req(`/project/${token}/tasks/${taskId}/attachments`);
+}
+
+export async function uploadEditBoardTaskAttachment(
+  token: string,
+  taskId: string,
+  file: File,
+): Promise<TaskAttachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${base}/project/${token}/tasks/${taskId}/attachments`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error ?? "Upload failed");
+  }
+  return data;
+}
+
+export async function deleteEditBoardTaskAttachment(
+  token: string,
+  taskId: string,
+  attachmentId: string,
+): Promise<void> {
+  const res = await fetch(`${base}/project/${token}/tasks/${taskId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(data.error ?? "Delete failed");
+  }
 }

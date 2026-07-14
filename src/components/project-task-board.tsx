@@ -15,9 +15,10 @@ import {
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { TaskCommentIndicator } from "@/components/task-comment-indicator";
+import { TaskRowIndicators } from "@/components/task-row-indicators";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
-import { getProject, createTask, updateTask, batchUpdateMilestones, getTaskComments, createTaskComment } from "@/lib/api";
+import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
+import { getProject, createTask, updateTask, batchUpdateMilestones, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
 import {
   createEditBoardTask,
   getEditBoardProject,
@@ -25,14 +26,17 @@ import {
   batchUpdateEditBoardMilestones,
   getEditBoardTaskComments,
   createEditBoardTaskComment,
+  getEditBoardTaskAttachments,
+  uploadEditBoardTaskAttachment,
+  deleteEditBoardTaskAttachment,
 } from "@/lib/edit-board-api";
 import {
-  Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor,
+  Milestone, Task, resolvePhaseColor,
 } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 export const TASK_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_28px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const UNASSIGNED_ID = "unassigned";
 
@@ -46,6 +50,9 @@ type BoardApi = {
   ) => Promise<Milestone[]>;
   getTaskComments: (taskId: string) => Promise<import("@/lib/types").TaskComment[]>;
   createTaskComment: (taskId: string, body: string) => Promise<import("@/lib/types").TaskComment>;
+  getTaskAttachments: (taskId: string) => Promise<import("@/lib/types").TaskAttachment[]>;
+  uploadTaskAttachment: (taskId: string, file: File) => Promise<import("@/lib/types").TaskAttachment>;
+  deleteTaskAttachment: (taskId: string, attachmentId: string) => Promise<void>;
 };
 
 const defaultBoardApi: BoardApi = {
@@ -55,6 +62,9 @@ const defaultBoardApi: BoardApi = {
   batchUpdateMilestones,
   getTaskComments,
   createTaskComment,
+  getTaskAttachments,
+  uploadTaskAttachment,
+  deleteTaskAttachment,
 };
 
 const BoardApiContext = createContext<BoardApi>(defaultBoardApi);
@@ -75,6 +85,10 @@ export function buildEditBoardApi(editToken: string): BoardApi {
       batchUpdateEditBoardMilestones(editToken, milestones),
     getTaskComments: (taskId) => getEditBoardTaskComments(editToken, taskId),
     createTaskComment: (taskId, body) => createEditBoardTaskComment(editToken, taskId, body),
+    getTaskAttachments: (taskId) => getEditBoardTaskAttachments(editToken, taskId),
+    uploadTaskAttachment: (taskId, file) => uploadEditBoardTaskAttachment(editToken, taskId, file),
+    deleteTaskAttachment: (taskId, attachmentId) =>
+      deleteEditBoardTaskAttachment(editToken, taskId, attachmentId),
   };
 }
 
@@ -130,6 +144,7 @@ function InlineAssigneeSelect({
   onUpdate: (t: Task) => void;
 }) {
   const boardApi = useBoardApi();
+  const assigneeUsers = useAssigneeUsers();
   return (
     <Select
       value={task.assignee || "none"}
@@ -143,13 +158,12 @@ function InlineAssigneeSelect({
         onClick={(e) => e.stopPropagation()}
         onPointerDown={cancelDrag}
       >
-        <SelectValue placeholder="—">{task.assignee || "—"}</SelectValue>
+        <SelectValue placeholder="—">
+          <AssigneeLabel name={task.assignee} users={assigneeUsers} />
+        </SelectValue>
       </SelectTrigger>
       <SelectContent className="bg-neutral-800 border-neutral-700">
-        <SelectItem value="none" className="text-neutral-500 text-xs">—</SelectItem>
-        {TASK_ASSIGNEES.map((name) => (
-          <SelectItem key={name} value={name} className="text-neutral-100 text-xs">{name}</SelectItem>
-        ))}
+        <AssigneeSelectItems users={assigneeUsers} />
       </SelectContent>
     </Select>
   );
@@ -356,7 +370,7 @@ function TaskRow({
         onRename={(title) => onRename(task.id, title)}
         onAddSubtask={onAddSubtask}
       />
-      <TaskCommentIndicator count={task.comment_count} />
+      <TaskRowIndicators task={task} />
       <PriorityFlag
         priority={task.priority ?? "low"}
         onChange={(next) => { boardApi.updateTask(task.id, { priority: next }).then(onUpdate); }}

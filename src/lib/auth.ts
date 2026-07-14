@@ -10,6 +10,7 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
+  avatar_url?: string | null;
 }
 
 export async function signToken(user: SessionUser): Promise<string> {
@@ -42,7 +43,7 @@ export async function resolveSessionUser(): Promise<SessionUser | null> {
   if (!session) return null;
 
   const { rows } = await sql`
-    SELECT id, email, name FROM users WHERE email = ${session.email.toLowerCase()}
+    SELECT id, email, name, avatar_url FROM users WHERE email = ${session.email.toLowerCase()}
   `;
   if (rows[0]) {
     return rows[0] as SessionUser;

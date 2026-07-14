@@ -13,10 +13,12 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { Task, TaskComment, TASK_ASSIGNEES, TaskPriority } from "@/lib/types";
+import { Task, TaskComment, TaskAttachment, TaskPriority } from "@/lib/types";
+import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
 import { formatDateTime, toDateInputValue } from "@/lib/format";
+import { TaskAttachments, TaskAttachmentsApi } from "@/components/task-attachments";
 
-export type TaskDetailDialogApi = {
+export type TaskDetailDialogApi = TaskAttachmentsApi & {
   updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
   getTaskComments: (taskId: string) => Promise<TaskComment[]>;
   createTaskComment: (taskId: string, body: string) => Promise<TaskComment>;
@@ -44,11 +46,14 @@ export function TaskDetailDialog({
     priority: "low" as TaskPriority,
   });
   const [comments, setComments] = useState<TaskComment[]>([]);
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
   const [commentDraft, setCommentDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [commentsLoading, setCommentsLoading] = useState(false);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
+  const assigneeUsers = useAssigneeUsers();
 
   useEffect(() => {
     if (task && open) {
@@ -62,10 +67,15 @@ export function TaskDetailDialog({
       });
       setCommentDraft("");
       setCommentsLoading(true);
+      setAttachmentsLoading(true);
       api.getTaskComments(task.id)
         .then(setComments)
         .catch(() => setComments([]))
         .finally(() => setCommentsLoading(false));
+      api.getTaskAttachments(task.id)
+        .then(setAttachments)
+        .catch(() => setAttachments([]))
+        .finally(() => setAttachmentsLoading(false));
     }
   }, [task?.id, open, api]);
 
@@ -90,7 +100,7 @@ export function TaskDetailDialog({
         url: form.url || null,
         priority: form.priority,
       });
-      onSave({ ...updated, comment_count: task.comment_count ?? comments.length });
+      onSave({ ...updated, comment_count: task.comment_count ?? comments.length, has_attachments: attachments.length > 0 });
       onClose();
     } finally {
       setLoading(false);
@@ -155,14 +165,15 @@ export function TaskDetailDialog({
                     >
                       <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100 w-full">
                         <SelectValue placeholder="Choose person">
-                          {form.assignee || "Nobody"}
+                          <AssigneeLabel
+                            name={form.assignee || null}
+                            users={assigneeUsers}
+                            placeholder="Nobody"
+                          />
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent className="bg-neutral-800 border-neutral-700">
-                        <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
-                        {TASK_ASSIGNEES.map((name) => (
-                          <SelectItem key={name} value={name} className="text-neutral-100">{name}</SelectItem>
-                        ))}
+                        <AssigneeSelectItems users={assigneeUsers} noneLabel="Nobody" itemClassName="text-sm" />
                       </SelectContent>
                     </Select>
                   </div>
@@ -203,6 +214,16 @@ export function TaskDetailDialog({
                     className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none"
                   />
                 </div>
+                <TaskAttachments
+                  taskId={task.id}
+                  attachments={attachments}
+                  loading={attachmentsLoading}
+                  onChange={(next) => {
+                    setAttachments(next);
+                    onSave({ ...task, has_attachments: next.length > 0 });
+                  }}
+                  api={api}
+                />
               </div>
               <DialogFooter className="bg-transparent border-t border-neutral-800 px-8 py-5 mt-auto shrink-0 mx-0 mb-0 rounded-none">
                 <Button

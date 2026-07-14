@@ -76,6 +76,7 @@ async function _init() {
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
       await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
+      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
       await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
@@ -106,6 +107,23 @@ async function _init() {
       await sql`
         CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
         ON task_comments (task_id, created_at)
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS task_attachments (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          file_name TEXT NOT NULL,
+          file_url TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          content_type TEXT NOT NULL,
+          uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          uploaded_by_name TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT now()
+        )
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS task_attachments_task_id_created_at
+        ON task_attachments (task_id, created_at)
       `;
       await sql`
         CREATE TABLE IF NOT EXISTS finance_deals (
@@ -262,6 +280,7 @@ async function _init() {
       created_at TIMESTAMPTZ DEFAULT now()
     )
   `;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS todos (
@@ -309,6 +328,25 @@ async function _init() {
   await sql`
     CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
     ON task_comments (task_id, created_at)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS task_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      content_type TEXT NOT NULL,
+      uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      uploaded_by_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS task_attachments_task_id_created_at
+    ON task_attachments (task_id, created_at)
   `;
 
   await sql`

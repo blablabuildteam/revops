@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
+import { UserAvatar } from "@/components/user-avatar";
+import type { SessionUser } from "@/lib/auth";
 import { useEffect, useState } from "react";
 
 const nav = [
@@ -25,8 +27,6 @@ const nav = [
   { href: "/finance", label: "Finance", icon: Euro },
   { href: "/companies", label: "Companies", icon: Building2 },
 ];
-
-interface SessionUser { id: string; email: string; name: string }
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -98,10 +98,22 @@ export function Sidebar() {
       {/* User + logout */}
       <div className="px-4 py-4 border-t border-neutral-800 space-y-3">
         {user && (
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-neutral-300 truncate">{user.name}</p>
-              <p className="text-[10px] text-neutral-600 truncate">{user.email}</p>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <UserAvatar
+                id={user.id}
+                name={user.name}
+                avatarUrl={user.avatar_url}
+                size="sm"
+                uploadable
+                onAvatarChange={(avatarUrl) =>
+                  setUser((prev) => (prev ? { ...prev, avatar_url: avatarUrl } : prev))
+                }
+              />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-neutral-300 truncate">{user.name}</p>
+                <p className="text-[10px] text-neutral-600 truncate">{user.email}</p>
+              </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button

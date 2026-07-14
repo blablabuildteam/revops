@@ -38,22 +38,26 @@ import { BinaryText } from "@/components/binary-text";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
-import { TaskCommentIndicator } from "@/components/task-comment-indicator";
+import { TaskRowIndicators } from "@/components/task-row-indicators";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
+import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment } from "@/lib/api";
+import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
-import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
+import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[20px_minmax(0,1fr)_28px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const taskDetailApi = {
   updateTask,
   getTaskComments,
   createTaskComment,
+  getTaskAttachments,
+  uploadTaskAttachment,
+  deleteTaskAttachment,
 };
 
 type TasksByMilestone = Record<string, Task[]>;
@@ -247,6 +251,7 @@ function InlineAssigneeSelect({
   task: Task;
   onUpdate: (t: Task) => void;
 }) {
+  const assigneeUsers = useAssigneeUsers();
   return (
     <Select
       value={task.assignee || "none"}
@@ -265,14 +270,11 @@ function InlineAssigneeSelect({
         onPointerDown={cancelDrag}
       >
         <SelectValue placeholder="—">
-          {task.assignee || "—"}
+          <AssigneeLabel name={task.assignee} users={assigneeUsers} />
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="bg-neutral-800 border-neutral-700">
-        <SelectItem value="none" className="text-neutral-500 text-xs">—</SelectItem>
-        {TASK_ASSIGNEES.map((name) => (
-          <SelectItem key={name} value={name} className="text-neutral-100 text-xs">{name}</SelectItem>
-        ))}
+        <AssigneeSelectItems users={assigneeUsers} />
       </SelectContent>
     </Select>
   );
@@ -533,7 +535,7 @@ function SubtaskRow({
         onRename={(title) => onRename(task.id, title)}
       />
 
-      <TaskCommentIndicator count={task.comment_count} />
+      <TaskRowIndicators task={task} />
 
       <PriorityFlag
         priority={task.priority ?? "low"}
@@ -643,7 +645,7 @@ function SortableTaskRow({
         />
       </div>
 
-      <TaskCommentIndicator count={task.comment_count} />
+      <TaskRowIndicators task={task} />
 
       <PriorityFlag
         priority={task.priority ?? "low"}
@@ -813,6 +815,7 @@ function BulkActionsBar({
 }) {
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
+  const assigneeUsers = useAssigneeUsers();
 
   if (count === 0) return null;
 
@@ -920,10 +923,7 @@ function BulkActionsBar({
           <SelectValue placeholder="Assignee" />
         </SelectTrigger>
         <SelectContent className="bg-neutral-800 border-neutral-700">
-          <SelectItem value="none" className="text-neutral-500 text-xs">Nobody</SelectItem>
-          {TASK_ASSIGNEES.map((name) => (
-            <SelectItem key={name} value={name} className="text-neutral-100 text-xs">{name}</SelectItem>
-          ))}
+          <AssigneeSelectItems users={assigneeUsers} noneLabel="Nobody" />
         </SelectContent>
       </Select>
 

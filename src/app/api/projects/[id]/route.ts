@@ -25,7 +25,10 @@ export async function GET(
     const { rows: tasks } = await sql`
       SELECT
         t.*,
-        COALESCE(cc.count, 0)::int AS comment_count
+        COALESCE(cc.count, 0)::int AS comment_count,
+        EXISTS (
+          SELECT 1 FROM task_attachments ta WHERE ta.task_id = t.id
+        ) AS has_attachments
       FROM tasks t
       LEFT JOIN (
         SELECT task_id, COUNT(*)::int AS count

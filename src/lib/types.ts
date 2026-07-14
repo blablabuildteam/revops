@@ -192,6 +192,7 @@ export interface Task {
   priority: TaskPriority;
   position: number;
   comment_count?: number;
+  has_attachments?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -202,6 +203,18 @@ export interface TaskComment {
   author_user_id?: string | null;
   author_name: string;
   body: string;
+  created_at: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  file_name: string;
+  file_url: string;
+  file_size: number;
+  content_type: string;
+  uploaded_by_user_id?: string | null;
+  uploaded_by_name: string;
   created_at: string;
 }
 

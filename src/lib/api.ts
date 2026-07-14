@@ -9,6 +9,7 @@ import {
   Milestone,
   Task,
   TaskComment,
+  TaskAttachment,
 } from "./types";
 
 const base = "/api";
@@ -144,6 +145,34 @@ export function createTaskComment(taskId: string, body: string) {
     method: "POST",
     body: JSON.stringify({ body }),
   });
+}
+
+export function getTaskAttachments(taskId: string) {
+  return req<TaskAttachment[]>(`/tasks/${taskId}/attachments`);
+}
+
+export async function uploadTaskAttachment(taskId: string, file: File): Promise<TaskAttachment> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${base}/tasks/${taskId}/attachments`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error ?? "Upload failed");
+  }
+  return data;
+}
+
+export async function deleteTaskAttachment(taskId: string, attachmentId: string): Promise<void> {
+  const res = await fetch(`${base}/tasks/${taskId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(data.error ?? "Delete failed");
+  }
 }
 
 // Public client view
