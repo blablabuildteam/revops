@@ -2,10 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, use, useCallback, useRef } from "react";
+import { useEffect, useState, use, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Check, X, Copy, Trash2, GripVertical,
+  ArrowLeft, Plus, Check, X, Copy, Trash2, Users, Calendar, FolderKanban,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -42,30 +42,37 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getProject, createMilestone, createTask, updateTask, deleteTask, updateMilestone, deleteMilestone, deleteProject } from "@/lib/api";
-import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR, PHASE_COLOR_PRESETS } from "@/lib/types";
-import { formatDate } from "@/lib/format";
+import { getProject, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
+import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
+import { formatDate, toDateInputValue } from "@/lib/format";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[24px_minmax(0,1fr)_140px_150px_150px_32px] items-center gap-x-4 gap-y-2";
-
-const milestoneStatusColors = {
-  pending: "text-neutral-500 bg-neutral-800",
-  in_progress: "text-blue-400 bg-blue-950",
-  completed: "text-emerald-400 bg-emerald-950",
-};
+  "grid grid-cols-[20px_minmax(0,1fr)_140px_150px_150px_32px] items-center gap-x-4 gap-y-2";
 
 type TasksByMilestone = Record<string, Task[]>;
 type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
+
+const UNASSIGNED_ID = "unassigned";
+
+function isApprovedTask(task: Task) {
+  return task.approved !== false;
+}
 
 function sortByPosition(tasks: Task[]) {
   return [...tasks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
 }
 
-function buildTasksByMilestone(milestones: (Milestone & { tasks: Task[] })[]): TasksByMilestone {
+function buildTasksByMilestone(
+  milestones: (Milestone & { tasks: Task[] })[],
+  unassignedTasks: Task[] = [],
+): TasksByMilestone {
   const map: TasksByMilestone = {};
   for (const m of milestones) {
     map[m.id] = sortByPosition(m.tasks || []);
+  }
+  const unassigned = sortByPosition(unassignedTasks.filter(isApprovedTask));
+  if (unassigned.length > 0) {
+    map[UNASSIGNED_ID] = unassigned;
   }
   return map;
 }
@@ -75,6 +82,7 @@ function findContainer(
   tasksByMilestone: TasksByMilestone,
   milestoneIds: string[],
 ): string | null {
+  if (id === UNASSIGNED_ID) return UNASSIGNED_ID;
   if (milestoneIds.includes(id)) return id;
   for (const [milestoneId, tasks] of Object.entries(tasksByMilestone)) {
     if (tasks.some((t) => t.id === id)) return milestoneId;
@@ -82,44 +90,40 @@ function findContainer(
   return null;
 }
 
-function PhaseColorPicker({
+function containerToMilestoneId(containerId: string): string | null {
+  return containerId === UNASSIGNED_ID ? null : containerId;
+}
+
+function PhaseColorInput({
   value,
   onChange,
-  compact,
 }: {
   value: string;
   onChange: (color: string) => void;
-  compact?: boolean;
 }) {
   return (
-    <div className={`flex items-center gap-1.5 ${compact ? "" : "shrink-0"}`} onClick={(e) => e.stopPropagation()}>
-      {PHASE_COLOR_PRESETS.map((preset) => (
-        <button
-          key={preset.value}
-          type="button"
-          title={preset.label}
-          onClick={() => onChange(preset.value)}
-          className={`rounded-full border-2 transition-transform hover:scale-110 ${compact ? "w-3.5 h-3.5" : "w-5 h-5"} ${value === preset.value ? "border-white" : "border-neutral-700"}`}
-          style={{ backgroundColor: preset.value }}
-        />
-      ))}
-      <label
-        title="Custom color"
-        className={`relative rounded-full border-2 border-neutral-600 overflow-hidden cursor-pointer hover:scale-110 transition-transform ${compact ? "w-3.5 h-3.5" : "w-5 h-5"}`}
-        style={{
-          background: value && !PHASE_COLOR_PRESETS.some((p) => p.value === value)
-            ? value
-            : "conic-gradient(red, yellow, lime, aqua, blue, magenta, red)",
-        }}
+    <label
+      title="Phase color"
+      className="group relative h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-neutral-700 p-[3px] transition-colors hover:border-neutral-500"
+      style={{
+        background: "conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #84cc16, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+      }}
+    >
+      <span
+        className="flex h-full w-full items-center justify-center rounded-[5px] bg-neutral-950/90"
       >
-        <input
-          type="color"
-          value={value.startsWith("#") && value.length >= 7 ? value : CUSTOM_PHASE_DEFAULT_COLOR}
-          onChange={(e) => onChange(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+        <span
+          className="h-3.5 w-3.5 rounded-full border border-neutral-600 shadow-sm transition-transform group-hover:scale-110"
+          style={{ backgroundColor: value }}
         />
-      </label>
-    </div>
+      </span>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
+    </label>
   );
 }
 
@@ -158,7 +162,7 @@ function TaskDetailDialog({
   useEffect(() => {
     if (task && open) {
       setForm({
-        due_date: task.due_date ? task.due_date.slice(0, 10) : "",
+        due_date: toDateInputValue(task.due_date),
         assignee: task.assignee ?? "",
         description: task.description ?? "",
         url: task.url ?? "",
@@ -172,10 +176,10 @@ function TaskDetailDialog({
     setLoading(true);
     try {
       const updated = await updateTask(task.id, {
-        due_date: form.due_date || undefined,
-        assignee: form.assignee || undefined,
-        description: form.description || undefined,
-        url: form.url || undefined,
+        due_date: form.due_date || null,
+        assignee: form.assignee || null,
+        description: form.description || null,
+        url: form.url || null,
       });
       onSave(updated);
       onClose();
@@ -345,14 +349,14 @@ function InlineDateInput({
   task: Task;
   onUpdate: (t: Task) => void;
 }) {
-  const value = task.due_date ? task.due_date.slice(0, 10) : "";
+  const value = toDateInputValue(task.due_date);
 
   return (
     <Input
       type="date"
       value={value}
       onChange={(e) => {
-        updateTask(task.id, { due_date: e.target.value || undefined }).then(onUpdate);
+        updateTask(task.id, { due_date: e.target.value || null }).then(onUpdate);
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
@@ -372,14 +376,15 @@ function InlinePhaseSelect({
   milestones: Milestone[];
   onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
 }) {
+  const isUnassigned = currentMilestoneId === UNASSIGNED_ID;
   const current = milestones.find((m) => m.id === currentMilestoneId);
   const currentColor = current ? resolvePhaseColor(current.name, current.color) : undefined;
 
   return (
     <Select
-      value={currentMilestoneId}
+      value={isUnassigned ? "unassigned" : currentMilestoneId}
       onValueChange={(v) => {
-        if (!v || v === currentMilestoneId) return;
+        if (!v || v === "unassigned" || v === currentMilestoneId) return;
         onPhaseChange(task.id, currentMilestoneId, v);
       }}
     >
@@ -390,7 +395,9 @@ function InlinePhaseSelect({
         onPointerDown={cancelDrag}
       >
         <SelectValue placeholder="Phase">
-          {current && (
+          {isUnassigned ? (
+            <span className="text-neutral-500 truncate">Unassigned</span>
+          ) : current && (
             <span className="flex items-center gap-1.5 min-w-0">
               <span
                 className="w-2 h-2 rounded-full shrink-0"
@@ -423,6 +430,56 @@ function InlinePhaseSelect({
   );
 }
 
+function BinaryText({ text, className }: { text: string; className?: string }) {
+  const [display, setDisplay] = useState(text);
+  const frameRef = useRef(0);
+
+  const id = useMemo(() => text, [text]);
+
+  useEffect(() => {
+    const chars = text.length;
+    if (chars === 0) {
+      setDisplay("");
+      return;
+    }
+
+    const duration = Math.min(1000, Math.max(300, chars * 35));
+    const start = performance.now();
+
+    setDisplay(
+      text
+        .split("")
+        .map((ch) => (ch === " " ? " " : Math.random() > 0.5 ? "1" : "0"))
+        .join(""),
+    );
+
+    function tick(now: number) {
+      const progress = Math.min((now - start) / duration, 1);
+      const revealed = Math.floor(progress * chars);
+
+      setDisplay(
+        text
+          .split("")
+          .map((ch, i) => {
+            if (i < revealed) return ch;
+            if (ch === " ") return " ";
+            return Math.random() > 0.5 ? "1" : "0";
+          })
+          .join(""),
+      );
+
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(tick);
+      }
+    }
+
+    frameRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [id, text]);
+
+  return <span className={className}>{display}</span>;
+}
+
 function SortableTaskRow({
   task,
   currentMilestoneId,
@@ -431,6 +488,8 @@ function SortableTaskRow({
   onDelete,
   onClick,
   onPhaseChange,
+  selected,
+  onToggleSelect,
 }: {
   task: Task;
   currentMilestoneId: string;
@@ -439,6 +498,8 @@ function SortableTaskRow({
   onDelete: (id: string) => void;
   onClick: (t: Task) => void;
   onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const {
     attributes,
@@ -464,13 +525,29 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-grab active:cursor-grabbing touch-none`}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group cursor-grab active:cursor-grabbing touch-none ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
       {...attributes}
       {...listeners}
     >
-      <div className="shrink-0 text-neutral-700 p-0.5 pointer-events-none">
-        <GripVertical className="w-3.5 h-3.5" />
-      </div>
+      <label
+        className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(task.id)}
+          className="sr-only"
+        />
+        <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+          selected
+            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+        }`}>
+          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+        </span>
+      </label>
 
       <button
         type="button"
@@ -478,7 +555,7 @@ function SortableTaskRow({
         className="min-w-0 text-left"
       >
         <p className="text-sm truncate text-neutral-200">
-          {task.title}
+          <BinaryText text={task.title} />
         </p>
         {task.description && (
           <p className="text-xs text-neutral-600 truncate">{task.description}</p>
@@ -502,6 +579,98 @@ function SortableTaskRow({
         className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1 rounded justify-self-end cursor-pointer"
       >
         <Trash2 className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
+function BulkActionsBar({
+  count,
+  milestones,
+  onBulkPhaseChange,
+  onBulkUpdate,
+  onClear,
+}: {
+  count: number;
+  milestones: Milestone[];
+  onBulkPhaseChange: (milestoneId: string) => void;
+  onBulkUpdate: (patch: Partial<Task>) => void;
+  onClear: () => void;
+}) {
+  if (count === 0) return null;
+
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
+      <span className="text-sm font-medium text-[#e8ff47] tabular-nums whitespace-nowrap">
+        {count} task{count !== 1 ? "s" : ""} selected
+      </span>
+
+      <div className="w-px h-5 bg-neutral-700" />
+
+      <Select onValueChange={(v: string | null) => { if (v) onBulkPhaseChange(v); }}>
+        <SelectTrigger
+          size="sm"
+          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+          onPointerDown={cancelDrag}
+        >
+          <FolderKanban className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <SelectValue placeholder="Phase" />
+        </SelectTrigger>
+        <SelectContent className="bg-neutral-800 border-neutral-700">
+          {milestones.map((m) => {
+            const color = resolvePhaseColor(m.name, m.color);
+            return (
+              <SelectItem key={m.id} value={m.id} className="text-xs">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span style={{ color }}>{m.name}</span>
+                </span>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+
+      <Select
+        onValueChange={(v: string | null) =>
+          onBulkUpdate({ assignee: !v || v === "none" ? null : v })
+        }
+      >
+        <SelectTrigger
+          size="sm"
+          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+          onPointerDown={cancelDrag}
+        >
+          <Users className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <SelectValue placeholder="Assignee" />
+        </SelectTrigger>
+        <SelectContent className="bg-neutral-800 border-neutral-700">
+          <SelectItem value="none" className="text-neutral-500 text-xs">Nobody</SelectItem>
+          {TASK_ASSIGNEES.map((name) => (
+            <SelectItem key={name} value={name} className="text-neutral-100 text-xs">{name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <label className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 cursor-pointer hover:border-neutral-600 transition-colors">
+        <Calendar className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+        <input
+          type="date"
+          className="bg-transparent border-none outline-none text-xs text-neutral-300 cursor-pointer w-[110px] font-mono"
+          onChange={(e) => {
+            if (e.target.value) onBulkUpdate({ due_date: e.target.value });
+          }}
+        />
+      </label>
+
+      <div className="w-px h-5 bg-neutral-700" />
+
+      <button
+        onClick={onClear}
+        className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors px-2 py-1.5 rounded hover:bg-neutral-800"
+      >
+        <X className="w-3.5 h-3.5" />
+        Clear
       </button>
     </div>
   );
@@ -561,91 +730,104 @@ function MilestoneSection({
   projectId,
   tasks,
   onDelete,
-  onCycleStatus,
   onTaskUpdate,
   onTaskDelete,
   onTaskAdd,
   onTaskClick,
   onPhaseChange,
-  onColorChange,
+  isUnassigned,
+  selectedIds,
+  onToggleSelect,
+  onTogglePhase,
 }: {
   milestone: Milestone;
   milestones: Milestone[];
   projectId: string;
   tasks: Task[];
   onDelete: (id: string) => void;
-  onCycleStatus: () => void;
   onTaskUpdate: (t: Task) => void;
   onTaskDelete: (id: string) => void;
   onTaskAdd: (t: Task) => void;
   onTaskClick: (t: Task) => void;
   onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
-  onColorChange: (milestoneId: string, color: string) => void;
+  isUnassigned?: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onTogglePhase: (taskIds: string[]) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: milestone.id });
-  const [colorOpen, setColorOpen] = useState(false);
 
-  const pendingTasks = tasks.filter((t) => !t.approved);
-  const approvedTasks = sortByPosition(tasks.filter((t) => t.approved));
+  const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
+  const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
   const total = approvedTasks.length;
-  const titleColor = resolvePhaseColor(milestone.name, milestone.color);
-  const pickerValue = milestone.color ?? titleColor;
+  const titleColor = isUnassigned
+    ? "#a3a3a3"
+    : resolvePhaseColor(milestone.name, milestone.color);
+
+  const approvedIds = approvedTasks.map((t) => t.id);
+  const allPhaseSelected = total > 0 && approvedIds.every((id) => selectedIds.has(id));
+  const somePhaseSelected = approvedIds.some((id) => selectedIds.has(id));
 
   function handleApprove(id: string) {
     updateTask(id, { approved: true }).then(onTaskUpdate);
   }
 
   return (
-    <div className={`border border-neutral-800 rounded-lg overflow-hidden transition-colors ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
-      <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800">
-        <button onClick={onCycleStatus}
-          className={`text-xs px-2 py-0.5 rounded font-mono cursor-pointer ${milestoneStatusColors[milestone.status]}`}>
-          {milestone.status === "pending" ? "Planned" : milestone.status === "in_progress" ? "In progress" : "Completed"}
-        </button>
-        <div className="flex-1">
-          <button
-            type="button"
-            onClick={() => setColorOpen((open) => !open)}
-            className="flex items-center gap-2 font-medium text-left hover:opacity-80 transition-opacity"
-          >
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: titleColor }}
-            />
-            <span style={{ color: titleColor }}>{milestone.name}</span>
-          </button>
+    <div className={`border rounded-lg overflow-hidden transition-colors ${
+      isUnassigned
+        ? "border-amber-900/50 bg-amber-950/10"
+        : "border-neutral-800"
+    } ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
+      <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800 group/phase">
+        <label
+          className={`flex items-center justify-center cursor-pointer transition-opacity ${
+            somePhaseSelected || allPhaseSelected ? "opacity-100" : "opacity-0 group-hover/phase:opacity-100"
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            checked={allPhaseSelected}
+            onChange={() => onTogglePhase(approvedIds)}
+            className="sr-only"
+            disabled={total === 0}
+          />
+          <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+            allPhaseSelected
+              ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+              : somePhaseSelected
+                ? "border-[#e8ff47]/30 bg-[#e8ff47]/5"
+                : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+          }`}>
+            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#e8ff47]/60" />}
+          </span>
+        </label>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: titleColor }}
+          />
+          <h3 className="font-medium truncate" style={{ color: titleColor }}>
+            {milestone.name}
+          </h3>
         </div>
         <div className="flex items-center gap-3">
-          {pendingTasks.length > 0 && (
+          {!isUnassigned && pendingTasks.length > 0 && (
             <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
           )}
           <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
-          {milestone.due_date && (
+          {!isUnassigned && milestone.due_date && (
             <span className="text-xs text-neutral-700 font-mono">{formatDate(milestone.due_date)}</span>
           )}
-          <button onClick={() => onDelete(milestone.id)}
-            className="text-neutral-700 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {!isUnassigned && (
+            <button onClick={() => onDelete(milestone.id)}
+              className="text-neutral-700 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
-
-      {colorOpen && (
-        <div
-          className="flex items-center gap-2 px-4 py-2 bg-neutral-900/40 border-b border-neutral-800"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-[10px] uppercase tracking-wide text-neutral-600 shrink-0">Color</span>
-          <PhaseColorPicker
-            compact
-            value={pickerValue}
-            onChange={(color) => {
-              onColorChange(milestone.id, color);
-              setColorOpen(false);
-            }}
-          />
-        </div>
-      )}
 
       {pendingTasks.map((task) => (
         <PendingTaskRow
@@ -669,6 +851,8 @@ function MilestoneSection({
                 onDelete={onTaskDelete}
                 onClick={onTaskClick}
                 onPhaseChange={onPhaseChange}
+                selected={selectedIds.has(task.id)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
           </div>
@@ -678,7 +862,7 @@ function MilestoneSection({
         )}
       </div>
 
-      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={milestone.id} />
+      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
     </div>
   );
 }
@@ -697,9 +881,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [deleting, setDeleting] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const tasksRef = useRef<TasksByMilestone>({});
 
-  const milestoneIds = project?.milestones.map((m) => m.id) ?? [];
+  const milestoneIds = [
+    ...(project?.milestones.map((m) => m.id) ?? []),
+    ...(tasksByMilestone[UNASSIGNED_ID]?.length ? [UNASSIGNED_ID] : []),
+  ];
 
   useEffect(() => {
     tasksRef.current = tasksByMilestone;
@@ -714,17 +902,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     getProject(id).then((p) => {
       const detail = p as ProjectDetail;
       setProject(detail);
-      setTasksByMilestone(buildTasksByMilestone(detail.milestones));
+      setTasksByMilestone(buildTasksByMilestone(detail.milestones, detail.unassigned_tasks || []));
       setLoading(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const persistContainer = useCallback(async (milestoneId: string, tasks: Task[]) => {
+  const persistContainer = useCallback(async (containerId: string, tasks: Task[]) => {
     await Promise.all(
       tasks.map((t, i) =>
         updateTask(t.id, {
-          milestone_id: milestoneId,
+          milestone_id: containerToMilestoneId(containerId),
           position: i,
         }),
       ),
@@ -734,21 +922,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   function handleTaskUpdate(updated: Task) {
     setTasksByMilestone((prev) => {
       const next = { ...prev };
-      for (const milestoneId of Object.keys(next)) {
-        const idx = next[milestoneId].findIndex((t) => t.id === updated.id);
-        if (idx !== -1) {
-          const newMilestoneId = updated.milestone_id ?? milestoneId;
-          if (newMilestoneId !== milestoneId) {
-            next[milestoneId] = next[milestoneId].filter((t) => t.id !== updated.id);
-            next[newMilestoneId] = sortByPosition([...(next[newMilestoneId] || []), updated]);
-          } else {
-            next[milestoneId] = sortByPosition(
-              next[milestoneId].map((t) => (t.id === updated.id ? updated : t)),
-            );
-          }
+      let oldContainer: string | null = null;
+      for (const containerId of Object.keys(next)) {
+        if (next[containerId].some((t) => t.id === updated.id)) {
+          oldContainer = containerId;
           break;
         }
       }
+      const newContainer = updated.milestone_id ?? UNASSIGNED_ID;
+
+      if (oldContainer) {
+        next[oldContainer] = next[oldContainer].filter((t) => t.id !== updated.id);
+      }
+
+      if (isApprovedTask(updated)) {
+        next[newContainer] = sortByPosition([
+          ...(next[newContainer] || []).filter((t) => t.id !== updated.id),
+          updated,
+        ]);
+      } else if (oldContainer) {
+        next[oldContainer] = sortByPosition([...(next[oldContainer] || []), updated]);
+      }
+
+      if (next[UNASSIGNED_ID]?.length === 0) {
+        delete next[UNASSIGNED_ID];
+      }
+
       return next;
     });
     if (selectedTask?.id === updated.id) setSelectedTask(updated);
@@ -769,16 +968,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  function handleTaskAdd(milestoneId: string, task: Task) {
+  function handleTaskAdd(containerId: string, task: Task) {
+    const bucket = task.milestone_id ?? UNASSIGNED_ID;
     setTasksByMilestone((prev) => ({
       ...prev,
-      [milestoneId]: sortByPosition([...(prev[milestoneId] || []), task]),
+      [bucket]: sortByPosition([...(prev[bucket] || []), task]),
     }));
   }
 
   async function handleTaskPhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
     const current = tasksRef.current;
-    const targetApproved = (current[toMilestoneId] || []).filter((t) => t.approved);
+    const targetApproved = (current[toMilestoneId] || []).filter(isApprovedTask);
     const newPosition = targetApproved.length;
 
     const updated = await updateTask(taskId, {
@@ -787,9 +987,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     });
 
     setTasksByMilestone((prev) => {
-      const fromPending = (prev[fromMilestoneId] || []).filter((t) => !t.approved);
-      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => t.approved && t.id !== taskId);
-      const toPending = (prev[toMilestoneId] || []).filter((t) => !t.approved);
+      const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
+      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && t.id !== taskId);
+      const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
       const toApproved = [...targetApproved, updated];
 
       const next = {
@@ -801,8 +1001,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       return next;
     });
 
-    const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter((t) => t.approved);
-    const toApproved = (tasksRef.current[toMilestoneId] || []).filter((t) => t.approved);
+    const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter(isApprovedTask);
+    const toApproved = (tasksRef.current[toMilestoneId] || []).filter(isApprovedTask);
     await Promise.all([
       persistContainer(fromMilestoneId, fromApproved),
       persistContainer(toMilestoneId, toApproved),
@@ -820,8 +1020,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (!activeContainer || !overContainer || activeContainer === overContainer) return;
 
     setTasksByMilestone((prev) => {
-      const activeItems = prev[activeContainer].filter((t) => t.approved);
-      const overItems = prev[overContainer].filter((t) => t.approved);
+      const activeItems = prev[activeContainer].filter(isApprovedTask);
+      const overItems = prev[overContainer].filter(isApprovedTask);
       const activeIndex = activeItems.findIndex((t) => t.id === active.id);
       if (activeIndex === -1) return prev;
 
@@ -830,13 +1030,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         : overItems.findIndex((t) => t.id === over.id);
 
       const task = activeItems[activeIndex];
-      const pendingInActive = prev[activeContainer].filter((t) => !t.approved);
-      const pendingInOver = prev[overContainer].filter((t) => !t.approved);
+      const pendingInActive = prev[activeContainer].filter((t) => !isApprovedTask(t));
+      const pendingInOver = prev[overContainer].filter((t) => !isApprovedTask(t));
 
       const newActiveApproved = activeItems.filter((t) => t.id !== active.id);
       const newOverApproved = [
         ...overItems.slice(0, overIndex >= 0 ? overIndex : overItems.length),
-        { ...task, milestone_id: overContainer },
+        { ...task, milestone_id: containerToMilestoneId(overContainer) },
         ...overItems.slice(overIndex >= 0 ? overIndex : overItems.length),
       ];
 
@@ -862,11 +1062,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     let nextState = current;
 
     if (activeContainer === overContainer) {
-      const approved = sortByPosition(current[activeContainer].filter((t) => t.approved));
+      const approved = sortByPosition(current[activeContainer].filter(isApprovedTask));
       const oldIndex = approved.findIndex((t) => t.id === active.id);
       const newIndex = approved.findIndex((t) => t.id === over.id);
       if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-        const pending = current[activeContainer].filter((t) => !t.approved);
+        const pending = current[activeContainer].filter((t) => !isApprovedTask(t));
         const reordered = arrayMove(approved, oldIndex, newIndex);
         nextState = {
           ...current,
@@ -877,10 +1077,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
 
     const activeApproved = sortByPosition(
-      (nextState[activeContainer] || []).filter((t) => t.approved),
+      (nextState[activeContainer] || []).filter(isApprovedTask),
     );
     const overApproved = sortByPosition(
-      (nextState[overContainer] || []).filter((t) => t.approved),
+      (nextState[overContainer] || []).filter(isApprovedTask),
     );
 
     await Promise.all([
@@ -906,15 +1106,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setNewMilestoneName("");
     setNewMilestoneColor(CUSTOM_PHASE_DEFAULT_COLOR);
     setAddingMilestone(false);
-  }
-
-  function handleMilestoneColorChange(milestoneId: string, color: string) {
-    updateMilestone(milestoneId, { color }).then((m) => {
-      setProject((prev) => prev ? {
-        ...prev,
-        milestones: prev.milestones.map((ms) => ms.id === milestoneId ? { ...ms, ...m } : ms),
-      } : prev);
-    });
   }
 
   function copyShareLink() {
@@ -948,8 +1139,51 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
 
   const allTasks = Object.values(tasksByMilestone).flat();
-  const pendingRequests = allTasks.filter((t) => !t.approved).length;
-  const hasApprovedTasks = allTasks.some((t) => t.approved);
+  const approvedTasksAll = allTasks.filter(isApprovedTask);
+  const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
+  const hasApprovedTasks = approvedTasksAll.length > 0;
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePhaseSelect(taskIds: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = taskIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of taskIds) next.delete(id);
+      } else {
+        for (const id of taskIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkUpdate(patch: Partial<Task>) {
+    const ids = Array.from(selectedIds);
+    const updates = await Promise.all(
+      ids.map((taskId) => updateTask(taskId, patch)),
+    );
+    for (const u of updates) handleTaskUpdate(u);
+    setSelectedIds(new Set());
+  }
+
+  async function handleBulkPhaseChange(toMilestoneId: string) {
+    const ids = Array.from(selectedIds);
+    const updates = await Promise.all(
+      ids.map((taskId) =>
+        updateTask(taskId, { milestone_id: toMilestoneId }),
+      ),
+    );
+    for (const u of updates) handleTaskUpdate(u);
+    setSelectedIds(new Set());
+  }
 
   return (
     <div className="w-full p-6 lg:p-8 space-y-6">
@@ -1032,6 +1266,34 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <TaskColumnHeader />
             </div>
           )}
+          {(tasksByMilestone[UNASSIGNED_ID]?.length ?? 0) > 0 && (
+            <MilestoneSection
+              key={UNASSIGNED_ID}
+              isUnassigned
+              milestone={{
+                id: UNASSIGNED_ID,
+                project_id: project.id,
+                name: "Unassigned",
+                position: -1,
+                status: "pending",
+                tasks: [],
+                created_at: "",
+                updated_at: "",
+              }}
+              milestones={project.milestones}
+              projectId={project.id}
+              tasks={tasksByMilestone[UNASSIGNED_ID] || []}
+              onDelete={() => {}}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={handleTaskDelete}
+              onTaskAdd={(t) => handleTaskAdd(UNASSIGNED_ID, t)}
+              onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
+              onPhaseChange={handleTaskPhaseChange}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onTogglePhase={togglePhaseSelect}
+            />
+          )}
           {project.milestones.map((milestone) => (
             <MilestoneSection
               key={milestone.id}
@@ -1051,22 +1313,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   return next;
                 });
               }}
-              onCycleStatus={() => {
-                const statuses: Milestone["status"][] = ["pending", "in_progress", "completed"];
-                const next = statuses[(statuses.indexOf(milestone.status) + 1) % statuses.length];
-                updateMilestone(milestone.id, { status: next }).then((m) => {
-                  setProject((prev) => prev ? {
-                    ...prev,
-                    milestones: prev.milestones.map((ms) => ms.id === milestone.id ? { ...ms, ...m } : ms),
-                  } : prev);
-                });
-              }}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
               onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
               onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
               onPhaseChange={handleTaskPhaseChange}
-              onColorChange={handleMilestoneColorChange}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onTogglePhase={togglePhaseSelect}
             />
           ))}
         </div>
@@ -1080,7 +1334,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       />
 
       <form onSubmit={handleAddMilestone} className="flex items-center gap-3">
-        <PhaseColorPicker
+        <PhaseColorInput
           value={newMilestoneColor}
           onChange={setNewMilestoneColor}
         />
@@ -1095,6 +1349,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Plus className="w-4 h-4" /> Phase
         </Button>
       </form>
+
+      <BulkActionsBar
+        count={selectedIds.size}
+        milestones={project.milestones}
+        onBulkPhaseChange={handleBulkPhaseChange}
+        onBulkUpdate={handleBulkUpdate}
+        onClear={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 }

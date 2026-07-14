@@ -7,18 +7,43 @@ export function formatCurrency(value: number, currency = "EUR"): string {
   }).format(value);
 }
 
+function parseLocalDate(dateStr?: string | Date | null): Date | null {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  const str = String(dateStr).trim();
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toLocalDateInputValue(date?: string | Date | null): string {
+  const parsed = parseLocalDate(date ?? undefined);
+  if (!parsed) return "";
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function formatDate(dateStr?: string): string {
   if (!dateStr) return "—";
+  const date = parseLocalDate(dateStr);
+  if (!date) return "—";
   return new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(dateStr));
+  }).format(date);
 }
 
 export function formatRelativeDate(dateStr?: string): string {
   if (!dateStr) return "—";
-  const date = new Date(dateStr);
+  const date = parseLocalDate(dateStr);
+  if (!date) return "—";
   const now = new Date();
   const diffDays = Math.ceil(
     (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
@@ -33,34 +58,28 @@ export function formatRelativeDate(dateStr?: string): string {
 }
 
 function toISODateString(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
 function toMonthInputValue(month?: string | Date | null): string {
   if (!month) return "";
   if (month instanceof Date) {
-    const y = month.getUTCFullYear();
-    const m = String(month.getUTCMonth() + 1).padStart(2, "0");
+    const y = month.getFullYear();
+    const m = String(month.getMonth() + 1).padStart(2, "0");
     return `${y}-${m}`;
   }
   const str = String(month).trim();
   if (/^\d{4}-\d{2}/.test(str)) return str.slice(0, 7);
-  const parsed = new Date(str);
-  if (!Number.isNaN(parsed.getTime())) return toMonthInputValue(parsed);
+  const parsed = parseLocalDate(str);
+  if (parsed) return toMonthInputValue(parsed);
   return "";
 }
 
 export function toDateInputValue(date?: string | Date | null): string {
-  if (!date) return "";
-  if (date instanceof Date) return toISODateString(date);
-  const str = String(date).trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
-  const parsed = new Date(str);
-  if (!Number.isNaN(parsed.getTime())) return toISODateString(parsed);
-  return "";
+  return toLocalDateInputValue(date);
 }
 
 export function normalizeDateParam(date?: string | Date | null): string | null {

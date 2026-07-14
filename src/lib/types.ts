@@ -173,15 +173,15 @@ export interface Milestone {
 export interface Task {
   id: string;
   project_id: string;
-  milestone_id?: string;
+  milestone_id?: string | null;
   title: string;
-  description?: string;
+  description?: string | null;
   status: TaskStatus;
   created_by: "team" | "client";
   approved: boolean;
-  assignee?: string;
-  due_date?: string;
-  url?: string;
+  assignee?: string | null;
+  due_date?: string | null;
+  url?: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -225,15 +225,6 @@ export const DEFAULT_PHASE_COLORS: Record<(typeof DEFAULT_PROJECT_MILESTONES)[nu
 };
 
 export const CUSTOM_PHASE_DEFAULT_COLOR = "#e5e5e5";
-
-export const PHASE_COLOR_PRESETS = [
-  { label: "White", value: CUSTOM_PHASE_DEFAULT_COLOR },
-  { label: "Blue", value: DEFAULT_PHASE_COLORS.Open },
-  { label: "Purple", value: DEFAULT_PHASE_COLORS["Up Next"] },
-  { label: "Volt", value: DEFAULT_PHASE_COLORS["In Progress"] },
-  { label: "Red", value: DEFAULT_PHASE_COLORS["On Hold"] },
-  { label: "Green", value: DEFAULT_PHASE_COLORS.Done },
-] as const;
 
 export function resolvePhaseColor(name: string, color?: string | null): string {
   if (color) return color;

@@ -7,18 +7,35 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const { title, description, status, milestone_id, assignee, due_date, url, approved, position } = await req.json();
+    const body = await req.json();
+
+    const { rows: existingRows } = await sql`SELECT * FROM tasks WHERE id = ${id}`;
+    if (!existingRows[0]) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const current = existingRows[0];
+    const title = "title" in body ? body.title : current.title;
+    const description = "description" in body ? body.description : current.description;
+    const status = "status" in body ? body.status : current.status;
+    const milestone_id = "milestone_id" in body ? body.milestone_id : current.milestone_id;
+    const assignee = "assignee" in body ? body.assignee : current.assignee;
+    const due_date = "due_date" in body ? body.due_date : current.due_date;
+    const url = "url" in body ? body.url : current.url;
+    const approved = "approved" in body ? body.approved : current.approved;
+    const position = "position" in body ? body.position : current.position;
+
     const { rows } = await sql`
       UPDATE tasks SET
-        title = COALESCE(${title ?? null}, title),
-        description = ${description ?? null},
-        status = COALESCE(${status ?? null}, status),
-        milestone_id = ${milestone_id ?? null},
-        assignee = ${assignee ?? null},
-        due_date = ${due_date ?? null},
-        url = ${url ?? null},
-        approved = COALESCE(${approved ?? null}, approved),
-        position = COALESCE(${position ?? null}, position),
+        title = ${title},
+        description = ${description},
+        status = ${status},
+        milestone_id = ${milestone_id},
+        assignee = ${assignee},
+        due_date = ${due_date},
+        url = ${url},
+        approved = ${approved},
+        position = ${position},
         updated_at = now()
       WHERE id = ${id}
       RETURNING *
