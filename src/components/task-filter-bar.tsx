@@ -188,22 +188,10 @@ function FieldPicker({
 }: {
   onSelect: (field: FilterField) => void;
 }) {
-  const [search, setSearch] = useState("");
-  const fields = (Object.keys(FIELD_META) as FilterField[]).filter((f) =>
-    FIELD_META[f].label.toLowerCase().includes(search.toLowerCase()),
-  );
+  const fields = Object.keys(FIELD_META) as FilterField[];
 
   return (
     <div className="w-48 py-1">
-      <div className="px-2 pb-1.5">
-        <Input
-          autoFocus
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search..."
-          className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
-        />
-      </div>
       {fields.map((field) => (
         <button
           key={field}
@@ -215,9 +203,6 @@ function FieldPicker({
           {FIELD_META[field].label}
         </button>
       ))}
-      {fields.length === 0 && (
-        <p className="px-3 py-2 text-xs text-neutral-600">No matching fields</p>
-      )}
     </div>
   );
 }
