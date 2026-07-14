@@ -47,6 +47,7 @@ import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -1301,7 +1302,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
-  const [filterBarOpen, setFilterBarOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
@@ -1848,17 +1848,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setFilterBarOpen((v) => !v); }}
-            className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors ${
-              filterBarOpen || filters.length > 0
-                ? "border-[#e8ff47]/30 text-[#e8ff47] hover:border-[#e8ff47]/50"
-                : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
-          </button>
+          <Popover>
+            <PopoverTrigger
+              className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                filters.length > 0
+                  ? "border-[#e8ff47]/30 text-[#e8ff47] hover:border-[#e8ff47]/50"
+                  : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto min-w-[320px] p-3">
+              <TaskFilterBar
+                filters={filters}
+                milestones={project.milestones}
+                onAddFilter={addFilter}
+                onUpdateFilter={updateFilter}
+                onRemoveFilter={removeFilter}
+                onClearFilters={clearFilters}
+              />
+            </PopoverContent>
+          </Popover>
           <button
             onClick={() => setEditStatusesOpen(true)}
             className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
@@ -1892,17 +1903,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <span className="font-medium">{pendingRequests} task request{pendingRequests !== 1 ? "s" : ""}</span> from the client awaiting approval
           </p>
         </div>
-      )}
-
-      {(filterBarOpen || filters.length > 0) && (
-        <TaskFilterBar
-          filters={filters}
-          milestones={project.milestones}
-          onAddFilter={addFilter}
-          onUpdateFilter={updateFilter}
-          onRemoveFilter={removeFilter}
-          onClearFilters={clearFilters}
-        />
       )}
 
       <DndContext
