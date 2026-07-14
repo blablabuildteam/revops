@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, ListTodo,
 } from "lucide-react";
 import Link from "next/link";
+import { BinaryText } from "@/components/binary-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -363,7 +364,7 @@ function TodoRow({ todo, onUpdate, onDelete }: {
         <p className={`text-sm leading-snug truncate ${
           todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
         }`}>
-          {todo.title}
+          <BinaryText text={todo.title} id={todo.id} />
         </p>
         <div className="flex items-center gap-2 shrink-0">
           {todo.assignee_name && (
@@ -424,10 +425,12 @@ function TodoCard({ todo, onUpdate, onDelete }: {
         <p className={`text-sm leading-snug ${
           todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
         }`}>
-          {todo.title}
+          <BinaryText text={todo.title} id={todo.id} />
         </p>
         {todo.description && (
-          <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">{todo.description}</p>
+          <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">
+            <BinaryText text={todo.description} id={`${todo.id}-desc`} />
+          </p>
         )}
         <div className="flex items-center gap-3 mt-1.5 flex-wrap">
           {todo.assignee_name && (

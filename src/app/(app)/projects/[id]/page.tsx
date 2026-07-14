@@ -42,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BinaryText } from "@/components/binary-text";
 import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -326,7 +327,7 @@ function PendingTaskRow({
       <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-orange-200">{task.title}</p>
-        {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate">{task.description}</p>}
+        {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate"><BinaryText text={task.description} id={`${task.id}-desc`} /></p>}
         <p className="text-xs text-orange-600 mt-0.5">Client request</p>
       </div>
       <button onClick={() => onApprove(task.id)}
@@ -471,61 +472,6 @@ function InlinePhaseSelect({
   );
 }
 
-const animatedTaskIds = new Set<string>();
-
-function BinaryText({ text, taskId, className }: { text: string; taskId: string; className?: string }) {
-  const [display, setDisplay] = useState(text);
-
-  useEffect(() => {
-    if (animatedTaskIds.has(taskId)) {
-      setDisplay(text);
-      return;
-    }
-
-    animatedTaskIds.add(taskId);
-    const chars = text.length;
-    if (chars === 0) {
-      setDisplay("");
-      return;
-    }
-
-    const duration = Math.min(1000, Math.max(300, chars * 35));
-    const start = performance.now();
-
-    setDisplay(
-      text
-        .split("")
-        .map((ch) => (ch === " " ? " " : Math.random() > 0.5 ? "1" : "0"))
-        .join(""),
-    );
-
-    function tick(now: number) {
-      const progress = Math.min((now - start) / duration, 1);
-      const revealed = Math.floor(progress * chars);
-
-      setDisplay(
-        text
-          .split("")
-          .map((ch, i) => {
-            if (i < revealed) return ch;
-            if (ch === " ") return " ";
-            return Math.random() > 0.5 ? "1" : "0";
-          })
-          .join(""),
-      );
-
-      if (progress < 1) {
-        requestAnimationFrame(tick);
-      }
-    }
-
-    const frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [taskId, text]);
-
-  return <span className={className}>{display}</span>;
-}
-
 function TaskNameCell({
   task,
   onOpen,
@@ -597,10 +543,12 @@ function TaskNameCell({
     <div className={`min-w-0 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}>
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left">
         <p className="text-sm truncate text-neutral-200">
-          <BinaryText text={task.title} taskId={task.id} />
+          <BinaryText text={task.title} id={task.id} />
         </p>
         {task.description && !indent && (
-          <p className="text-xs text-neutral-600 truncate">{task.description}</p>
+          <p className="text-xs text-neutral-600 truncate">
+            <BinaryText text={task.description} id={`${task.id}-desc`} />
+          </p>
         )}
       </button>
       <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -934,13 +882,32 @@ function BulkActionsBar({
   projects: Project[];
   currentProjectId: string;
   onBulkPhaseChange: (milestoneId: string) => void;
-  onBulkProjectMove: (projectId: string) => void;
+  onBulkProjectMove: (projectId: string) => void | Promise<void>;
   onBulkUpdate: (patch: Partial<Task>) => void;
   onClear: () => void;
 }) {
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+
   if (count === 0) return null;
 
   const otherProjects = projects.filter((p) => p.id !== currentProjectId);
+
+  async function confirmProjectMove() {
+    if (!pendingProjectId || moving) return;
+    setMoving(true);
+    try {
+      await onBulkProjectMove(pendingProjectId);
+      setPendingProjectId(null);
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  function handleClear() {
+    setPendingProjectId(null);
+    onClear();
+  }
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
@@ -975,23 +942,43 @@ function BulkActionsBar({
       </Select>
 
       {otherProjects.length > 0 && (
-        <Select onValueChange={(v: string | null) => { if (v) onBulkProjectMove(v); }}>
-          <SelectTrigger
-            size="sm"
-            className="h-8 w-auto min-w-[140px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
-            onPointerDown={cancelDrag}
+        <div className="flex items-center gap-1.5">
+          <Select
+            value={pendingProjectId ?? undefined}
+            onValueChange={(v: string | null) => setPendingProjectId(v || null)}
           >
-            <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-            <SelectValue placeholder="Move to project" />
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700 max-h-60">
-            {otherProjects.map((p) => (
-              <SelectItem key={p.id} value={p.id} className="text-xs text-neutral-100">
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-auto min-w-[160px] max-w-[220px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+              onPointerDown={cancelDrag}
+            >
+              <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <SelectValue placeholder="Move to project" />
+            </SelectTrigger>
+            <SelectContent
+              alignItemWithTrigger={false}
+              align="start"
+              className="bg-neutral-800 border-neutral-700 max-h-60 min-w-[min(360px,90vw)] w-max"
+            >
+              {otherProjects.map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-xs text-neutral-100">
+                  <span className="whitespace-normal">{p.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {pendingProjectId && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={moving}
+              className="h-8 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium px-3 shrink-0"
+              onClick={confirmProjectMove}
+            >
+              {moving ? "Moving…" : "Move"}
+            </Button>
+          )}
+        </div>
       )}
 
       <Select
@@ -1029,7 +1016,7 @@ function BulkActionsBar({
       <div className="w-px h-5 bg-neutral-700" />
 
       <button
-        onClick={onClear}
+        onClick={handleClear}
         className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors px-2 py-1.5 rounded hover:bg-neutral-800"
       >
         <X className="w-3.5 h-3.5" />
