@@ -87,6 +87,9 @@ async function _init() {
       await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
       await sql`ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'low'`;
+      await sql`UPDATE tasks SET priority = 'low' WHERE priority != 'low'`;
+      await sql`ALTER TABLE todos ALTER COLUMN priority SET DEFAULT 'low'`;
+      await sql`UPDATE todos SET priority = 'low' WHERE priority != 'low'`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
       await sql`
@@ -251,7 +254,7 @@ async function _init() {
       description TEXT,
       status TEXT DEFAULT 'open'
         CHECK (status IN ('open', 'in_progress', 'done')),
-      priority TEXT DEFAULT 'medium'
+      priority TEXT DEFAULT 'low'
         CHECK (priority IN ('low', 'medium', 'high')),
       assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,
       company_id UUID REFERENCES companies(id) ON DELETE SET NULL,

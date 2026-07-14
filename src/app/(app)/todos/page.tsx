@@ -153,7 +153,7 @@ function TodoFormDialog({
 }) {
   const isEdit = !!todo;
   const [form, setForm] = useState({
-    title: "", description: "", priority: "medium",
+    title: "", description: "", priority: "low",
     assignee_id: "",
     company_id: "", project_id: defaultProjectId ?? "", due_date: "",
   });
@@ -178,7 +178,7 @@ function TodoFormDialog({
       return;
     }
     setForm({
-      title: "", description: "", priority: "medium",
+      title: "", description: "", priority: "low",
       assignee_id: currentUser?.id ?? "",
       company_id: "", project_id: defaultProjectId ?? "", due_date: "",
     });
@@ -241,7 +241,7 @@ function TodoFormDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Priority</Label>
-              <Select value={form.priority} onValueChange={(v) => s("priority", v ?? "medium")}>
+              <Select value={form.priority} onValueChange={(v) => s("priority", v ?? "low")}>
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
                   <SelectValue />
                 </SelectTrigger>
@@ -345,7 +345,7 @@ function QuickAddTodo({ onAdd, currentUser }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: value.trim(),
-          priority: "medium",
+          priority: "low",
           assignee_id: currentUser?.id ?? null,
           company_id: null,
           project_id: null,

@@ -1644,6 +1644,47 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setAddingMilestone(false);
   }
 
+  function handleStatusesSaved(updated: Milestone[]) {
+    if (!project) return;
+    const withTasks = updated.map((m) => ({
+      ...m,
+      tasks: (tasksByMilestone[m.id] || []),
+    }));
+    setProject((prev) =>
+      prev ? { ...prev, milestones: withTasks } : prev,
+    );
+    const removedIds = new Set(
+      project.milestones.map((m) => m.id).filter((id) => !updated.some((u) => u.id === id)),
+    );
+    if (removedIds.size > 0) {
+      setTasksByMilestone((prev) => {
+        const next = { ...prev };
+        const orphaned: Task[] = [];
+        for (const id of removedIds) {
+          if (next[id]) {
+            orphaned.push(...next[id]);
+            delete next[id];
+          }
+        }
+        if (orphaned.length > 0) {
+          next[UNASSIGNED_ID] = [...(next[UNASSIGNED_ID] || []), ...orphaned];
+        }
+        for (const m of updated) {
+          if (!next[m.id]) next[m.id] = [];
+        }
+        return next;
+      });
+    } else {
+      setTasksByMilestone((prev) => {
+        const next = { ...prev };
+        for (const m of updated) {
+          if (!next[m.id]) next[m.id] = [];
+        }
+        return next;
+      });
+    }
+  }
+
   function copyShareLink() {
     if (!project) return;
     navigator.clipboard.writeText(`${window.location.origin}/project/${project.share_token}`);
@@ -1806,6 +1847,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setEditStatusesOpen(true)}
+            className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Edit statuses
+          </button>
+          <button
             onClick={copyShareLink}
             className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
           >
@@ -1919,6 +1967,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Plus className="w-4 h-4" /> Phase
         </Button>
       </form>
+
+      <EditStatusesDialog
+        open={editStatusesOpen}
+        onOpenChange={setEditStatusesOpen}
+        projectId={project.id}
+        milestones={project.milestones}
+        onSave={handleStatusesSaved}
+      />
 
       <BulkActionsBar
         count={selectedIds.size}
