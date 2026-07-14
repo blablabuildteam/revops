@@ -31,31 +31,30 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { BinaryText } from "@/components/binary-text";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
+import { TaskCommentIndicator } from "@/components/task-comment-indicator";
+import { TaskDetailDialog } from "@/components/task-detail-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject } from "@/lib/api";
+import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment } from "@/lib/api";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[20px_minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid grid-cols-[20px_minmax(0,1fr)_28px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+
+const taskDetailApi = {
+  updateTask,
+  getTaskComments,
+  createTaskComment,
+};
 
 type TasksByMilestone = Record<string, Task[]>;
 type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
@@ -199,175 +198,12 @@ function TaskColumnHeader() {
       <span />
       <span>Task</span>
       <span />
+      <span />
       <span>Responsible</span>
       <span>Date</span>
       <span>Phase</span>
       <span />
     </div>
-  );
-}
-
-function TaskDetailDialog({
-  task,
-  open,
-  onClose,
-  onSave,
-}: {
-  task: Task | null;
-  open: boolean;
-  onClose: () => void;
-  onSave: (t: Task) => void;
-}) {
-  const [form, setForm] = useState({
-    title: "",
-    due_date: "",
-    assignee: "",
-    description: "",
-    url: "",
-    priority: "low" as "low" | "medium" | "high",
-  });
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (task && open) {
-      setForm({
-        title: task.title,
-        due_date: toDateInputValue(task.due_date),
-        assignee: task.assignee ?? "",
-        description: task.description ?? "",
-        url: task.url ?? "",
-        priority: task.priority ?? "low",
-      });
-    }
-  }, [task, open]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!task) return;
-    const title = form.title.trim();
-    if (!title) return;
-    setLoading(true);
-    try {
-      const updated = await updateTask(task.id, {
-        title,
-        due_date: form.due_date || null,
-        assignee: form.assignee || null,
-        description: form.description || null,
-        url: form.url || null,
-        priority: form.priority,
-      });
-      onSave(updated);
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!task) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-neutral-100 pr-6">Edit task</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Title</Label>
-            <Input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Task title..."
-              required
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Date</Label>
-              <DatePicker
-                value={form.due_date}
-                onChange={(v) => setForm((f) => ({ ...f, due_date: v }))}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Responsible</Label>
-              <Select
-                value={form.assignee || "none"}
-                onValueChange={(v) => setForm((f) => ({ ...f, assignee: v === "none" ? "" : (v ?? "") }))}
-              >
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Choose person">
-                    {form.assignee || "Nobody"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
-                  {TASK_ASSIGNEES.map((name) => (
-                    <SelectItem key={name} value={name} className="text-neutral-100">{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Priority</Label>
-              <Select
-                value={form.priority}
-                onValueChange={(v) => setForm((f) => ({ ...f, priority: (v ?? "low") as "low" | "medium" | "high" }))}
-              >
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="high" className="text-red-400">High</SelectItem>
-                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
-                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">URL</Label>
-            <Input
-              type="url"
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://..."
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Notes</Label>
-            <Textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Add notes or details..."
-              rows={4}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none"
-            />
-          </div>
-          <DialogFooter className="bg-transparent border-neutral-800 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              disabled={loading}
-              className="text-neutral-400 hover:text-neutral-200"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || !form.title.trim()}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950"
-            >
-              {loading ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -697,6 +533,8 @@ function SubtaskRow({
         onRename={(title) => onRename(task.id, title)}
       />
 
+      <TaskCommentIndicator count={task.comment_count} />
+
       <PriorityFlag
         priority={task.priority ?? "low"}
         onChange={(next) => {
@@ -804,6 +642,8 @@ function SortableTaskRow({
           onAddSubtask={onAddSubtask}
         />
       </div>
+
+      <TaskCommentIndicator count={task.comment_count} />
 
       <PriorityFlag
         priority={task.priority ?? "low"}
@@ -918,6 +758,8 @@ function TaskWithSubtasks({
             onPointerDown={cancelDrag}
             className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 ml-5 flex-1 min-w-0"
           />
+          <span />
+          <span />
           <span />
           <span />
           <span />
@@ -2038,6 +1880,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onSave={handleTaskUpdate}
+        api={taskDetailApi}
       />
 
       <form onSubmit={handleAddMilestone} className="flex items-center gap-3">

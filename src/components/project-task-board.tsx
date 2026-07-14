@@ -9,23 +9,22 @@ import { BinaryText } from "@/components/binary-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, createTask, updateTask, batchUpdateMilestones } from "@/lib/api";
+import { TaskCommentIndicator } from "@/components/task-comment-indicator";
+import { TaskDetailDialog } from "@/components/task-detail-dialog";
+import { getProject, createTask, updateTask, batchUpdateMilestones, getTaskComments, createTaskComment } from "@/lib/api";
 import {
   createEditBoardTask,
   getEditBoardProject,
   updateEditBoardTask,
   batchUpdateEditBoardMilestones,
+  getEditBoardTaskComments,
+  createEditBoardTaskComment,
 } from "@/lib/edit-board-api";
 import {
   Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor,
@@ -33,7 +32,7 @@ import {
 import { formatDate, toDateInputValue } from "@/lib/format";
 
 export const TASK_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid grid-cols-[minmax(0,1fr)_28px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const UNASSIGNED_ID = "unassigned";
 
@@ -45,6 +44,8 @@ type BoardApi = {
     projectId: string,
     milestones: { id?: string; name: string; color?: string | null; position: number }[],
   ) => Promise<Milestone[]>;
+  getTaskComments: (taskId: string) => Promise<import("@/lib/types").TaskComment[]>;
+  createTaskComment: (taskId: string, body: string) => Promise<import("@/lib/types").TaskComment>;
 };
 
 const defaultBoardApi: BoardApi = {
@@ -52,6 +53,8 @@ const defaultBoardApi: BoardApi = {
   createTask,
   updateTask,
   batchUpdateMilestones,
+  getTaskComments,
+  createTaskComment,
 };
 
 const BoardApiContext = createContext<BoardApi>(defaultBoardApi);
@@ -70,6 +73,8 @@ export function buildEditBoardApi(editToken: string): BoardApi {
     updateTask: (id, data) => updateEditBoardTask(editToken, id, data),
     batchUpdateMilestones: (_projectId, milestones) =>
       batchUpdateEditBoardMilestones(editToken, milestones),
+    getTaskComments: (taskId) => getEditBoardTaskComments(editToken, taskId),
+    createTaskComment: (taskId, body) => createEditBoardTaskComment(editToken, taskId, body),
   };
 }
 
@@ -108,168 +113,12 @@ function TaskColumnHeader() {
     <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
       <span>Task</span>
       <span />
+      <span />
       <span>Responsible</span>
       <span>Date</span>
       <span>Phase</span>
       <span />
     </div>
-  );
-}
-
-function TaskDetailDialog({
-  task,
-  open,
-  onClose,
-  onSave,
-}: {
-  task: Task | null;
-  open: boolean;
-  onClose: () => void;
-  onSave: (t: Task) => void;
-}) {
-  const boardApi = useBoardApi();
-  const [form, setForm] = useState({
-    title: "",
-    due_date: "",
-    assignee: "",
-    description: "",
-    url: "",
-    priority: "low" as "low" | "medium" | "high",
-  });
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (task && open) {
-      setForm({
-        title: task.title,
-        due_date: toDateInputValue(task.due_date),
-        assignee: task.assignee ?? "",
-        description: task.description ?? "",
-        url: task.url ?? "",
-        priority: task.priority ?? "low",
-      });
-    }
-  }, [task, open]);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!task) return;
-    const title = form.title.trim();
-    if (!title) return;
-    setLoading(true);
-    try {
-      const updated = await boardApi.updateTask(task.id, {
-        title,
-        due_date: form.due_date || null,
-        assignee: form.assignee || null,
-        description: form.description || null,
-        url: form.url || null,
-        priority: form.priority,
-      });
-      onSave(updated);
-      onClose();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!task) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="text-neutral-100 pr-6">Edit task</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Title</Label>
-            <Input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Task title..."
-              required
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Date</Label>
-              <DatePicker
-                value={form.due_date}
-                onChange={(v) => setForm((f) => ({ ...f, due_date: v }))}
-                className="bg-neutral-800 border-neutral-700 text-neutral-100"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Responsible</Label>
-              <Select
-                value={form.assignee || "none"}
-                onValueChange={(v) => setForm((f) => ({ ...f, assignee: v === "none" ? "" : (v ?? "") }))}
-              >
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Choose person">
-                    {form.assignee || "Nobody"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
-                  {TASK_ASSIGNEES.map((name) => (
-                    <SelectItem key={name} value={name} className="text-neutral-100">{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Priority</Label>
-              <Select
-                value={form.priority}
-                onValueChange={(v) => setForm((f) => ({ ...f, priority: (v ?? "low") as "low" | "medium" | "high" }))}
-              >
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="high" className="text-red-400">High</SelectItem>
-                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
-                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">URL</Label>
-            <Input
-              type="url"
-              value={form.url}
-              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-              placeholder="https://..."
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Notes</Label>
-            <Textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Add notes or details..."
-              rows={4}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none"
-            />
-          </div>
-          <DialogFooter className="bg-transparent border-neutral-800 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}
-              className="text-neutral-400 hover:text-neutral-200">
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading || !form.title.trim()}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950">
-              {loading ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -507,6 +356,7 @@ function TaskRow({
         onRename={(title) => onRename(task.id, title)}
         onAddSubtask={onAddSubtask}
       />
+      <TaskCommentIndicator count={task.comment_count} />
       <PriorityFlag
         priority={task.priority ?? "low"}
         onChange={(next) => { boardApi.updateTask(task.id, { priority: next }).then(onUpdate); }}
@@ -961,6 +811,7 @@ export function ProjectTaskBoardPanel({
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onSave={handleTaskUpdate}
+        api={boardApi}
       />
       <EditStatusesDialog
         open={editStatusesOpen}
