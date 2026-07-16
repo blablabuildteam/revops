@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Plus, CheckCircle2, Trash2,
   User, Building2, FolderKanban, Calendar,
-  ChevronDown, ChevronRight, ListTodo,
+  ChevronDown, ChevronRight, ListTodo, ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
 import { BinaryText } from "@/components/binary-text";
@@ -576,40 +576,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
   onDelete: (id: string) => void;
   onEdit: (t: Todo) => void;
 }) {
-  const statuses: Todo["status"][] = ["open", "in_progress", "done"];
-  const { begin, end, pushUndo } = useMutationFeedback();
-
-  function cycleStatus() {
-    const prev = todo.status;
-    const next = statuses[(statuses.indexOf(todo.status) + 1) % statuses.length];
-    onUpdate({ ...todo, status: next, _source: "todo" });
-
-    begin();
-    fetch(`/api/todos/${todo.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        onUpdate({ ...d, _source: "todo" });
-        pushUndo({
-          label: "Status changed",
-          revert: async () => {
-            onUpdate({ ...todo, status: prev, _source: "todo" });
-            const res = await fetch(`/api/todos/${todo.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: prev }),
-            });
-            const data = await res.json();
-            onUpdate({ ...data, _source: "todo" });
-          },
-        });
-      })
-      .catch(() => onUpdate({ ...todo, status: prev, _source: "todo" }))
-      .finally(() => end());
-  }
+  const changeStatus = useTodoStatusChange(todo, onUpdate);
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
     new Date(todo.due_date) < new Date();
@@ -618,9 +585,9 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
     <div className={`flex items-start gap-3 px-3.5 py-2.5 transition-all group ${
       todo.status === "done" ? "opacity-50" : ""
     }`}>
-      <button onClick={cycleStatus} className="shrink-0 mt-0.5">
-        {statusIcon[todo.status]}
-      </button>
+      <div className="shrink-0 mt-0.5">
+        <TodoStatusSelect status={todo.status} onChange={changeStatus} />
+      </div>
       <div className="flex-1 min-w-0">
         <button
           type="button"
@@ -832,6 +799,7 @@ export default function TodosPage() {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterCompany, setFilterCompany] = useState("all");
   const [filterStatus, setFilterStatus] = useState("active");
+  const [myTodosView, setMyTodosView] = useState<"active" | "completed">("active");
   const [filtersReady, setFiltersReady] = useState(false);
   const defaultAssigneeApplied = useRef(false);
   const { requestDelete, confirmDialog } = useConfirmDelete();
@@ -1020,9 +988,9 @@ export default function TodosPage() {
 
   // Further split personal to-dos
   const personalActive = filterStatus === "done" ? [] : personalTodos.filter((t) => t.status !== "done");
-  const personalDone = filterStatus === "done"
-    ? personalTodos
-    : personalTodos.filter((t) => t.status === "done");
+  const personalDone = sortCompletedLatest(personalTodos.filter((t) => t.status === "done"));
+  const personalDonePreview = personalDone.slice(0, 3);
+  const showCompletedView = myTodosView === "completed" || filterStatus === "done";
 
   // Stats (include both sources)
   const totalOpen = personalTodos.filter((t) => t.status === "open").length
@@ -1112,40 +1080,87 @@ export default function TodosPage() {
             <div className="flex items-center gap-2 mb-3">
               <ListTodo className="w-4 h-4 text-neutral-500" />
               <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wider">
-                My To-Dos
+                {showCompletedView ? "Completed To-Dos" : "My To-Dos"}
               </h2>
               <span className="text-xs text-neutral-600 font-mono ml-1">
-                {personalActive.length}
+                {showCompletedView ? personalDone.length : personalActive.length}
               </span>
+              <div className="flex-1" />
+              {showCompletedView ? (
+                <button
+                  type="button"
+                  onClick={() => setMyTodosView("active")}
+                  className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  My To-Dos
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setMyTodosView("completed")}
+                  className="text-xs text-neutral-500 hover:text-neutral-200 transition-colors"
+                >
+                  Completed To-Dos
+                  {personalDone.length > 0 && (
+                    <span className="text-neutral-600 font-mono ml-1.5">{personalDone.length}</span>
+                  )}
+                </button>
+              )}
             </div>
 
             <div className="space-y-1.5">
-              <QuickAddTodo
-                onAdd={(t) => { setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]); }}
-                currentUser={currentUser}
-              />
-              {personalActive.map((t) => (
-                <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
-              ))}
-              {personalDone.length > 0 && (
+              {showCompletedView ? (
                 <>
-                  <div className="flex items-center gap-3 pt-2 pb-1">
-                    <div className="flex-1 border-t border-neutral-800/60" />
-                    <span className="text-[10px] text-neutral-600 uppercase tracking-widest shrink-0">
-                      Done ({personalDone.length})
-                    </span>
-                    <div className="flex-1 border-t border-neutral-800/60" />
-                  </div>
                   {personalDone.map((t) => (
                     <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
                   ))}
+                  {personalDone.length === 0 && (
+                    <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
+                      <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
+                      <p className="text-neutral-600 text-xs">No completed to-dos yet</p>
+                    </div>
+                  )}
                 </>
-              )}
-              {personalActive.length === 0 && personalDone.length === 0 && (
-                <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
-                  <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                  <p className="text-neutral-600 text-xs">No personal to-dos — all caught up!</p>
-                </div>
+              ) : (
+                <>
+                  <QuickAddTodo
+                    onAdd={(t) => { setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]); }}
+                    currentUser={currentUser}
+                  />
+                  {personalActive.map((t) => (
+                    <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                  ))}
+                  {personalDonePreview.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-3 pt-2 pb-1">
+                        <div className="flex-1 border-t border-neutral-800/60" />
+                        <span className="text-[10px] text-neutral-600 uppercase tracking-widest shrink-0">
+                          Recently completed
+                        </span>
+                        <div className="flex-1 border-t border-neutral-800/60" />
+                      </div>
+                      {personalDonePreview.map((t) => (
+                        <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                      ))}
+                      {personalDone.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => setMyTodosView("completed")}
+                          className="w-full py-2 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
+                        >
+                          View all {personalDone.length} completed to-dos
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {personalActive.length === 0 && personalDone.length === 0 && (
+                    <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
+                      <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
+                      <p className="text-neutral-600 text-xs">No personal to-dos — all caught up!</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
