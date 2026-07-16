@@ -5,7 +5,8 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useMemo } from "react";
 import { Plus, ExternalLink, AlertCircle, FolderKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getProjects, getCompanies, createProject } from "@/lib/api";
+import { getCompanies, createProject } from "@/lib/api";
+import { useProjects } from "@/hooks/use-api-data";
 import { Company, Project, PROJECT_STATUS_LABELS } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -29,12 +30,6 @@ import {
 } from "@/components/ui/select";
 import Link from "next/link";
 import { CompanyAvatar } from "@/components/company-avatar";
-
-type ProjectWithStats = Project & {
-  task_count: number;
-  done_count: number;
-  pending_requests: number;
-};
 
 const statusColors: Record<string, string> = {
   active: "bg-[#e8ff47]/10 text-[#e8ff47]",
@@ -167,14 +162,10 @@ function NewProjectDialog({
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<ProjectWithStats[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: projects = [], isLoading, mutate } = useProjects();
+  const loading = isLoading && projects.length === 0;
   const [formOpen, setFormOpen] = useState(false);
   const [companyFilter, setCompanyFilter] = useState<string>("all");
-
-  useEffect(() => {
-    getProjects().then((p) => { setProjects(p as ProjectWithStats[]); setLoading(false); });
-  }, []);
 
   const { companyChips, unassignedCount } = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>();
@@ -372,7 +363,7 @@ export default function ProjectsPage() {
       <NewProjectDialog
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSave={(p) => setProjects((prev) => [p as ProjectWithStats, ...prev])}
+        onSave={() => { void mutate(); }}
       />
     </div>
   );

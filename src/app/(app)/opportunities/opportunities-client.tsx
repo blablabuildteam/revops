@@ -33,6 +33,8 @@ import {
 } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useMutationFeedback } from "@/components/mutation-provider";
+import { cacheKeys, getCached } from "@/lib/query-cache";
 
 type SortKey = "name" | "stage" | "expected_value" | "probability" | "updated_at";
 
@@ -248,8 +250,12 @@ export default function OpportunitiesPageClient() {
   const view: ViewMode =
     searchParams.get("view") === "pipeline" ? "pipeline" : "list";
 
-  const [opps, setOpps] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [opps, setOpps] = useState<Opportunity[]>(
+    () => getCached<Opportunity[]>(cacheKeys.opportunities) ?? []
+  );
+  const [loading, setLoading] = useState(
+    () => getCached<Opportunity[]>(cacheKeys.opportunities) === undefined
+  );
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<Stage | "all">("all");
   const [sortKey, setSortKey] = useState<SortKey>("stage");
@@ -261,9 +267,11 @@ export default function OpportunitiesPageClient() {
   const [activatedOpportunityIds, setActivatedOpportunityIds] = useState<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
   const patchQueues = useRef(new Map<string, Promise<void>>());
+  const { begin, end, pushUndo } = useMutationFeedback();
 
   async function load() {
-    setLoading(true);
+    const hadCache = getCached(cacheKeys.opportunities) !== undefined;
+    if (!hadCache) setLoading(true);
     const [data, deals] = await Promise.all([
       getOpportunities(),
       getFinanceDeals(),
@@ -314,6 +322,7 @@ export default function OpportunitiesPageClient() {
       }
     };
 
+    begin();
     const previous = patchQueues.current.get(id) ?? Promise.resolve();
     const next = previous
       .catch(() => {})
@@ -326,15 +335,34 @@ export default function OpportunitiesPageClient() {
           const message = err instanceof Error ? err.message : "Failed to save changes";
           setSaveError(message);
           throw err;
+        } finally {
+          end();
         }
       });
 
     patchQueues.current.set(id, next);
     await next;
-  }, [stageFilter]);
+  }, [stageFilter, begin, end]);
 
   async function handleStageChange(id: string, stage: Stage) {
+    const current =
+      opps.find((o) => o.id === id) ??
+      (editingOpp?.id === id ? editingOpp : undefined);
+    const prevStage = current?.stage;
+    const prevProbability = current?.probability;
+
     await patchOpp(id, { stage, probability: STAGE_PROBABILITY[stage] });
+
+    if (prevStage && prevStage !== stage) {
+      pushUndo({
+        label: "Status changed",
+        revert: () =>
+          patchOpp(id, {
+            stage: prevStage,
+            probability: prevProbability ?? STAGE_PROBABILITY[prevStage],
+          }),
+      });
+    }
   }
 
   function handleRowClick(e: React.MouseEvent, opp: Opportunity) {

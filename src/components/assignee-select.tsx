@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { UserAvatar } from "@/components/user-avatar";
 import { SelectItem } from "@/components/ui/select";
+import { useUsers } from "@/hooks/use-api-data";
 import { TASK_ASSIGNEES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -13,30 +13,8 @@ export type AssigneeUser = {
   avatar_url?: string | null;
 };
 
-let cachedUsers: AssigneeUser[] | null = null;
-let usersPromise: Promise<AssigneeUser[]> | null = null;
-
-function fetchAssigneeUsers(): Promise<AssigneeUser[]> {
-  if (cachedUsers) return Promise.resolve(cachedUsers);
-  if (!usersPromise) {
-    usersPromise = fetch("/api/users")
-      .then((r) => r.json())
-      .then((data: AssigneeUser[]) => {
-        cachedUsers = data;
-        return data;
-      })
-      .catch(() => [] as AssigneeUser[]);
-  }
-  return usersPromise;
-}
-
 export function useAssigneeUsers() {
-  const [users, setUsers] = useState<AssigneeUser[]>(cachedUsers ?? []);
-
-  useEffect(() => {
-    fetchAssigneeUsers().then(setUsers);
-  }, []);
-
+  const { data: users = [] } = useUsers();
   return users;
 }
 

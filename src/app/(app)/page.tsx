@@ -2,14 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, TrendingUp, Target, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StageBadge } from "@/components/stage-badge";
 import { SentimentIndicator } from "@/components/sentiment-indicator";
 import { OpportunityForm } from "@/components/opportunity-form";
-import { getOpportunities } from "@/lib/api";
-import { Opportunity } from "@/lib/types";
+import { useOpportunities } from "@/hooks/use-api-data";
 import { formatCurrency, formatRelativeDate } from "@/lib/format";
 
 function KpiCard({
@@ -37,20 +36,8 @@ function KpiCard({
 }
 
 export default function DashboardPage() {
-  const [opps, setOpps] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: opps = [], isLoading: loading, mutate } = useOpportunities();
   const [formOpen, setFormOpen] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    const data = await getOpportunities();
-    setOpps(data);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   const active = opps.filter((o) => !["won", "lost"].includes(o.stage));
   const won = opps.filter((o) => o.stage === "won");
@@ -240,8 +227,8 @@ export default function DashboardPage() {
       <OpportunityForm
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSave={(opp) => {
-          setOpps((prev) => [opp, ...prev]);
+        onSave={() => {
+          void mutate();
         }}
       />
     </div>

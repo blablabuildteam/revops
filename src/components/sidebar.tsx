@@ -16,8 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
 import { UserAvatar } from "@/components/user-avatar";
-import type { SessionUser } from "@/lib/auth";
-import { useEffect, useState } from "react";
+import { useSession } from "@/components/session-provider";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -32,14 +31,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, toggle } = useTheme();
-  const [user, setUser] = useState<SessionUser | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => setUser(d.user))
-      .catch(() => {});
-  }, []);
+  const { user, setUser } = useSession();
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });

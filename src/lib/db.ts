@@ -5,8 +5,14 @@ export { sql };
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 
+/**
+ * Ensures the schema is ready for requests.
+ * Warm path: no-op after first call in this isolate.
+ * Cold path when tables already exist: single existence check (no ALTERs/migrations).
+ * Set RUN_DB_MIGRATIONS=true to apply pending column/data migrations on boot.
+ * Fresh databases still run full CREATE + migrations.
+ */
 export async function ensureTables() {
-  // Single flight: if already running, wait for the same promise
   if (initialized) return;
   if (initPromise) return initPromise;
   initPromise = _init();
@@ -63,92 +69,100 @@ async function migrateOpportunityTypes() {
   }
 }
 
+/** Idempotent schema/data migrations. Call via RUN_DB_MIGRATIONS=true or after fresh create. */
+async function runSchemaMigrations() {
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
+  await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
+  await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
+  await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
+  await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
+  await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
+  await sql`UPDATE milestones SET color = '#e8ff47' WHERE name = 'In Progress' AND color IS NULL`;
+  await sql`UPDATE milestones SET color = '#f87171' WHERE name = 'On Hold' AND color IS NULL`;
+  await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
+  await sql`ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'low'`;
+  await sql`UPDATE tasks SET priority = 'low' WHERE priority != 'low'`;
+  await sql`ALTER TABLE todos ALTER COLUMN priority SET DEFAULT 'low'`;
+  await sql`UPDATE todos SET priority = 'low' WHERE priority != 'low'`;
+  await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
+    ON task_comments (task_id, created_at)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS task_attachments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      content_type TEXT NOT NULL,
+      uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      uploaded_by_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS task_attachments_task_id_created_at
+    ON task_attachments (task_id, created_at)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS finance_deals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+      project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      company_name TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      deal_type TEXT NOT NULL CHECK (deal_type IN ('project', 'retainer')),
+      total_deal_value NUMERIC(12,2) DEFAULT 0,
+      start_date DATE,
+      end_date DATE,
+      payment_schedule JSONB DEFAULT '[]',
+      monthly_fee NUMERIC(12,2) DEFAULT 0,
+      monthly_revshare NUMERIC(12,2) DEFAULT 0,
+      amount_paid NUMERIC(12,2) DEFAULT 0,
+      payments JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await migrateOpportunityTypes();
+  await migrateFinanceDealsToInclVat();
+  await backfillMissingStandardPhases();
+}
+
 async function _init() {
-  // Check if tables already exist (fast path for warm instances after first boot)
+  const runMigrations = process.env.RUN_DB_MIGRATIONS === "true";
+
+  // Check if tables already exist (fast path for warm/cold instances after first deploy)
   try {
     const { rows } = await sql`
       SELECT COUNT(*) AS c FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name = 'users'
     `;
     if (Number(rows[0].c) > 0) {
-      // Tables exist — still run ALTER TABLE for any new columns, but skip CREATE
-      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_type TEXT DEFAULT 'none'`;
-      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS retainer_amount NUMERIC(12,2) DEFAULT 0`;
-      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2) DEFAULT 0`;
-      await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
-      await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
-      await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
-      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
-      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
-      await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
-      await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
-      await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
-      await sql`UPDATE milestones SET color = '#e8ff47' WHERE name = 'In Progress' AND color IS NULL`;
-      await sql`UPDATE milestones SET color = '#f87171' WHERE name = 'On Hold' AND color IS NULL`;
-      await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
-      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
-      await sql`ALTER TABLE tasks ALTER COLUMN priority SET DEFAULT 'low'`;
-      await sql`UPDATE tasks SET priority = 'low' WHERE priority != 'low'`;
-      await sql`ALTER TABLE todos ALTER COLUMN priority SET DEFAULT 'low'`;
-      await sql`UPDATE todos SET priority = 'low' WHERE priority != 'low'`;
-      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
-      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
-      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
-      await sql`
-        CREATE TABLE IF NOT EXISTS task_comments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-          author_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-          author_name TEXT NOT NULL,
-          body TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT now()
-        )
-      `;
-      await sql`
-        CREATE INDEX IF NOT EXISTS task_comments_task_id_created_at
-        ON task_comments (task_id, created_at)
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS task_attachments (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-          file_name TEXT NOT NULL,
-          file_url TEXT NOT NULL,
-          file_size INTEGER NOT NULL,
-          content_type TEXT NOT NULL,
-          uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-          uploaded_by_name TEXT NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT now()
-        )
-      `;
-      await sql`
-        CREATE INDEX IF NOT EXISTS task_attachments_task_id_created_at
-        ON task_attachments (task_id, created_at)
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS finance_deals (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
-          project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
-          company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
-          company_name TEXT NOT NULL,
-          project_name TEXT NOT NULL,
-          deal_type TEXT NOT NULL CHECK (deal_type IN ('project', 'retainer')),
-          total_deal_value NUMERIC(12,2) DEFAULT 0,
-          start_date DATE,
-          end_date DATE,
-          payment_schedule JSONB DEFAULT '[]',
-          monthly_fee NUMERIC(12,2) DEFAULT 0,
-          monthly_revshare NUMERIC(12,2) DEFAULT 0,
-          amount_paid NUMERIC(12,2) DEFAULT 0,
-          payments JSONB DEFAULT '[]',
-          created_at TIMESTAMPTZ DEFAULT now(),
-          updated_at TIMESTAMPTZ DEFAULT now()
-        )
-      `;
-      await migrateOpportunityTypes();
-      await migrateFinanceDealsToInclVat();
-      await backfillMissingStandardPhases();
+      if (runMigrations) {
+        await runSchemaMigrations();
+      }
       initialized = true;
       return;
     }
@@ -400,9 +414,7 @@ async function _init() {
     ON CONFLICT (key) DO NOTHING
   `;
 
-  await migrateOpportunityTypes();
-  await migrateFinanceDealsToInclVat();
-  await backfillMissingStandardPhases();
+  await runSchemaMigrations();
 
   initialized = true;
 }

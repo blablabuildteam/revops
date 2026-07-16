@@ -34,6 +34,7 @@ import {
   Milestone, Task, resolvePhaseColor,
 } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
+import { useMutationFeedbackOptional } from "@/components/mutation-provider";
 
 export const TASK_ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
@@ -656,6 +657,7 @@ export function ProjectTaskBoardPanel({
   hideToolbar?: boolean;
 }) {
   const boardApi = useBoardApi();
+  const mutation = useMutationFeedbackOptional();
   const [milestones, setMilestones] = useState<Milestone[]>(milestonesOverride ?? []);
   const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
   const [loading, setLoading] = useState(!milestonesOverride);
@@ -701,14 +703,52 @@ export function ProjectTaskBoardPanel({
   }
 
   async function handlePhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
+    if (fromMilestoneId === toMilestoneId) return;
+
+    const task = localTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const prevMilestoneId = task.milestone_id ?? null;
+    const prevPosition = task.position;
     const targetTopLevel = localTasks.filter(
-      (t) => (t.milestone_id ?? UNASSIGNED_ID) === toMilestoneId && isTopLevelTask(t),
+      (t) =>
+        (t.milestone_id ?? UNASSIGNED_ID) === toMilestoneId &&
+        isTopLevelTask(t) &&
+        t.id !== taskId,
     );
-    const updated = await boardApi.updateTask(taskId, {
-      milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
-      position: targetTopLevel.length,
-    });
-    handleTaskUpdate(updated);
+    const nextMilestoneId = toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId;
+    const nextPosition = targetTopLevel.length;
+
+    const optimistic: Task = {
+      ...task,
+      milestone_id: nextMilestoneId,
+      position: nextPosition,
+    };
+    handleTaskUpdate(optimistic);
+
+    mutation?.begin();
+    try {
+      const updated = await boardApi.updateTask(taskId, {
+        milestone_id: nextMilestoneId,
+        position: nextPosition,
+      });
+      handleTaskUpdate(updated);
+
+      mutation?.pushUndo({
+        label: "Status changed",
+        revert: async () => {
+          const reverted = await boardApi.updateTask(taskId, {
+            milestone_id: prevMilestoneId,
+            position: prevPosition,
+          });
+          handleTaskUpdate(reverted);
+        },
+      });
+    } catch {
+      handleTaskUpdate(task);
+    } finally {
+      mutation?.end();
+    }
   }
 
   async function handleRename(id: string, title: string) {

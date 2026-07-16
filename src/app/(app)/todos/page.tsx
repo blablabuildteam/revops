@@ -2,1106 +2,2098 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, use, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Plus, CheckCircle2, Circle, Clock, Trash2,
-  User, Building2, FolderKanban, Calendar,
-  ChevronDown, ChevronRight, ListTodo,
+  ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
 } from "lucide-react";
+import { PriorityFlag } from "@/components/priority-flag";
 import Link from "next/link";
-import { BinaryText } from "@/components/binary-text";
-import { PriorityFlag, type Priority } from "@/components/priority-flag";
-import { CompanyAvatar } from "@/components/company-avatar";
+import {
+  DndContext,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
-import { getCompanies, getProjects } from "@/lib/api";
-import { Company, Project } from "@/lib/types";
-import { formatDate, toDateInputValue } from "@/lib/format";
+import { BinaryText } from "@/components/binary-text";
+import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
-import { ProjectTaskBoardPanel } from "@/components/project-task-board";
-import { Task } from "@/lib/types";
+import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
+import { TaskRowIndicators } from "@/components/task-row-indicators";
+import { TaskDetailDialog } from "@/components/task-detail-dialog";
+import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
+import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
+import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
+import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
+import { formatDate, toDateInputValue } from "@/lib/format";
+import { useMutationFeedback } from "@/components/mutation-provider";
 
-interface TodoUser { id: string; email: string; name: string }
-interface Todo {
-  id: string;
-  title: string;
-  description?: string;
-  status: "open" | "in_progress" | "done";
-  priority: "low" | "medium" | "high";
-  assignee_id?: string;
-  assignee_name?: string;
-  company_id?: string;
-  company_name?: string;
-  project_id?: string;
-  project_name?: string;
-  project_company_name?: string;
-  project_company_logo_url?: string;
-  due_date?: string;
-  created_at: string;
-  _source: "todo";
+const TASK_ROW_GRID =
+  "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+
+const taskDetailApi = {
+  updateTask,
+  getTaskComments,
+  createTaskComment,
+  getTaskAttachments,
+  uploadTaskAttachment,
+  deleteTaskAttachment,
+};
+
+type TasksByMilestone = Record<string, Task[]>;
+type ProjectDetail = Project & { milestones: (Milestone & { tasks: Task[] })[]; unassigned_tasks: Task[] };
+
+const UNASSIGNED_ID = "unassigned";
+
+function isApprovedTask(task: Task) {
+  return task.approved !== false;
 }
 
-interface ProjectBoardTask {
-  id: string;
-  title: string;
-  description?: string;
-  status: "open" | "in_progress" | "done";
-  priority: Priority;
-  assignee?: string;
-  due_date?: string;
-  project_id: string;
-  project_name: string;
-  company_name?: string;
-  company_id?: string;
-  company_logo_url?: string;
-  milestone_id?: string | null;
-  milestone_name?: string;
-  milestone_color?: string;
-  parent_id?: string | null;
-  position?: number;
-  approved?: boolean;
-  url?: string | null;
-  created_at: string;
-  updated_at?: string;
-  _source: "task";
+function sortByPosition(tasks: Task[]) {
+  return [...tasks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
 }
 
-function boardTaskToTask(t: ProjectBoardTask): Task {
-  return {
-    id: t.id,
-    project_id: t.project_id,
-    milestone_id: t.milestone_id ?? null,
-    parent_id: t.parent_id ?? null,
-    title: t.title,
-    description: t.description ?? null,
-    status: t.status,
-    created_by: "team",
-    approved: t.approved !== false,
-    assignee: t.assignee ?? null,
-    due_date: t.due_date ?? null,
-    url: t.url ?? null,
-    priority: t.priority ?? "low",
-    position: t.position ?? 0,
-    created_at: t.created_at,
-    updated_at: t.updated_at ?? t.created_at,
-  };
+function buildTasksByMilestone(
+  milestones: (Milestone & { tasks: Task[] })[],
+  unassignedTasks: Task[] = [],
+): TasksByMilestone {
+  const map: TasksByMilestone = {};
+  for (const m of milestones) {
+    map[m.id] = sortByPosition(m.tasks || []);
+  }
+  const unassigned = sortByPosition(unassignedTasks.filter(isApprovedTask));
+  if (unassigned.length > 0) {
+    map[UNASSIGNED_ID] = unassigned;
+  }
+  return map;
+}
+
+function findContainer(
+  id: string,
+  tasksByMilestone: TasksByMilestone,
+  milestoneIds: string[],
+): string | null {
+  if (id === UNASSIGNED_ID) return UNASSIGNED_ID;
+  if (milestoneIds.includes(id)) return id;
+  for (const [milestoneId, tasks] of Object.entries(tasksByMilestone)) {
+    if (tasks.some((t) => t.id === id)) return milestoneId;
+  }
+  return null;
+}
+
+function isTopLevelTask(task: Task) {
+  return isApprovedTask(task) && !task.parent_id;
+}
+
+function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
+  const map = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!isApprovedTask(task) || !task.parent_id) continue;
+    const list = map.get(task.parent_id) ?? [];
+    list.push(task);
+    map.set(task.parent_id, list);
+  }
+  for (const [parentId, list] of map) {
+    map.set(parentId, sortByPosition(list));
+  }
+  return map;
+}
+
+function getChildTasks(tasksByMilestone: TasksByMilestone, parentId: string): Task[] {
+  return sortByPosition(
+    Object.values(tasksByMilestone)
+      .flat()
+      .filter((t) => t.parent_id === parentId),
+  );
+}
+
+function containerToMilestoneId(containerId: string): string | null {
+  return containerId === UNASSIGNED_ID ? null : containerId;
+}
+
+function reorderTopLevelInContainer(
+  containerTasks: Task[],
+  activeId: string,
+  overId: string,
+  milestoneIds: string[],
+): Task[] | null {
+  const pending = containerTasks.filter((t) => !isApprovedTask(t));
+  const approved = containerTasks.filter(isApprovedTask);
+  const topLevel = sortByPosition(approved.filter(isTopLevelTask));
+  const subtasks = approved.filter((t) => t.parent_id);
+
+  const oldIndex = topLevel.findIndex((t) => t.id === activeId);
+  if (oldIndex === -1) return null;
+
+  let newIndex: number;
+  if (milestoneIds.includes(overId)) {
+    newIndex = topLevel.length - 1;
+  } else {
+    newIndex = topLevel.findIndex((t) => t.id === overId);
+    if (newIndex === -1) return null;
+  }
+
+  if (oldIndex === newIndex) return null;
+
+  const reorderedTop = arrayMove(topLevel, oldIndex, newIndex);
+  const rebuilt = reorderedTop.flatMap((t) => [
+    t,
+    ...sortByPosition(subtasks.filter((s) => s.parent_id === t.id)),
+  ]);
+  return [...pending, ...rebuilt];
+}
+
+function PhaseColorInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <label
+      title="Phase color"
+      className="group relative h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-neutral-700 p-[3px] transition-colors hover:border-neutral-500"
+      style={{
+        background: "conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #84cc16, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+      }}
+    >
+      <span
+        className="flex h-full w-full items-center justify-center rounded-[5px] bg-neutral-950/90"
+      >
+        <span
+          className="h-3.5 w-3.5 rounded-full border border-neutral-600 shadow-sm transition-transform group-hover:scale-110"
+          style={{ backgroundColor: value }}
+        />
+      </span>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
+    </label>
+  );
+}
+
+function TaskColumnHeader() {
+  return (
+    <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
+      <span />
+      <span>Task</span>
+      <span />
+      <span />
+      <span>Responsible</span>
+      <span>Date</span>
+      <span>Phase</span>
+      <span />
+    </div>
+  );
+}
+
+function PendingTaskRow({
+  task,
+  onDelete,
+  onApprove,
+}: {
+  task: Task;
+  onDelete: (id: string) => void;
+  onApprove: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-950/30 border border-orange-900/40 rounded-lg mx-2 my-1">
+      <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-orange-200">{task.title}</p>
+        {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate"><BinaryText text={task.description} id={`${task.id}-desc`} /></p>}
+        <p className="text-xs text-orange-600 mt-0.5">Client request</p>
+      </div>
+      <button onClick={() => onApprove(task.id)}
+        className="flex items-center gap-1 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-900 transition-colors">
+        <Check className="w-3 h-3" /> Approve
+      </button>
+      <button onClick={() => onDelete(task.id)}
+        className="text-neutral-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function cancelDrag(e: React.PointerEvent) {
+  e.stopPropagation();
+}
+
+function InlineAssigneeSelect({
+  task,
+  onUpdate,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+}) {
+  const assigneeUsers = useAssigneeUsers();
+  return (
+    <Select
+      value={task.assignee || "none"}
+      onValueChange={(v) => {
+        if (!v || v === "none") {
+          updateTask(task.id, { assignee: undefined }).then(onUpdate);
+        } else {
+          updateTask(task.id, { assignee: v }).then(onUpdate);
+        }
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <SelectValue placeholder="—">
+          <AssigneeLabel name={task.assignee} users={assigneeUsers} />
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="bg-neutral-800 border-neutral-700">
+        <AssigneeSelectItems users={assigneeUsers} />
+      </SelectContent>
+    </Select>
+  );
+}
+
+function InlineDateInput({
+  task,
+  onUpdate,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+}) {
+  const value = toDateInputValue(task.due_date);
+
+  return (
+    <DatePicker
+      value={value}
+      onChange={(v) => {
+        updateTask(task.id, { due_date: v || null }).then(onUpdate);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={cancelDrag}
+      size="sm"
+      className="h-7 w-full bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+    />
+  );
+}
+
+function InlinePhaseSelect({
+  task,
+  currentMilestoneId,
+  milestones,
+  onPhaseChange,
+}: {
+  task: Task;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+}) {
+  const isUnassigned = currentMilestoneId === UNASSIGNED_ID;
+  const current = milestones.find((m) => m.id === currentMilestoneId);
+  const currentColor = current ? resolvePhaseColor(current.name, current.color) : undefined;
+
+  return (
+    <Select
+      value={isUnassigned ? "unassigned" : currentMilestoneId}
+      onValueChange={(v) => {
+        if (!v || v === "unassigned" || v === currentMilestoneId) return;
+        onPhaseChange(task.id, currentMilestoneId, v);
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 px-2 gap-1.5"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <SelectValue placeholder="Phase">
+          {isUnassigned ? (
+            <span className="text-neutral-500 truncate">Unassigned</span>
+          ) : current && (
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: currentColor }}
+              />
+              <span className="truncate" style={{ color: currentColor }}>
+                {current.name}
+              </span>
+            </span>
+          )}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent className="bg-neutral-800 border-neutral-700">
+        {milestones.map((m) => {
+          const color = resolvePhaseColor(m.name, m.color);
+          return (
+            <SelectItem key={m.id} value={m.id} className="text-xs">
+              <span className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span style={{ color }}>{m.name}</span>
+              </span>
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
+  );
 }
 
 function isDonePhase(name?: string) {
   return (name ?? "").toLowerCase() === "done";
 }
-const statusIcon = {
-  open: <Circle className="w-4 h-4 text-neutral-600" />,
-  in_progress: <Clock className="w-4 h-4 text-blue-400" />,
-  done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-};
 
-function assigneeOptions(users: TodoUser[], currentUser: TodoUser | null): TodoUser[] {
-  if (!currentUser) return users;
-  if (users.some((u) => u.id === currentUser.id)) return users;
-  return [currentUser, ...users];
-}
+function TaskNameCell({
+  task,
+  onOpen,
+  onRename,
+  allowSubtasks,
+  onAddSubtask,
+  indent = false,
+  isDone = false,
+}: {
+  task: Task;
+  onOpen: () => void;
+  onRename: (title: string) => Promise<void>;
+  allowSubtasks?: boolean;
+  onAddSubtask?: () => void;
+  indent?: boolean;
+  isDone?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(task.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
-function assigneeLabel(users: TodoUser[], assigneeId: string, currentUser: TodoUser | null) {
-  if (!assigneeId) return "Nobody";
+  useEffect(() => {
+    if (!editing) setValue(task.title);
+  }, [task.title, editing]);
+
+  function startEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditing(true);
+    requestAnimationFrame(() => inputRef.current?.select());
+  }
+
+  async function commit() {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setValue(task.title);
+      setEditing(false);
+      return;
+    }
+    if (trimmed !== task.title) {
+      await onRename(trimmed);
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => { void commit(); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void commit();
+          }
+          if (e.key === "Escape") {
+            setValue(task.title);
+            setEditing(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+        className={`h-7 text-xs bg-neutral-800 border-neutral-600 text-neutral-100 flex-1 min-w-0 ${indent ? "ml-5" : ""}`}
+      />
+    );
+  }
+
   return (
-    users.find((u) => u.id === assigneeId)?.name ??
-    (currentUser?.id === assigneeId ? currentUser.name : null) ??
-    "Choose person"
+    <div
+      className={`min-w-0 flex-1 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex-1 min-w-0 text-left cursor-pointer"
+      >
+        <p className="text-sm text-neutral-200 flex items-center gap-1.5 min-w-0">
+          <span className="truncate">
+            <BinaryText text={task.title} id={task.id} />
+          </span>
+          {isOverdue && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+              title="Overdue"
+              aria-label="Overdue"
+            />
+          )}
+        </p>
+        {task.description && !indent && (
+          <p className="text-xs text-neutral-600 truncate">
+            <BinaryText text={task.description} id={`${task.id}-desc`} />
+          </p>
+        )}
+      </button>
+      <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          title="Rename"
+          onClick={startEdit}
+          onPointerDown={cancelDrag}
+          className="p-1.5 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        {allowSubtasks && onAddSubtask && (
+          <button
+            type="button"
+            title="Add subtask"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddSubtask();
+            }}
+            onPointerDown={cancelDrag}
+            className="p-1.5 rounded text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
-function namedOptionLabel(
-  items: { id: string; name: string }[],
-  id: string,
-  emptyLabel: string
-) {
-  if (!id) return emptyLabel;
-  return items.find((i) => i.id === id)?.name ?? emptyLabel;
+function SubtaskRow({
+  task,
+  onUpdate,
+  onDelete,
+  onClick,
+  onRename,
+  selected,
+  onToggleSelect,
+  isDone = false,
+}: {
+  task: Task;
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  isDone?: boolean;
+}) {
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    onDelete(task.id);
+  }
+
+  return (
+    <div
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
+    >
+      <label
+        className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(task.id)}
+          className="sr-only"
+        />
+        <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+          selected
+            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+        }`}>
+          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+        </span>
+      </label>
+
+      <TaskNameCell
+        task={task}
+        indent
+        isDone={isDone}
+        onOpen={() => onClick(task)}
+        onRename={(title) => onRename(task.id, title)}
+      />
+
+      <TaskRowIndicators task={task} />
+
+      <PriorityFlag
+        priority={task.priority ?? "low"}
+        onChange={(next) => {
+          updateTask(task.id, { priority: next }).then(onUpdate);
+        }}
+      />
+
+      <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} />
+      <span className="text-xs text-neutral-700">—</span>
+
+      <button
+        type="button"
+        onClick={handleDelete}
+        onPointerDown={cancelDrag}
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1.5 rounded justify-self-end cursor-pointer"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
 }
 
-const statusFilterLabels: Record<string, string> = {
-  active: "Active",
-  all: "All",
-  done: "Done",
-};
-
-// ---------------------------------------------------------------------------
-// New Task Dialog (full form)
-// ---------------------------------------------------------------------------
-
-function TodoFormDialog({
-  open, onClose, onSave, todo, users, companies, projects, currentUser, defaultProjectId,
+function SortableTaskRow({
+  task,
+  currentMilestoneId,
+  milestones,
+  onUpdate,
+  onDelete,
+  onClick,
+  onPhaseChange,
+  onRename,
+  onAddSubtask,
+  selected,
+  onToggleSelect,
 }: {
-  open: boolean;
-  onClose: () => void;
-  onSave: (t: Todo) => void;
-  todo?: Todo | null;
-  users: TodoUser[];
-  companies: Company[];
-  projects: Project[];
-  currentUser: TodoUser | null;
-  defaultProjectId?: string;
+  task: Task;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  onAddSubtask: () => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
-  const isEdit = !!todo;
-  const [form, setForm] = useState({
-    title: "", description: "", priority: "low",
-    assignee_id: "",
-    company_id: "", project_id: defaultProjectId ?? "", due_date: "",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, data: { type: "task", milestoneId: task.milestone_id } });
 
-  const people = assigneeOptions(users, currentUser);
+  const style = {
+    transform: isDragging ? undefined : CSS.Transform.toString(transform),
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0 : 1,
+  };
 
-  useEffect(() => {
-    if (!open) return;
-    setError("");
-    if (todo) {
-      setForm({
-        title: todo.title,
-        description: todo.description ?? "",
-        priority: todo.priority,
-        assignee_id: todo.assignee_id ?? "",
-        company_id: todo.company_id ?? "",
-        project_id: todo.project_id ?? "",
-        due_date: toDateInputValue(todo.due_date),
-      });
-      return;
-    }
-    setForm({
-      title: "", description: "", priority: "low",
-      assignee_id: currentUser?.id ?? "",
-      company_id: "", project_id: defaultProjectId ?? "", due_date: "",
-    });
-  }, [open, todo, currentUser, defaultProjectId]);
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    onDelete(task.id);
+  }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const milestone = milestones.find((m) => m.id === currentMilestoneId);
+  const isDone = milestone ? isDonePhase(milestone.name) : false;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
+    >
+      <label
+        className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={cancelDrag}
+      >
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(task.id)}
+          className="sr-only"
+        />
+        <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+          selected
+            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+        }`}>
+          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+        </span>
+      </label>
+
+      <div
+        className="min-w-0 flex items-center cursor-grab active:cursor-grabbing touch-none"
+        {...listeners}
+        {...attributes}
+      >
+        <TaskNameCell
+          task={task}
+          allowSubtasks
+          isDone={isDone}
+          onOpen={() => onClick(task)}
+          onRename={(title) => onRename(task.id, title)}
+          onAddSubtask={onAddSubtask}
+        />
+      </div>
+
+      <TaskRowIndicators task={task} />
+
+      <PriorityFlag
+        priority={task.priority ?? "low"}
+        onChange={(next) => {
+          updateTask(task.id, { priority: next }).then(onUpdate);
+        }}
+      />
+
+      <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} />
+
+      <InlinePhaseSelect
+        task={task}
+        currentMilestoneId={currentMilestoneId}
+        milestones={milestones}
+        onPhaseChange={onPhaseChange}
+      />
+
+      <button
+        type="button"
+        onClick={handleDelete}
+        onPointerDown={cancelDrag}
+        className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1.5 rounded justify-self-end cursor-pointer"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function TaskWithSubtasks({
+  task,
+  subtasks,
+  projectId,
+  currentMilestoneId,
+  milestones,
+  onUpdate,
+  onDelete,
+  onClick,
+  onPhaseChange,
+  onRename,
+  onTaskAdd,
+  selectedIds,
+  onToggleSelect,
+}: {
+  task: Task;
+  subtasks: Task[];
+  projectId: string;
+  currentMilestoneId: string;
+  milestones: Milestone[];
+  onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
+  onClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  onRename: (id: string, title: string) => Promise<void>;
+  onTaskAdd: (t: Task) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+}) {
+  const [addingSubtask, setAddingSubtask] = useState(false);
+  const [subtaskTitle, setSubtaskTitle] = useState("");
+
+  async function submitSubtask(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title.trim()) return;
-    setLoading(true);
-    setError("");
+    if (!subtaskTitle.trim()) return;
+    const newTask = await createTask(projectId, {
+      title: subtaskTitle.trim(),
+      parent_id: task.id,
+      milestone_id: task.milestone_id ?? undefined,
+      position: subtasks.length,
+    });
+    onTaskAdd(newTask);
+    setSubtaskTitle("");
+    setAddingSubtask(false);
+  }
+
+  const milestone = milestones.find((m) => m.id === currentMilestoneId);
+  const isDone = milestone ? isDonePhase(milestone.name) : false;
+
+  return (
+    <div>
+      <SortableTaskRow
+        task={task}
+        currentMilestoneId={currentMilestoneId}
+        milestones={milestones}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        onClick={onClick}
+        onPhaseChange={onPhaseChange}
+        onRename={onRename}
+        onAddSubtask={() => setAddingSubtask(true)}
+        selected={selectedIds.has(task.id)}
+        onToggleSelect={onToggleSelect}
+      />
+      {subtasks.map((subtask) => (
+        <SubtaskRow
+          key={subtask.id}
+          task={subtask}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          onClick={onClick}
+          onRename={onRename}
+          selected={selectedIds.has(subtask.id)}
+          onToggleSelect={onToggleSelect}
+          isDone={isDone}
+        />
+      ))}
+      {addingSubtask && (
+        <form onSubmit={submitSubtask} className={`${TASK_ROW_GRID} px-3 py-1.5 items-center`}>
+          <span />
+          <Input
+            autoFocus
+            value={subtaskTitle}
+            onChange={(e) => setSubtaskTitle(e.target.value)}
+            placeholder="Subtask name..."
+            onPointerDown={cancelDrag}
+            className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 ml-5 flex-1 min-w-0"
+          />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <div className="flex items-center gap-1 justify-self-end">
+            <Button type="submit" size="sm" className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
+              <Check className="w-3 h-3" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-neutral-600 hover:text-neutral-400 px-2"
+              onClick={() => { setAddingSubtask(false); setSubtaskTitle(""); }}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function findTaskInState(tasksByMilestone: TasksByMilestone, taskId: string): Task | null {
+  for (const tasks of Object.values(tasksByMilestone)) {
+    const task = tasks.find((t) => t.id === taskId);
+    if (task) return task;
+  }
+  return null;
+}
+
+function BulkActionsBar({
+  count,
+  milestones,
+  projects,
+  currentProjectId,
+  onBulkPhaseChange,
+  onBulkProjectMove,
+  onBulkUpdate,
+  onClear,
+}: {
+  count: number;
+  milestones: Milestone[];
+  projects: Project[];
+  currentProjectId: string;
+  onBulkPhaseChange: (milestoneId: string) => void;
+  onBulkProjectMove: (projectId: string) => void | Promise<void>;
+  onBulkUpdate: (patch: Partial<Task>) => void;
+  onClear: () => void;
+}) {
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const assigneeUsers = useAssigneeUsers();
+
+  if (count === 0) return null;
+
+  const otherProjects = projects.filter((p) => p.id !== currentProjectId);
+
+  async function confirmProjectMove() {
+    if (!pendingProjectId || moving) return;
+    setMoving(true);
     try {
-      const payload = {
-        ...form,
-        assignee_id:
-          form.assignee_id === ""
-            ? null
-            : (form.assignee_id || currentUser?.id || null),
-        company_id: form.company_id || null,
-        project_id: form.project_id || null,
-        due_date: form.due_date || null,
-      };
-      const res = await fetch(isEdit ? `/api/todos/${todo!.id}` : "/api/todos", {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? (isEdit ? "Failed to update task" : "Failed to create task"));
-        return;
-      }
-      onSave(data);
-      onClose();
+      await onBulkProjectMove(pendingProjectId);
+      setPendingProjectId(null);
     } finally {
-      setLoading(false);
+      setMoving(false);
     }
   }
 
-  const s = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  function handleClear() {
+    setPendingProjectId(null);
+    onClear();
+  }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit task" : "New task"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Task *</Label>
-            <Input required value={form.title} onChange={(e) => s("title", e.target.value)}
-              placeholder="What needs to be done?"
-              className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" autoFocus />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Description</Label>
-            <Textarea value={form.description} onChange={(e) => s("description", e.target.value)}
-              placeholder="Optional details..."
-              rows={2} className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Priority</Label>
-              <Select value={form.priority} onValueChange={(v) => s("priority", v ?? "low")}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="high" className="text-red-400">High</SelectItem>
-                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
-                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Assigned to</Label>
-              <Select value={form.assignee_id || "none"} onValueChange={(v) => s("assignee_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Choose person">
-                    {assigneeLabel(people, form.assignee_id, currentUser)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
-                  {people.map((u) => (
-                    <SelectItem key={u.id} value={u.id} className="text-neutral-100">{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Client</Label>
-              <Select value={form.company_id || "none"} onValueChange={(v) => s("company_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optional">
-                    {namedOptionLabel(companies, form.company_id, "No client")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">No client</SelectItem>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Project</Label>
-              <Select value={form.project_id || "none"} onValueChange={(v) => s("project_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optional">
-                    {namedOptionLabel(projects, form.project_id, "No project")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">No project</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="text-neutral-100">{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-neutral-400 text-xs">Due date</Label>
-            <DatePicker
-              value={form.due_date}
-              onChange={(v) => s("due_date", v)}
-              className="bg-neutral-800 border-neutral-700 text-neutral-100"
-            />
-          </div>
-          <DialogFooter className="flex-col items-stretch gap-2 sm:flex-col sm:items-stretch">
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
-            <Button type="submit" disabled={loading}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
-              {loading ? (isEdit ? "Saving..." : "Adding...") : (isEdit ? "Save" : "Add")}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
+      <span className="text-sm font-medium text-[#e8ff47] tabular-nums whitespace-nowrap">
+        {count} task{count !== 1 ? "s" : ""} selected
+      </span>
+
+      <div className="w-px h-5 bg-neutral-700" />
+
+      <Select onValueChange={(v: string | null) => { if (v) onBulkPhaseChange(v); }}>
+        <SelectTrigger
+          size="sm"
+          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+          onPointerDown={cancelDrag}
+        >
+          <FolderKanban className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <SelectValue placeholder="Phase" />
+        </SelectTrigger>
+        <SelectContent className="bg-neutral-800 border-neutral-700">
+          {milestones.map((m) => {
+            const color = resolvePhaseColor(m.name, m.color);
+            return (
+              <SelectItem key={m.id} value={m.id} className="text-xs">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span style={{ color }}>{m.name}</span>
+                </span>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+
+      {otherProjects.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <Select
+            value={pendingProjectId ?? undefined}
+            onValueChange={(v: string | null) => setPendingProjectId(v || null)}
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-auto min-w-[160px] max-w-[220px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+              onPointerDown={cancelDrag}
+            >
+              <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <SelectValue placeholder="Move to project" />
+            </SelectTrigger>
+            <SelectContent
+              alignItemWithTrigger={false}
+              align="start"
+              className="bg-neutral-800 border-neutral-700 max-h-60 min-w-[min(360px,90vw)] w-max"
+            >
+              {otherProjects.map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-xs text-neutral-100">
+                  <span className="whitespace-normal">{p.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {pendingProjectId && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={moving}
+              className="h-8 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium px-3 shrink-0"
+              onClick={confirmProjectMove}
+            >
+              {moving ? "Moving…" : "Move"}
             </Button>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          )}
+        </div>
+      )}
+
+      <Select
+        onValueChange={(v: string | null) =>
+          onBulkUpdate({ assignee: !v || v === "none" ? null : v })
+        }
+      >
+        <SelectTrigger
+          size="sm"
+          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+          onPointerDown={cancelDrag}
+        >
+          <Users className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <SelectValue placeholder="Assignee" />
+        </SelectTrigger>
+        <SelectContent className="bg-neutral-800 border-neutral-700">
+          <AssigneeSelectItems users={assigneeUsers} noneLabel="Nobody" />
+        </SelectContent>
+      </Select>
+
+      <div className="flex items-center h-8 px-2.5 rounded-md bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors">
+        <DatePicker
+          placeholder="Set date"
+          size="sm"
+          onChange={(v) => {
+            if (v) onBulkUpdate({ due_date: v });
+          }}
+          className="h-auto min-w-[110px] border-0 bg-transparent px-0 text-xs text-neutral-300 shadow-none hover:bg-transparent"
+        />
+      </div>
+
+      <div className="w-px h-5 bg-neutral-700" />
+
+      <button
+        onClick={handleClear}
+        className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors px-2 py-1.5 rounded hover:bg-neutral-800"
+      >
+        <X className="w-3.5 h-3.5" />
+        Clear
+      </button>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Inline Quick-Add for personal to-dos
-// ---------------------------------------------------------------------------
-
-function QuickAddTodo({ onAdd, currentUser }: {
-  onAdd: (t: Todo) => void;
-  currentUser: TodoUser | null;
+function AddTaskInline({
+  onAdd,
+  projectId,
+  milestoneId,
+}: {
+  onAdd: (t: Task) => void;
+  projectId: string;
+  milestoneId?: string;
 }) {
-  const [value, setValue] = useState("");
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!value.trim() || loading) return;
-    setLoading(true);
-    try {
-      const res = await fetch("/api/todos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: value.trim(),
-          priority: "low",
-          assignee_id: currentUser?.id ?? null,
-          company_id: null,
-          project_id: null,
-          due_date: null,
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data) {
-        onAdd(data);
-        setValue("");
-        inputRef.current?.focus();
-      }
-    } finally {
-      setLoading(false);
-    }
+    if (!title.trim()) return;
+    const task = await createTask(projectId, { title: title.trim(), milestone_id: milestoneId });
+    onAdd(task);
+    setTitle("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        className="flex items-center gap-2 text-xs text-neutral-700 hover:text-neutral-400 transition-colors px-3 py-1.5 w-full">
+        <Plus className="w-3.5 h-3.5" /> Add task
+      </button>
+    );
   }
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-2">
-      <div className="flex items-center gap-2 flex-1 bg-neutral-900/60 border border-neutral-800 rounded-lg px-3 py-1.5 focus-within:border-neutral-600 transition-colors">
-        <Plus className="w-4 h-4 text-neutral-600 shrink-0" />
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Add a quick to-do..."
-          className="flex-1 bg-transparent text-sm text-neutral-200 placeholder:text-neutral-600 outline-none"
-        />
-      </div>
-      {value.trim() && (
-        <Button
-          type="submit"
-          disabled={loading}
-          size="sm"
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium h-8 px-3 text-xs shrink-0"
-        >
-          {loading ? "..." : "Add"}
-        </Button>
-      )}
+    <form onSubmit={submit} className="flex items-center gap-2 px-3 py-1.5">
+      <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
+        placeholder="Task description..."
+        className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1" />
+      <Button type="submit" size="sm"
+        className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
+        <Check className="w-3 h-3" />
+      </Button>
+      <Button type="button" size="sm" variant="ghost"
+        className="h-7 text-xs text-neutral-600 hover:text-neutral-400 px-2"
+        onClick={() => { setOpen(false); setTitle(""); }}>
+        <X className="w-3 h-3" />
+      </Button>
     </form>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Compact todo row for the checklist
-// ---------------------------------------------------------------------------
-
-function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
-  todo: Todo;
-  onUpdate: (t: Todo) => void;
-  onDelete: (id: string) => void;
-  onEdit: (t: Todo) => void;
-}) {
-  const statuses: Todo["status"][] = ["open", "in_progress", "done"];
-
-  function cycleStatus() {
-    const next = statuses[(statuses.indexOf(todo.status) + 1) % statuses.length];
-    fetch(`/api/todos/${todo.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next }),
-    }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
-  }
-
-  const isOverdue = todo.due_date && todo.status !== "done" &&
-    new Date(todo.due_date) < new Date();
-
-  return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all group ${
-      todo.status === "done"
-        ? "opacity-50 bg-neutral-900/20 border-neutral-800/50"
-        : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
-    }`}>
-      <button onClick={cycleStatus} className="shrink-0">
-        {statusIcon[todo.status]}
-      </button>
-      <div className="flex-1 min-w-0 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onEdit(todo)}
-          className={`flex-1 min-w-0 text-left cursor-pointer hover:text-neutral-100 transition-colors ${
-            todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
-          }`}
-        >
-          <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
-            <span className="truncate">
-              <BinaryText text={todo.title} id={todo.id} />
-            </span>
-            {isOverdue && (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-                title="Overdue"
-                aria-label="Overdue"
-              />
-            )}
-          </p>
-        </button>
-        <div className="flex items-center gap-2 shrink-0">
-          {todo.assignee_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <User className="w-3 h-3" /> {todo.assignee_name}
-            </span>
-          )}
-          {todo.due_date && (
-            <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-500"}`}>
-              <Calendar className={`w-3 h-3 ${isOverdue ? "text-red-400" : ""}`} />
-              {formatDate(todo.due_date)}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center shrink-0">
-        <PriorityFlag
-          priority={todo.priority}
-          onChange={(next) => {
-            fetch(`/api/todos/${todo.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ priority: next }),
-            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
-          }}
-        />
-        <button onClick={() => onDelete(todo.id)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Expanded todo card (used in project groups for more detail)
-// ---------------------------------------------------------------------------
-
-function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
-  todo: Todo;
-  onUpdate: (t: Todo) => void;
-  onDelete: (id: string) => void;
-  onEdit: (t: Todo) => void;
-}) {
-  const statuses: Todo["status"][] = ["open", "in_progress", "done"];
-
-  function cycleStatus() {
-    const next = statuses[(statuses.indexOf(todo.status) + 1) % statuses.length];
-    fetch(`/api/todos/${todo.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next }),
-    }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
-  }
-
-  const isOverdue = todo.due_date && todo.status !== "done" &&
-    new Date(todo.due_date) < new Date();
-
-  return (
-    <div className={`flex items-start gap-3 px-3.5 py-2.5 transition-all group ${
-      todo.status === "done" ? "opacity-50" : ""
-    }`}>
-      <button onClick={cycleStatus} className="shrink-0 mt-0.5">
-        {statusIcon[todo.status]}
-      </button>
-      <div className="flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => onEdit(todo)}
-          className={`w-full text-left cursor-pointer hover:text-neutral-100 transition-colors ${
-            todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
-          }`}
-        >
-          <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
-            <span className="truncate">
-              <BinaryText text={todo.title} id={todo.id} />
-            </span>
-            {isOverdue && (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-                title="Overdue"
-                aria-label="Overdue"
-              />
-            )}
-          </p>
-        </button>
-        {todo.description && (
-          <p className="text-xs text-neutral-500 mt-0.5 line-clamp-1">
-            <BinaryText text={todo.description} id={`${todo.id}-desc`} />
-          </p>
-        )}
-        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-          {todo.assignee_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <User className="w-3 h-3" /> {todo.assignee_name}
-            </span>
-          )}
-          {todo.company_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <Building2 className="w-3 h-3" /> {todo.company_name}
-            </span>
-          )}
-          {todo.due_date && (
-            <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-500"}`}>
-              <Calendar className={`w-3 h-3 ${isOverdue ? "text-red-400" : ""}`} />
-              {formatDate(todo.due_date)}
-              {isOverdue && " · overdue"}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center shrink-0">
-        <PriorityFlag
-          priority={todo.priority}
-          onChange={(next) => {
-            fetch(`/api/todos/${todo.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ priority: next }),
-            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
-          }}
-        />
-        <button onClick={() => onDelete(todo.id)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Collapsible project group
-// ---------------------------------------------------------------------------
-
-function ProjectGroup({
-  projectId, projectName, companyName, companyLogoUrl,
-  todos, boardTasks, filterStatus,
-  onTodoUpdate, onTodoDelete, onTodoEdit,
-  onBoardTaskUpdate, onBoardTaskDelete, onNewTask,
+function MilestoneSection({
+  milestone,
+  milestones,
+  projectId,
+  tasks,
+  onDelete,
+  onTaskUpdate,
+  onTaskDelete,
+  onTaskAdd,
+  onTaskClick,
+  onPhaseChange,
+  isUnassigned,
+  selectedIds,
+  onToggleSelect,
+  onTogglePhase,
+  onRename,
 }: {
+  milestone: Milestone;
+  milestones: Milestone[];
   projectId: string;
-  projectName: string;
-  companyName?: string;
-  companyLogoUrl?: string;
-  todos: Todo[];
-  boardTasks: ProjectBoardTask[];
-  filterStatus: "active" | "all" | "done";
-  onTodoUpdate: (t: Todo) => void;
-  onTodoDelete: (id: string) => void;
-  onTodoEdit: (t: Todo) => void;
-  onBoardTaskUpdate: (t: Task, milestone?: { name?: string; color?: string }) => void;
-  onBoardTaskDelete: (id: string) => void;
-  onNewTask: (projectId: string) => void;
+  tasks: Task[];
+  onDelete: (id: string) => void;
+  onTaskUpdate: (t: Task) => void;
+  onTaskDelete: (id: string) => void;
+  onTaskAdd: (t: Task) => void;
+  onTaskClick: (t: Task) => void;
+  onPhaseChange: (taskId: string, fromMilestoneId: string, toMilestoneId: string) => void;
+  isUnassigned?: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onTogglePhase: (taskIds: string[]) => void;
+  onRename: (id: string, title: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const { setNodeRef, isOver } = useDroppable({ id: milestone.id });
 
-  const visibleTodos = filterStatus === "done"
-    ? todos.filter((t) => t.status === "done")
-    : filterStatus === "active"
-      ? todos.filter((t) => t.status !== "done")
-      : todos;
+  const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
+  const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
+  const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
+  const subtasksByParent = groupSubtasksByParent(tasks);
+  const total = approvedTopLevel.length;
+  const titleColor = isUnassigned
+    ? "#a3a3a3"
+    : resolvePhaseColor(milestone.name, milestone.color);
 
-  const todoDone = todos.filter((t) => t.status === "done").length;
-  const boardDone = boardTasks.filter((t) => isDonePhase(t.milestone_name)).length;
-  const total = todos.length + boardTasks.length;
-  const doneCount = todoDone + boardDone;
+  const approvedIds = approvedTasks.map((t) => t.id);
+  const allPhaseSelected = total > 0 && approvedIds.every((id) => selectedIds.has(id));
+  const somePhaseSelected = approvedIds.some((id) => selectedIds.has(id));
+
+  function handleApprove(id: string) {
+    updateTask(id, { approved: true }).then(onTaskUpdate);
+  }
 
   return (
-    <div className="border border-neutral-800 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-3 w-full px-4 py-3 bg-neutral-900/60 hover:bg-neutral-900/80 transition-colors text-left"
-      >
-        {expanded
-          ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
-          : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />
-        }
-        {companyName ? (
-          <CompanyAvatar name={companyName} logoUrl={companyLogoUrl} size="sm" />
-        ) : (
-          <FolderKanban className="w-4 h-4 text-neutral-500 shrink-0" />
-        )}
-        <span className="flex-1 min-w-0">
-          <span className="text-sm font-medium text-neutral-200 truncate">{projectName}</span>
-        </span>
-        <span className="text-xs text-neutral-600 font-mono shrink-0">
-          {doneCount}/{total}
-        </span>
-        <div
-          className="w-16 h-1.5 rounded-full bg-neutral-800 overflow-hidden shrink-0"
-          title={`${doneCount} of ${total} done`}
+    <div className={`border rounded-lg overflow-hidden transition-colors ${
+      isUnassigned
+        ? "border-amber-900/50 bg-amber-950/10"
+        : "border-neutral-800"
+    } ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
+      <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800 group/phase">
+        <label
+          className={`flex items-center justify-center cursor-pointer transition-opacity ${
+            somePhaseSelected || allPhaseSelected ? "opacity-100" : "opacity-0 group-hover/phase:opacity-100"
+          }`}
+          onClick={(e) => e.stopPropagation()}
         >
-          {total > 0 && (
-            <div
-              className="h-full rounded-full bg-emerald-500/70 transition-all"
-              style={{ width: `${(doneCount / total) * 100}%` }}
-            />
+          <input
+            type="checkbox"
+            checked={allPhaseSelected}
+            onChange={() => onTogglePhase(approvedIds)}
+            className="sr-only"
+            disabled={total === 0}
+          />
+          <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
+            allPhaseSelected
+              ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+              : somePhaseSelected
+                ? "border-[#e8ff47]/30 bg-[#e8ff47]/5"
+                : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
+          }`}>
+            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#e8ff47]/60" />}
+          </span>
+        </label>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: titleColor }}
+          />
+          <h3 className="font-medium truncate" style={{ color: titleColor }}>
+            {milestone.name}
+          </h3>
+        </div>
+        <div className="flex items-center gap-3">
+          {!isUnassigned && pendingTasks.length > 0 && (
+            <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
+          )}
+          <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
+          {!isUnassigned && milestone.due_date && (
+            <span className="text-xs text-neutral-700 font-mono">{formatDate(milestone.due_date)}</span>
+          )}
+          {!isUnassigned && (
+            <button onClick={() => onDelete(milestone.id)}
+              className="text-neutral-700 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
-      </button>
+      </div>
 
-      {expanded && (
-        <>
-          {visibleTodos.length > 0 && (
-            <div className="divide-y divide-neutral-800/40 border-b border-neutral-800/60">
-              <div className="px-4 py-1.5">
-                <span className="text-[10px] text-neutral-600 uppercase tracking-widest">To-dos</span>
-              </div>
-              {visibleTodos.map((todo) => (
-                <TodoCard
-                  key={`todo-${todo.id}`}
-                  todo={todo}
-                  onUpdate={onTodoUpdate}
-                  onDelete={onTodoDelete}
-                  onEdit={onTodoEdit}
-                />
-              ))}
-            </div>
-          )}
-          <ProjectTaskBoardPanel
-            projectId={projectId}
-            tasks={boardTasks.map(boardTaskToTask)}
-            filterStatus={filterStatus}
-            onTaskUpdate={onBoardTaskUpdate}
-            onTaskDelete={onBoardTaskDelete}
-          />
-          {total === 0 && (
-            <p className="text-xs text-neutral-700 px-4 py-3">No tasks yet</p>
-          )}
-          <div className="px-3 py-2 flex items-center gap-2 border-t border-neutral-800/60">
-            <button
-              onClick={() => onNewTask(projectId)}
-              className="flex items-center gap-1.5 text-xs text-neutral-600 hover:text-neutral-400 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add task
-            </button>
-            <span className="text-neutral-800">·</span>
-            <Link
-              href={`/projects/${projectId}`}
-              className="text-xs text-neutral-600 hover:text-[#e8ff47] transition-colors"
-            >
-              Open project board
-            </Link>
+      {pendingTasks.map((task) => (
+        <PendingTaskRow
+          key={task.id}
+          task={task}
+          onDelete={onTaskDelete}
+          onApprove={handleApprove}
+        />
+      ))}
+
+      <div ref={setNodeRef} className="min-h-[2rem]">
+        <SortableContext items={approvedTopLevel.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="divide-y divide-neutral-800/40">
+            {approvedTopLevel.map((task) => (
+              <TaskWithSubtasks
+                key={task.id}
+                task={task}
+                subtasks={subtasksByParent.get(task.id) ?? []}
+                projectId={projectId}
+                currentMilestoneId={milestone.id}
+                milestones={milestones}
+                onUpdate={onTaskUpdate}
+                onDelete={onTaskDelete}
+                onClick={onTaskClick}
+                onPhaseChange={onPhaseChange}
+                onRename={onRename}
+                onTaskAdd={onTaskAdd}
+                selectedIds={selectedIds}
+                onToggleSelect={onToggleSelect}
+              />
+            ))}
           </div>
-        </>
-      )}
+        </SortableContext>
+        {approvedTopLevel.length === 0 && pendingTasks.length === 0 && (
+          <p className="text-xs text-neutral-700 px-4 py-3">Drop tasks here</p>
+        )}
+      </div>
+
+      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main page
-// ---------------------------------------------------------------------------
-
-export default function TodosPage() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [boardTasks, setBoardTasks] = useState<ProjectBoardTask[]>([]);
-  const [users, setUsers] = useState<TodoUser[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [currentUser, setCurrentUser] = useState<TodoUser | null>(null);
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [tasksByMilestone, setTasksByMilestone] = useState<TasksByMilestone>({});
   const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-  const [formDefaultProject, setFormDefaultProject] = useState<string | undefined>();
-  const [filterAssignee, setFilterAssignee] = useState("all");
-  const [filterCompany, setFilterCompany] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("active");
-  const [filtersReady, setFiltersReady] = useState(false);
+  const [newMilestoneName, setNewMilestoneName] = useState("");
+  const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
+  const [addingMilestone, setAddingMilestone] = useState(false);
+  const [copiedEdit, setCopiedEdit] = useState(false);
+  const [sharingEdit, setSharingEdit] = useState(false);
+  const [revokingEdit, setRevokingEdit] = useState(false);
   const { requestDelete, confirmDialog } = useConfirmDelete();
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [editStatusesOpen, setEditStatusesOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
+  const tasksRef = useRef<TasksByMilestone>({});
+  const dragStartSnapshot = useRef<TasksByMilestone | null>(null);
+  const { begin, end, pushUndo } = useMutationFeedback();
+
+  const milestoneIds = [
+    ...(project?.milestones.map((m) => m.id) ?? []),
+    ...(tasksByMilestone[UNASSIGNED_ID]?.length ? [UNASSIGNED_ID] : []),
+  ];
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((data) => {
-        const user = data.user ?? null;
-        setCurrentUser(user);
-        if (user?.id) setFilterAssignee(user.id);
-        setFiltersReady(true);
-      })
-      .catch(() => setFiltersReady(true));
+    tasksRef.current = tasksByMilestone;
+  }, [tasksByMilestone]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    getProject(id).then((p) => {
+      const detail = p as ProjectDetail;
+      setProject(detail);
+      setTasksByMilestone(buildTasksByMilestone(detail.milestones, detail.unassigned_tasks || []));
+      setLoading(false);
+    });
+    getProjects().then(setAllProjects);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const persistContainer = useCallback(async (containerId: string, tasks: Task[]) => {
+    const approved = sortByPosition(tasks.filter(isApprovedTask));
+    const topLevel = approved.filter((t) => !t.parent_id);
+    const subtasks = approved.filter((t) => t.parent_id);
+    const milestoneId = containerToMilestoneId(containerId);
+
+    await Promise.all([
+      ...topLevel.map((t, i) =>
+        updateTask(t.id, {
+          milestone_id: milestoneId,
+          position: i,
+        }),
+      ),
+      ...subtasks.map((t) =>
+        updateTask(t.id, {
+          milestone_id: milestoneId,
+        }),
+      ),
+    ]);
   }, []);
 
-  const load = useCallback(async () => {
-    if (!filtersReady) return;
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (filterAssignee !== "all") params.set("assignee", filterAssignee);
-    if (filterCompany !== "all") params.set("company", filterCompany);
-    if (filterStatus !== "all") params.set("status", filterStatus === "active" ? "" : filterStatus);
+  function handleTaskUpdate(updated: Task) {
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      let oldContainer: string | null = null;
+      for (const containerId of Object.keys(next)) {
+        if (next[containerId].some((t) => t.id === updated.id)) {
+          oldContainer = containerId;
+          break;
+        }
+      }
+      const newContainer = updated.milestone_id ?? UNASSIGNED_ID;
 
-    // Build params for project board tasks (uses name-based assignee)
-    const boardParams = new URLSearchParams();
-    if (filterStatus !== "all") boardParams.set("status", filterStatus);
+      if (oldContainer) {
+        next[oldContainer] = next[oldContainer].filter((t) => t.id !== updated.id);
+      }
 
-    const [todoData, userData, companyData, projectData] = await Promise.all([
-      fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetch("/api/users").then((r) => r.json()).catch(() => []),
-      getCompanies(),
-      getProjects(),
-    ]);
+      if (isApprovedTask(updated)) {
+        next[newContainer] = sortByPosition([
+          ...(next[newContainer] || []).filter((t) => t.id !== updated.id),
+          updated,
+        ]);
+      } else if (oldContainer) {
+        next[oldContainer] = sortByPosition([...(next[oldContainer] || []), updated]);
+      }
 
-    setUsers(userData);
-    setCompanies(companyData);
-    setProjects(projectData as Project[]);
+      if (next[UNASSIGNED_ID]?.length === 0) {
+        delete next[UNASSIGNED_ID];
+      }
 
-    // Resolve the assignee name for board tasks filter
-    // The assignee filter uses user IDs; board tasks use text names
-    let assigneeName: string | null = null;
-    if (filterAssignee !== "all") {
-      const matchedUser = userData.find((u: TodoUser) => u.id === filterAssignee);
-      if (matchedUser) assigneeName = matchedUser.name;
-    }
-    if (assigneeName) boardParams.set("assignee_name", assigneeName);
-
-    const boardData = await fetch(`/api/tasks/assigned?${boardParams}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .catch(() => []);
-
-    setTodos(todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })));
-    setBoardTasks(boardData.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })));
-    setCurrentUser((prev) => {
-      const me = userData.find((u: TodoUser) => u.id === prev?.id) ?? prev;
-      return me;
+      return next;
     });
-    setLoading(false);
-  }, [filterAssignee, filterCompany, filterStatus, filtersReady]);
-
-  useEffect(() => { load(); }, [load]);
-
-  function handleTodoUpdate(updated: Todo) {
-    setTodos((prev) => prev.map((x) => x.id === updated.id ? { ...x, ...updated } : x));
+    if (selectedTask?.id === updated.id) setSelectedTask(updated);
   }
 
-  function handleBoardTaskUpdate(updated: Task, milestone?: { name?: string; color?: string }) {
-    setBoardTasks((prev) => prev.map((x) => {
-      if (x.id !== updated.id) return x;
-      return {
-        ...x,
-        title: updated.title,
-        description: updated.description ?? undefined,
-        status: updated.status,
-        priority: updated.priority,
-        assignee: updated.assignee ?? undefined,
-        due_date: updated.due_date ?? undefined,
-        milestone_id: updated.milestone_id,
-        parent_id: updated.parent_id,
-        position: updated.position,
-        url: updated.url ?? undefined,
-        milestone_name: milestone?.name ?? (updated.milestone_id ? x.milestone_name : undefined),
-        milestone_color: milestone?.color ?? (updated.milestone_id ? x.milestone_color : undefined),
-      };
-    }));
-  }
-
-  function handleBoardTaskDelete(id: string) {
-    const task = boardTasks.find((t) => t.id === id);
+  function confirmTaskDelete(taskId: string) {
+    const task = findTaskInState(tasksRef.current, taskId);
+    const childCount = getChildTasks(tasksRef.current, taskId).length;
     requestDelete({
       title: "Delete task",
       description: (
         <>
           Are you sure you want to delete{" "}
           <span className="text-neutral-300">{task?.title ?? "this task"}</span>?
+          {childCount > 0 && (
+            <> This will also delete {childCount} subtask{childCount !== 1 ? "s" : ""}.</>
+          )}
         </>
       ),
       confirmLabel: "Delete task",
-      onConfirm: () => {
-        fetch(`/api/tasks/${id}`, { method: "DELETE" });
-        setBoardTasks((prev) => prev.filter((t) => t.id !== id));
-      },
+      onConfirm: () => handleTaskDelete(taskId),
     });
   }
 
-  function handleDelete(id: string) {
-    const todo = todos.find((t) => t.id === id);
+  function confirmMilestoneDelete(milestoneId: string) {
+    const milestone = project?.milestones.find((m) => m.id === milestoneId);
+    const taskCount = (tasksByMilestone[milestoneId] || []).length;
     requestDelete({
-      title: "Delete task",
+      title: "Delete phase",
       description: (
         <>
           Are you sure you want to delete{" "}
-          <span className="text-neutral-300">{todo?.title ?? "this task"}</span>?
+          <span className="text-neutral-300">{milestone?.name ?? "this phase"}</span>?
+          {taskCount > 0 && (
+            <> This will permanently remove {taskCount} task{taskCount !== 1 ? "s" : ""} in this phase.</>
+          )}
         </>
       ),
-      confirmLabel: "Delete task",
-      onConfirm: () => {
-        fetch(`/api/todos/${id}`, { method: "DELETE" });
-        setTodos((prev) => prev.filter((t) => t.id !== id));
+      confirmLabel: "Delete phase",
+      onConfirm: async () => {
+        await deleteMilestone(milestoneId);
+        setProject((prev) => prev ? {
+          ...prev,
+          milestones: prev.milestones.filter((ms) => ms.id !== milestoneId),
+        } : prev);
+        setTasksByMilestone((prev) => {
+          const next = { ...prev };
+          delete next[milestoneId];
+          return next;
+        });
       },
     });
   }
 
-  function openNewTaskForProject(projectId: string) {
-    setEditingTodo(null);
-    setFormDefaultProject(projectId);
-    setFormOpen(true);
+  function handleTaskDelete(taskId: string) {
+    const childIds = getChildTasks(tasksRef.current, taskId).map((c) => c.id);
+    const idsToRemove = new Set([taskId, ...childIds]);
+    deleteTask(taskId);
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      for (const milestoneId of Object.keys(next)) {
+        next[milestoneId] = next[milestoneId].filter((t) => !idsToRemove.has(t.id));
+      }
+      return next;
+    });
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of idsToRemove) next.delete(id);
+      return next;
+    });
+    if (selectedTask && idsToRemove.has(selectedTask.id)) {
+      setDetailOpen(false);
+      setSelectedTask(null);
+    }
   }
 
-  function openNewTask() {
-    setEditingTodo(null);
-    setFormDefaultProject(undefined);
-    setFormOpen(true);
+  function handleTaskAdd(containerId: string, task: Task) {
+    const bucket = task.milestone_id ?? UNASSIGNED_ID;
+    setTasksByMilestone((prev) => ({
+      ...prev,
+      [bucket]: sortByPosition([...(prev[bucket] || []), task]),
+    }));
   }
 
-  function openEditTask(todo: Todo) {
-    setEditingTodo(todo);
-    setFormDefaultProject(undefined);
-    setFormOpen(true);
+  async function handleTaskPhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
+    if (fromMilestoneId === toMilestoneId) return;
+
+    const current = tasksRef.current;
+    const childTasks = getChildTasks(current, taskId);
+    const movingIds = new Set([taskId, ...childTasks.map((c) => c.id)]);
+    const parentTask = findTaskInState(current, taskId);
+    if (!parentTask) return;
+
+    const fromSnapshot = [...(current[fromMilestoneId] || [])];
+    const toSnapshot = [...(current[toMilestoneId] || [])];
+    const targetApproved = (current[toMilestoneId] || []).filter(isTopLevelTask);
+    const newPosition = targetApproved.length;
+
+    const optimisticParent: Task = {
+      ...parentTask,
+      milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+      position: newPosition,
+    };
+    const optimisticChildren = childTasks.map((child) => ({
+      ...child,
+      milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+    }));
+
+    setTasksByMilestone((prev) => {
+      const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
+      const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id));
+      const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
+      const toApproved = [
+        ...targetApproved,
+        optimisticParent,
+        ...optimisticChildren,
+      ];
+      const next = {
+        ...prev,
+        [fromMilestoneId]: [...fromPending, ...fromApproved],
+        [toMilestoneId]: [...toPending, ...toApproved],
+      };
+      tasksRef.current = next;
+      return next;
+    });
+
+    if (selectedTask?.id === taskId) setSelectedTask(optimisticParent);
+
+    begin();
+    try {
+      const updated = await updateTask(taskId, {
+        milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+        position: newPosition,
+      });
+      const updatedChildren = await Promise.all(
+        childTasks.map((child) =>
+          updateTask(child.id, {
+            milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+          }),
+        ),
+      );
+
+      setTasksByMilestone((prev) => {
+        const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
+        const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id));
+        const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
+        const toApproved = [
+          ...(prev[toMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id)),
+          updated,
+          ...updatedChildren,
+        ];
+        const next = {
+          ...prev,
+          [fromMilestoneId]: [...fromPending, ...fromApproved],
+          [toMilestoneId]: [...toPending, ...toApproved],
+        };
+        tasksRef.current = next;
+        return next;
+      });
+
+      const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter(isApprovedTask);
+      const toApproved = (tasksRef.current[toMilestoneId] || []).filter(isApprovedTask);
+      await Promise.all([
+        persistContainer(fromMilestoneId, fromApproved),
+        persistContainer(toMilestoneId, toApproved),
+      ]);
+
+      if (selectedTask?.id === taskId) setSelectedTask(updated);
+
+      pushUndo({
+        label: "Status changed",
+        revert: async () => {
+          setTasksByMilestone((prev) => {
+            const next = {
+              ...prev,
+              [fromMilestoneId]: fromSnapshot,
+              [toMilestoneId]: toSnapshot,
+            };
+            tasksRef.current = next;
+            return next;
+          });
+          await Promise.all([
+            persistContainer(fromMilestoneId, fromSnapshot.filter(isApprovedTask)),
+            persistContainer(toMilestoneId, toSnapshot.filter(isApprovedTask)),
+          ]);
+          if (selectedTask?.id === taskId) {
+            const restored = fromSnapshot.find((t) => t.id === taskId) ?? null;
+            if (restored) setSelectedTask(restored);
+          }
+        },
+      });
+    } catch {
+      setTasksByMilestone((prev) => {
+        const next = {
+          ...prev,
+          [fromMilestoneId]: fromSnapshot,
+          [toMilestoneId]: toSnapshot,
+        };
+        tasksRef.current = next;
+        return next;
+      });
+      if (selectedTask?.id === taskId) setSelectedTask(parentTask);
+    } finally {
+      end();
+    }
   }
 
-  function closeForm() {
-    setFormOpen(false);
-    setEditingTodo(null);
-    setFormDefaultProject(undefined);
+  async function handleRename(taskId: string, title: string) {
+    const updated = await updateTask(taskId, { title });
+    handleTaskUpdate(updated);
   }
 
-  const people = assigneeOptions(users, currentUser);
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-  // Split todos into personal vs project-linked
-  const personalTodos = todos.filter((t) => !t.project_id);
-  const projectTodos = todos.filter((t) => !!t.project_id);
+    const activeContainer = findContainer(String(active.id), tasksByMilestone, milestoneIds);
+    const overContainer = findContainer(String(over.id), tasksByMilestone, milestoneIds);
+    if (!activeContainer || !overContainer) return;
 
-  // Build unified project groups: combine todo-based and board-based tasks
-  const projectGroups = new Map<string, {
-    name: string;
-    companyName?: string;
-    companyLogoUrl?: string;
-    todos: Todo[];
-    boardTasks: ProjectBoardTask[];
-  }>();
+    if (activeContainer === overContainer) {
+      setTasksByMilestone((prev) => {
+        const reordered = reorderTopLevelInContainer(
+          prev[activeContainer],
+          String(active.id),
+          String(over.id),
+          milestoneIds,
+        );
+        if (!reordered) return prev;
+        const next = { ...prev, [activeContainer]: reordered };
+        tasksRef.current = next;
+        return next;
+      });
+      return;
+    }
 
-  for (const t of projectTodos) {
-    const pid = t.project_id!;
-    if (!projectGroups.has(pid)) {
-      projectGroups.set(pid, {
-        name: t.project_name || "Unknown project",
-        companyName: t.project_company_name,
-        companyLogoUrl: t.project_company_logo_url,
-        todos: [], boardTasks: [],
+    setTasksByMilestone((prev) => {
+      const activeItems = prev[activeContainer].filter(isApprovedTask);
+      const overItems = prev[overContainer].filter(isApprovedTask);
+      const activeIndex = activeItems.findIndex((t) => t.id === active.id);
+      if (activeIndex === -1) return prev;
+
+      const task = activeItems[activeIndex];
+      if (task.parent_id) return prev;
+
+      const childTasks = activeItems.filter((t) => t.parent_id === task.id);
+      const movingIds = new Set([task.id, ...childTasks.map((c) => c.id)]);
+      const overTopLevel = overItems.filter(isTopLevelTask);
+      const overIndexTop = milestoneIds.includes(String(over.id))
+        ? overTopLevel.length
+        : overTopLevel.findIndex((t) => t.id === over.id);
+
+      const newMilestoneId = containerToMilestoneId(overContainer);
+      const movingTasks = activeItems
+        .filter((t) => movingIds.has(t.id))
+        .map((t) => ({ ...t, milestone_id: newMilestoneId }));
+      const parentTask = movingTasks.find((t) => t.id === task.id)!;
+      const movedChildren = movingTasks.filter((t) => t.parent_id === task.id);
+
+      const pendingInActive = prev[activeContainer].filter((t) => !isApprovedTask(t));
+      const pendingInOver = prev[overContainer].filter((t) => !isApprovedTask(t));
+      const newActiveApproved = activeItems.filter((t) => !movingIds.has(t.id));
+
+      const remainingOver = overItems.filter((t) => !movingIds.has(t.id));
+      const remainingOverTop = remainingOver.filter(isTopLevelTask);
+      const remainingOverSub = remainingOver.filter((t) => t.parent_id);
+      const insertAt = overIndexTop >= 0 ? overIndexTop : remainingOverTop.length;
+      const newOverTop = [
+        ...remainingOverTop.slice(0, insertAt),
+        parentTask,
+        ...remainingOverTop.slice(insertAt),
+      ];
+      const newOverApproved = [...newOverTop, ...remainingOverSub, ...movedChildren];
+
+      const next = {
+        ...prev,
+        [activeContainer]: [...pendingInActive, ...newActiveApproved],
+        [overContainer]: [...pendingInOver, ...newOverApproved],
+      };
+      tasksRef.current = next;
+      return next;
+    });
+  }
+
+  function handleDragStart(_event: DragStartEvent) {
+    dragStartSnapshot.current = structuredClone(tasksRef.current);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) {
+      dragStartSnapshot.current = null;
+      return;
+    }
+
+    const current = tasksRef.current;
+    const activeContainer = findContainer(String(active.id), current, milestoneIds);
+    const overContainer = findContainer(String(over.id), current, milestoneIds);
+    if (!activeContainer || !overContainer) {
+      dragStartSnapshot.current = null;
+      return;
+    }
+
+    let nextState = current;
+
+    if (activeContainer === overContainer) {
+      const reordered = reorderTopLevelInContainer(
+        current[activeContainer],
+        String(active.id),
+        String(over.id),
+        milestoneIds,
+      );
+      if (reordered) {
+        nextState = { ...current, [activeContainer]: reordered };
+        setTasksByMilestone(nextState);
+        tasksRef.current = nextState;
+      }
+    }
+
+    const activeApproved = sortByPosition(
+      (nextState[activeContainer] || []).filter(isApprovedTask),
+    );
+    const overApproved = sortByPosition(
+      (nextState[overContainer] || []).filter(isApprovedTask),
+    );
+
+    const containersChanged = activeContainer !== overContainer;
+    const snapshot = dragStartSnapshot.current;
+    dragStartSnapshot.current = null;
+
+    begin();
+    try {
+      await Promise.all([
+        persistContainer(activeContainer, activeApproved),
+        containersChanged ? persistContainer(overContainer, overApproved) : Promise.resolve(),
+      ]);
+
+      if (containersChanged && snapshot) {
+        pushUndo({
+          label: "Status changed",
+          revert: async () => {
+            setTasksByMilestone(snapshot);
+            tasksRef.current = snapshot;
+            await Promise.all([
+              persistContainer(
+                activeContainer,
+                (snapshot[activeContainer] || []).filter(isApprovedTask),
+              ),
+              persistContainer(
+                overContainer,
+                (snapshot[overContainer] || []).filter(isApprovedTask),
+              ),
+            ]);
+          },
+        });
+      }
+    } finally {
+      end();
+    }
+  }
+
+  async function handleAddMilestone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newMilestoneName.trim() || !project) return;
+    setAddingMilestone(true);
+    const milestone = await createMilestone(project.id, {
+      name: newMilestoneName.trim(),
+      position: project.milestones.length,
+      color: newMilestoneColor || defaultColorForPhaseName(newMilestoneName.trim()),
+    });
+    setProject((prev) => prev ? {
+      ...prev,
+      milestones: [...prev.milestones, { ...milestone, tasks: [] }],
+    } : prev);
+    setTasksByMilestone((prev) => ({ ...prev, [milestone.id]: [] }));
+    setNewMilestoneName("");
+    setNewMilestoneColor(CUSTOM_PHASE_DEFAULT_COLOR);
+    setAddingMilestone(false);
+  }
+
+  function handleStatusesSaved(updated: Milestone[]) {
+    if (!project) return;
+    const withTasks = updated.map((m) => ({
+      ...m,
+      tasks: (tasksByMilestone[m.id] || []),
+    }));
+    setProject((prev) =>
+      prev ? { ...prev, milestones: withTasks } : prev,
+    );
+    const removedIds = new Set(
+      project.milestones.map((m) => m.id).filter((id) => !updated.some((u) => u.id === id)),
+    );
+    if (removedIds.size > 0) {
+      setTasksByMilestone((prev) => {
+        const next = { ...prev };
+        const orphaned: Task[] = [];
+        for (const id of removedIds) {
+          if (next[id]) {
+            orphaned.push(...next[id]);
+            delete next[id];
+          }
+        }
+        if (orphaned.length > 0) {
+          next[UNASSIGNED_ID] = [...(next[UNASSIGNED_ID] || []), ...orphaned];
+        }
+        for (const m of updated) {
+          if (!next[m.id]) next[m.id] = [];
+        }
+        return next;
+      });
+    } else {
+      setTasksByMilestone((prev) => {
+        const next = { ...prev };
+        for (const m of updated) {
+          if (!next[m.id]) next[m.id] = [];
+        }
+        return next;
       });
     }
-    projectGroups.get(pid)!.todos.push(t);
   }
 
-  for (const t of boardTasks) {
-    const pid = t.project_id;
-    if (!projectGroups.has(pid)) {
-      projectGroups.set(pid, {
-        name: t.project_name || "Unknown project",
-        companyName: t.company_name,
-        companyLogoUrl: t.company_logo_url,
-        todos: [], boardTasks: [],
-      });
+  async function shareEditAccess() {
+    if (!project) return;
+    setSharingEdit(true);
+    try {
+      let editToken = project.edit_token;
+      if (!editToken) {
+        const result = await grantEditAccess(project.id);
+        editToken = result.edit_token;
+        setProject((prev) => prev ? { ...prev, edit_token: editToken } : prev);
+      }
+      navigator.clipboard.writeText(`${window.location.origin}/project/${editToken}/board`);
+      setCopiedEdit(true);
+      setTimeout(() => setCopiedEdit(false), 2000);
+    } finally {
+      setSharingEdit(false);
     }
-    const group = projectGroups.get(pid)!;
-    if (!group.companyName && t.company_name) {
-      group.companyName = t.company_name;
-      group.companyLogoUrl = t.company_logo_url;
-    }
-    group.boardTasks.push(t);
   }
 
-  // Further split personal to-dos
-  const personalActive = filterStatus === "done" ? [] : personalTodos.filter((t) => t.status !== "done");
-  const personalDone = filterStatus === "done"
-    ? personalTodos
-    : personalTodos.filter((t) => t.status === "done");
+  async function removeEditAccess() {
+    if (!project?.edit_token) return;
+    setRevokingEdit(true);
+    try {
+      await revokeEditAccess(project.id);
+      setProject((prev) => prev ? { ...prev, edit_token: null } : prev);
+    } finally {
+      setRevokingEdit(false);
+    }
+  }
 
-  // Stats (include both sources)
-  const totalOpen = personalTodos.filter((t) => t.status === "open").length
-    + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.status === "open").length;
-  const totalInProgress = personalTodos.filter((t) => t.status === "in_progress").length
-    + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.status === "in_progress").length;
-  const totalOverdue =
-    personalTodos.filter((t) => t.due_date && t.status !== "done" && new Date(t.due_date) < new Date()).length
-    + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.due_date && new Date(t.due_date) < new Date()).length;
-  const totalProjectItems = Array.from(projectGroups.values()).reduce((sum, g) => sum + g.todos.length + g.boardTasks.length, 0);
+  function requestDeleteProject() {
+    if (!project) return;
+    requestDelete({
+      title: "Delete project",
+      description: (
+        <>
+          Are you sure you want to delete <span className="text-neutral-300">{project.name}</span>?
+          This will permanently remove all phases, tasks, and external board access.
+        </>
+      ),
+      confirmLabel: "Delete project",
+      onConfirm: async () => {
+        await deleteProject(project.id);
+        router.push("/projects");
+      },
+    });
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8 space-y-4">
+        <div className="h-8 w-48 bg-neutral-800 rounded animate-pulse" />
+        <div className="h-40 bg-neutral-800 rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
+
+  const allTasks = Object.values(tasksByMilestone).flat();
+  const approvedTasksAll = allTasks.filter(isApprovedTask);
+  const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
+  const hasApprovedTasks = approvedTasksAll.length > 0;
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePhaseSelect(taskIds: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = taskIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of taskIds) next.delete(id);
+      } else {
+        for (const id of taskIds) next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkUpdate(patch: Partial<Task>) {
+    const ids = Array.from(selectedIds);
+    const updates = await Promise.all(
+      ids.map((taskId) => updateTask(taskId, patch)),
+    );
+    for (const u of updates) handleTaskUpdate(u);
+    setSelectedIds(new Set());
+  }
+
+  async function handleBulkPhaseChange(toMilestoneId: string) {
+    const ids = Array.from(selectedIds);
+    const previous = ids
+      .map((taskId) => {
+        const task = findTaskInState(tasksRef.current, taskId);
+        return task
+          ? { id: taskId, milestone_id: task.milestone_id ?? null }
+          : null;
+      })
+      .filter((entry): entry is { id: string; milestone_id: string | null } => Boolean(entry));
+
+    begin();
+    try {
+      const updates = await Promise.all(
+        ids.map((taskId) =>
+          updateTask(taskId, { milestone_id: toMilestoneId }),
+        ),
+      );
+      for (const u of updates) handleTaskUpdate(u);
+      setSelectedIds(new Set());
+
+      if (previous.some((p) => p.milestone_id !== toMilestoneId)) {
+        pushUndo({
+          label: "Status changed",
+          revert: async () => {
+            const reverted = await Promise.all(
+              previous.map((p) =>
+                updateTask(p.id, { milestone_id: p.milestone_id }),
+              ),
+            );
+            for (const u of reverted) handleTaskUpdate(u);
+          },
+        });
+      }
+    } finally {
+      end();
+    }
+  }
+
+  async function handleBulkProjectMove(targetProjectId: string) {
+    if (!project) return;
+
+    const target = (await getProject(targetProjectId)) as ProjectDetail;
+    const targetMilestoneByName = new Map(
+      target.milestones.map((m) => [m.name.toLowerCase(), m.id]),
+    );
+    const sourceMilestoneById = new Map(project.milestones.map((m) => [m.id, m]));
+
+    const idsToMove = new Set<string>();
+    for (const taskId of selectedIds) {
+      idsToMove.add(taskId);
+      const task = findTaskInState(tasksRef.current, taskId);
+      if (task && !task.parent_id) {
+        for (const child of getChildTasks(tasksRef.current, taskId)) {
+          idsToMove.add(child.id);
+        }
+      }
+    }
+
+    const resolveTargetMilestone = (task: Task): string | null => {
+      if (!task.milestone_id) return null;
+      const sourceName = sourceMilestoneById.get(task.milestone_id)?.name;
+      if (!sourceName) return null;
+      return targetMilestoneByName.get(sourceName.toLowerCase()) ?? null;
+    };
+
+    await Promise.all(
+      Array.from(idsToMove).map((taskId) => {
+        const task = findTaskInState(tasksRef.current, taskId);
+        if (!task) return Promise.resolve();
+        return updateTask(taskId, {
+          project_id: targetProjectId,
+          milestone_id: resolveTargetMilestone(task),
+        });
+      }),
+    );
+
+    setTasksByMilestone((prev) => {
+      const next = { ...prev };
+      for (const milestoneId of Object.keys(next)) {
+        next[milestoneId] = next[milestoneId].filter((t) => !idsToMove.has(t.id));
+        if (next[milestoneId].length === 0 && milestoneId === UNASSIGNED_ID) {
+          delete next[milestoneId];
+        }
+      }
+      return next;
+    });
+
+    if (selectedTask && idsToMove.has(selectedTask.id)) {
+      setDetailOpen(false);
+      setSelectedTask(null);
+    }
+
+    setSelectedIds(new Set());
+  }
 
   return (
-    <div className="p-8 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
-            {totalOpen} open · {totalInProgress} in progress
-            {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
+    <div className="w-full p-6 lg:p-8 space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+        </Link>
+        {(project.company as { logo_url?: string; name?: string })?.name && (
+          <CompanyAvatar
+            name={(project.company as { name?: string }).name!}
+            logoUrl={(project.company as { logo_url?: string }).logo_url}
+            size="lg"
+          />
+        )}
+        <div className="flex-1">
+          <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
+            {project.name}
+            {project.edit_token && (
+              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/50 text-amber-400">
+                External
+              </span>
+            )}
+          </h1>
+          <p className="text-sm text-neutral-600 mt-0.5">
+            {(project.company as { name?: string })?.name || "—"}
+            {project.client_name && ` · ${project.client_name}`}
           </p>
         </div>
-        <Button onClick={openNewTask}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
-          <Plus className="w-4 h-4" /> New task
-        </Button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <Select value={filterAssignee} onValueChange={(v) => setFilterAssignee(v ?? "all")}>
-          <SelectTrigger className="w-40 bg-neutral-900 border-neutral-700 text-neutral-100 h-8 text-sm">
-            <SelectValue>
-              {filterAssignee === "all"
-                ? "Everyone"
-                : assigneeLabel(people, filterAssignee, currentUser)}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="all" className="text-neutral-400">Everyone</SelectItem>
-            {people.map((u) => (
-              <SelectItem key={u.id} value={u.id} className="text-neutral-100">{u.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterCompany} onValueChange={(v) => setFilterCompany(v ?? "all")}>
-          <SelectTrigger className="w-44 bg-neutral-900 border-neutral-700 text-neutral-100 h-8 text-sm">
-            <SelectValue>
-              {filterCompany === "all"
-                ? "All companies"
-                : namedOptionLabel(companies, filterCompany, "All companies")}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="all" className="text-neutral-400">All companies</SelectItem>
-            {companies.map((c) => (
-              <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v ?? "active")}>
-          <SelectTrigger className="w-36 bg-neutral-900 border-neutral-700 text-neutral-100 h-8 text-sm">
-            <SelectValue>
-              {statusFilterLabels[filterStatus] ?? "Active"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent className="bg-neutral-800 border-neutral-700">
-            <SelectItem value="active" className="text-neutral-100">Active</SelectItem>
-            <SelectItem value="all" className="text-neutral-400">All</SelectItem>
-            <SelectItem value="done" className="text-emerald-400">Done</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-12 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {/* =========================================================== */}
-          {/* SECTION 1: MY TO-DOS (personal, no project) */}
-          {/* =========================================================== */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <ListTodo className="w-4 h-4 text-neutral-500" />
-              <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wider">
-                My To-Dos
-              </h2>
-              <span className="text-xs text-neutral-600 font-mono ml-1">
-                {personalActive.length}
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              <QuickAddTodo
-                onAdd={(t) => { setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]); }}
-                currentUser={currentUser}
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger
+              className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                filters.length > 0
+                  ? "border-[#e8ff47]/30 text-[#e8ff47] hover:border-[#e8ff47]/50"
+                  : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto min-w-[320px] p-3">
+              <TaskFilterBar
+                filters={filters}
+                milestones={project.milestones}
+                onAddFilter={addFilter}
+                onUpdateFilter={updateFilter}
+                onRemoveFilter={removeFilter}
+                onClearFilters={clearFilters}
               />
-              {personalActive.map((t) => (
-                <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
-              ))}
-              {personalDone.length > 0 && (
-                <>
-                  <div className="flex items-center gap-3 pt-2 pb-1">
-                    <div className="flex-1 border-t border-neutral-800/60" />
-                    <span className="text-[10px] text-neutral-600 uppercase tracking-widest shrink-0">
-                      Done ({personalDone.length})
-                    </span>
-                    <div className="flex-1 border-t border-neutral-800/60" />
-                  </div>
-                  {personalDone.map((t) => (
-                    <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
-                  ))}
-                </>
-              )}
-              {personalActive.length === 0 && personalDone.length === 0 && (
-                <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
-                  <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                  <p className="text-neutral-600 text-xs">No personal to-dos — all caught up!</p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* =========================================================== */}
-          {/* SECTION 2: PROJECT TASKS (grouped by project) */}
-          {/* =========================================================== */}
-          {(projectGroups.size > 0 || filterStatus !== "done") && (
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <FolderKanban className="w-4 h-4 text-neutral-500" />
-                <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wider">
-                  Project Tasks
-                </h2>
-                <span className="text-xs text-neutral-600 font-mono ml-1">
-                  {totalProjectItems}
-                </span>
-              </div>
-
-              {projectGroups.size > 0 ? (
-                <div className="space-y-3">
-                  {Array.from(projectGroups.entries()).map(([pid, group]) => (
-                    <ProjectGroup
-                      key={pid}
-                      projectId={pid}
-                      projectName={group.name}
-                      companyName={group.companyName}
-                      companyLogoUrl={group.companyLogoUrl}
-                      todos={group.todos}
-                      boardTasks={group.boardTasks}
-                      filterStatus={filterStatus as "active" | "all" | "done"}
-                      onTodoUpdate={handleTodoUpdate}
-                      onTodoDelete={handleDelete}
-                      onTodoEdit={openEditTask}
-                      onBoardTaskUpdate={handleBoardTaskUpdate}
-                      onBoardTaskDelete={handleBoardTaskDelete}
-                      onNewTask={openNewTaskForProject}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
-                  <FolderKanban className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                  <p className="text-neutral-600 text-xs">No project tasks yet</p>
-                  <p className="text-neutral-700 text-xs mt-1">Assign a project when creating a task to see it here</p>
-                </div>
-              )}
-            </section>
+            </PopoverContent>
+          </Popover>
+          <button
+            onClick={() => setEditStatusesOpen(true)}
+            className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Edit statuses
+          </button>
+          <button
+            onClick={shareEditAccess}
+            disabled={sharingEdit}
+            className="flex items-center gap-2 text-xs border border-[#e8ff47]/30 px-3 py-2 rounded-lg text-[#e8ff47] hover:border-[#e8ff47]/50 transition-colors disabled:opacity-50"
+          >
+            {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+            {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share board access"}
+          </button>
+          {project.edit_token && (
+            <button
+              onClick={removeEditAccess}
+              disabled={revokingEdit}
+              className="flex items-center gap-2 text-xs border border-red-900/50 px-3 py-2 rounded-lg text-red-400 hover:border-red-800 transition-colors disabled:opacity-50"
+            >
+              <UserX className="w-3.5 h-3.5" />
+              {revokingEdit ? "Removing..." : "Remove access"}
+            </button>
           )}
+          <button
+            onClick={requestDeleteProject}
+            className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:border-red-900/50 transition-colors"
+            aria-label="Delete project"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {confirmDialog}
+
+      {pendingRequests > 0 && (
+        <div className="flex items-center gap-3 bg-orange-950/40 border border-orange-900/50 rounded-lg px-4 py-3">
+          <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse shrink-0" />
+          <p className="text-sm text-orange-300">
+            <span className="font-medium">{pendingRequests} task request{pendingRequests !== 1 ? "s" : ""}</span> from the client awaiting approval
+          </p>
         </div>
       )}
 
-      <TodoFormDialog
-        open={formOpen}
-        onClose={closeForm}
-        onSave={() => { load(); }}
-        todo={editingTodo}
-        users={users}
-        companies={companies}
-        projects={projects as Project[]}
-        currentUser={currentUser}
-        defaultProjectId={formDefaultProject}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="space-y-3">
+          {hasApprovedTasks && (
+            <div className="px-3">
+              <TaskColumnHeader />
+            </div>
+          )}
+          {(tasksByMilestone[UNASSIGNED_ID]?.length ?? 0) > 0 && (
+            <MilestoneSection
+              key={UNASSIGNED_ID}
+              isUnassigned
+              milestone={{
+                id: UNASSIGNED_ID,
+                project_id: project.id,
+                name: "Unassigned",
+                position: -1,
+                status: "pending",
+                tasks: [],
+                created_at: "",
+                updated_at: "",
+              }}
+              milestones={project.milestones}
+              projectId={project.id}
+              tasks={applyTaskFilters(tasksByMilestone[UNASSIGNED_ID] || [], filters, project.milestones)}
+              onDelete={() => {}}
+              onTaskUpdate={handleTaskUpdate}
+              onTaskDelete={confirmTaskDelete}
+              onTaskAdd={(t) => handleTaskAdd(UNASSIGNED_ID, t)}
+              onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
+              onPhaseChange={handleTaskPhaseChange}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onTogglePhase={togglePhaseSelect}
+              onRename={handleRename}
+            />
+          )}
+          {project.milestones.map((milestone) => {
+            const filteredTasks = applyTaskFilters(tasksByMilestone[milestone.id] || [], filters, project.milestones);
+            return (
+              <MilestoneSection
+                key={milestone.id}
+                milestone={milestone}
+                milestones={project.milestones}
+                projectId={project.id}
+                tasks={filteredTasks}
+                onDelete={confirmMilestoneDelete}
+                onTaskUpdate={handleTaskUpdate}
+                onTaskDelete={confirmTaskDelete}
+                onTaskAdd={(t) => handleTaskAdd(milestone.id, t)}
+                onTaskClick={(t) => { setSelectedTask(t); setDetailOpen(true); }}
+                onPhaseChange={handleTaskPhaseChange}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onTogglePhase={togglePhaseSelect}
+                onRename={handleRename}
+              />
+            );
+          })}
+        </div>
+      </DndContext>
+
+      <TaskDetailDialog
+        task={selectedTask}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onSave={handleTaskUpdate}
+        api={taskDetailApi}
       />
 
-      {confirmDialog}
+      <form onSubmit={handleAddMilestone} className="flex items-center gap-3">
+        <PhaseColorInput
+          value={newMilestoneColor}
+          onChange={setNewMilestoneColor}
+        />
+        <Input
+          value={newMilestoneName}
+          onChange={(e) => setNewMilestoneName(e.target.value)}
+          placeholder="Add new phase... (e.g. Discovery, Design, Build)"
+          className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1"
+        />
+        <Button type="submit" disabled={addingMilestone || !newMilestoneName.trim()}
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 shrink-0">
+          <Plus className="w-4 h-4" /> Phase
+        </Button>
+      </form>
+
+      <EditStatusesDialog
+        open={editStatusesOpen}
+        onOpenChange={setEditStatusesOpen}
+        projectId={project.id}
+        milestones={project.milestones}
+        onSave={handleStatusesSaved}
+      />
+
+      <BulkActionsBar
+        count={selectedIds.size}
+        milestones={project.milestones}
+        projects={allProjects}
+        currentProjectId={id}
+        onBulkPhaseChange={handleBulkPhaseChange}
+        onBulkProjectMove={handleBulkProjectMove}
+        onBulkUpdate={handleBulkUpdate}
+        onClear={() => setSelectedIds(new Set())}
+      />
     </div>
   );
 }

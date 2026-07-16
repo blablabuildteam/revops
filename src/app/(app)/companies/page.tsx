@@ -15,7 +15,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { StageBadge } from "@/components/stage-badge";
-import { getCompanies, getOpportunities, createCompany } from "@/lib/api";
+import { createCompany } from "@/lib/api";
+import { useCompanies, useOpportunities } from "@/hooks/use-api-data";
 import { Company, Opportunity, RetainerType } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 
@@ -184,19 +185,11 @@ const retainerBadge = (c: Company) => {
 };
 
 export default function CompaniesPage() {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [opps, setOpps] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: companies = [], isLoading: companiesLoading, mutate: mutateCompanies } = useCompanies();
+  const { data: opps = [], isLoading: oppsLoading } = useOpportunities();
+  const loading = (companiesLoading && companies.length === 0) || (oppsLoading && opps.length === 0);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
-
-  useEffect(() => {
-    Promise.all([getCompanies(), getOpportunities()]).then(([c, o]) => {
-      setCompanies(c);
-      setOpps(o);
-      setLoading(false);
-    });
-  }, []);
 
   const companyOpps = (id: string) => opps.filter((o) => o.company_id === id);
   const companyRevenue = (id: string) =>
@@ -206,19 +199,14 @@ export default function CompaniesPage() {
       .filter((o) => !["won", "lost"].includes(o.stage))
       .reduce((s, o) => s + (Number(o.expected_value) || 0), 0);
 
-  function handleSave(updated: Company) {
-    setCompanies((prev) =>
-      prev.some((c) => c.id === updated.id)
-        ? prev.map((c) => (c.id === updated.id ? updated : c))
-        : [...prev, updated]
-    );
+  function handleSave(_updated: Company) {
+    void mutateCompanies();
     setEditing(null);
+    setFormOpen(false);
   }
 
-  function handleLogoChange(companyId: string, logoUrl: string) {
-    setCompanies((prev) =>
-      prev.map((c) => (c.id === companyId ? { ...c, logo_url: logoUrl } : c))
-    );
+  function handleLogoChange(_companyId: string, _logoUrl: string) {
+    void mutateCompanies();
   }
 
   return (

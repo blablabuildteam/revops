@@ -11,6 +11,19 @@ import {
   TaskComment,
   TaskAttachment,
 } from "./types";
+import {
+  cachedFetch,
+  cacheKeys,
+  getCached,
+  invalidateCache,
+  invalidateCachePrefix,
+  setCached,
+} from "./query-cache";
+
+function invalidateFinanceCaches() {
+  invalidateCache(cacheKeys.financeDeals());
+  invalidateCachePrefix("finance-summary:");
+}
 
 const base = "/api";
 
@@ -42,8 +55,21 @@ async function req<T>(
   return res.json();
 }
 
+export type ProjectWithStats = Project & {
+  task_count: number;
+  done_count: number;
+  pending_requests: number;
+};
+
+export type ApiUser = {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url?: string | null;
+};
+
 export function getOpportunities(): Promise<Opportunity[]> {
-  return req("/opportunities");
+  return cachedFetch(cacheKeys.opportunities, () => req("/opportunities"));
 }
 
 export function getOpportunity(id: string): Promise<Opportunity> {
@@ -51,37 +77,53 @@ export function getOpportunity(id: string): Promise<Opportunity> {
 }
 
 export function createOpportunity(opp: NewOpportunity): Promise<Opportunity> {
-  return req("/opportunities", { method: "POST", body: JSON.stringify(opp) });
+  return req<Opportunity>("/opportunities", {
+    method: "POST",
+    body: JSON.stringify(opp),
+  }).then((created) => {
+    invalidateCache(cacheKeys.opportunities);
+    return created;
+  });
 }
 
 export function updateOpportunity(
   id: string,
   updates: Partial<NewOpportunity>
 ): Promise<Opportunity> {
-  return req(`/opportunities/${id}`, {
+  return req<Opportunity>(`/opportunities/${id}`, {
     method: "PUT",
     body: JSON.stringify(updates),
+  }).then((updated) => {
+    invalidateCache(cacheKeys.opportunities);
+    return updated;
   });
 }
 
 export function deleteOpportunity(id: string): Promise<void> {
-  return req(`/opportunities/${id}`, { method: "DELETE" });
+  return req<void>(`/opportunities/${id}`, { method: "DELETE" }).then(() => {
+    invalidateCache(cacheKeys.opportunities);
+  });
 }
 
 export function getCompanies(): Promise<Company[]> {
-  return req("/companies");
+  return cachedFetch(cacheKeys.companies, () => req("/companies"));
 }
 
 export function createCompany(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   company: any
 ): Promise<Company> {
-  return req("/companies", { method: "POST", body: JSON.stringify(company) });
+  return req<Company>("/companies", {
+    method: "POST",
+    body: JSON.stringify(company),
+  }).then((created) => {
+    invalidateCache(cacheKeys.companies);
+    return created;
+  });
 }
 
-// Projects
-export function getProjects(): Promise<(Project & { task_count: number; done_count: number; pending_requests: number })[]> {
-  return req("/projects");
+export function getProjects(): Promise<ProjectWithStats[]> {
+  return cachedFetch(cacheKeys.projects, () => req("/projects"));
 }
 
 export function getProject(id: string): Promise<Project> {
@@ -89,15 +131,33 @@ export function getProject(id: string): Promise<Project> {
 }
 
 export function createProject(data: Partial<Project>): Promise<Project> {
-  return req("/projects", { method: "POST", body: JSON.stringify(data) });
+  return req<Project>("/projects", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    invalidateCache(cacheKeys.projects);
+    return created;
+  });
 }
 
 export function updateProject(id: string, data: Partial<Project>): Promise<Project> {
-  return req(`/projects/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  return req<Project>(`/projects/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    invalidateCache(cacheKeys.projects);
+    return updated;
+  });
 }
 
 export function deleteProject(id: string): Promise<void> {
-  return req(`/projects/${id}`, { method: "DELETE" });
+  return req<void>(`/projects/${id}`, { method: "DELETE" }).then(() => {
+    invalidateCache(cacheKeys.projects);
+  });
+}
+
+export function getUsers(): Promise<ApiUser[]> {
+  return cachedFetch(cacheKeys.users, () => req("/users"));
 }
 
 // Milestones
@@ -125,7 +185,13 @@ export function batchUpdateMilestones(
 
 // Tasks
 export function createTask(projectId: string, data: Partial<Task>): Promise<Task> {
-  return req(`/projects/${projectId}/tasks`, { method: "POST", body: JSON.stringify(data) });
+  return req<Task>(`/projects/${projectId}/tasks`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    invalidateCache(cacheKeys.projects);
+    return created;
+  });
 }
 
 export function updateTask(id: string, data: Partial<Task>): Promise<Task> {
@@ -133,7 +199,9 @@ export function updateTask(id: string, data: Partial<Task>): Promise<Task> {
 }
 
 export function deleteTask(id: string): Promise<void> {
-  return req(`/tasks/${id}`, { method: "DELETE" });
+  return req(`/tasks/${id}`, { method: "DELETE" }).then(() => {
+    invalidateCache(cacheKeys.projects);
+  });
 }
 
 export function getTaskComments(taskId: string) {
@@ -187,7 +255,9 @@ export function submitClientTask(token: string, data: { title: string; descripti
 // Finance deals
 export function getFinanceDeals(opportunityId?: string): Promise<FinanceDeal[]> {
   const query = opportunityId ? `?opportunity_id=${opportunityId}` : "";
-  return req(`/finance/deals${query}`);
+  return cachedFetch(cacheKeys.financeDeals(opportunityId), () =>
+    req(`/finance/deals${query}`)
+  );
 }
 
 export function getFinanceDeal(id: string): Promise<FinanceDeal> {
@@ -195,13 +265,43 @@ export function getFinanceDeal(id: string): Promise<FinanceDeal> {
 }
 
 export function createFinanceDeal(data: NewFinanceDeal): Promise<FinanceDeal> {
-  return req("/finance/deals", { method: "POST", body: JSON.stringify(data) });
+  return req<FinanceDeal>("/finance/deals", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    invalidateFinanceCaches();
+    return created;
+  });
 }
 
 export function updateFinanceDeal(id: string, data: UpdateFinanceDeal): Promise<FinanceDeal> {
-  return req(`/finance/deals/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  return req<FinanceDeal>(`/finance/deals/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    invalidateFinanceCaches();
+    return updated;
+  });
 }
 
 export function deleteFinanceDeal(id: string): Promise<void> {
-  return req(`/finance/deals/${id}`, { method: "DELETE" });
+  return req<void>(`/finance/deals/${id}`, { method: "DELETE" }).then(() => {
+    invalidateFinanceCaches();
+  });
+}
+
+export function getFinanceSummary<T = unknown>(month: string): Promise<T> {
+  return cachedFetch(cacheKeys.financeSummary(month), () =>
+    req<T>(`/finance/summary?month=${month}`)
+  );
+}
+
+/** Optimistically patch a cached opportunities list after local edits. */
+export function patchCachedOpportunity(id: string, updates: Partial<Opportunity>) {
+  const list = getCached<Opportunity[]>(cacheKeys.opportunities);
+  if (!list) return;
+  setCached(
+    cacheKeys.opportunities,
+    list.map((o) => (o.id === id ? { ...o, ...updates } : o))
+  );
 }

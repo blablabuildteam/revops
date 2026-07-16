@@ -11,8 +11,20 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = req.nextUrl;
-    const assigneeName = searchParams.get("assignee_name") || null;
+    let assigneeName = searchParams.get("assignee_name") || null;
+    const assigneeId = searchParams.get("assignee") || null;
     const status = searchParams.get("status") || null;
+
+    // Resolve assignee name from user id so clients can fetch in one parallel round-trip
+    if (!assigneeName && assigneeId) {
+      const { rows: userRows } = await sql`
+        SELECT name FROM users WHERE id = ${assigneeId}
+      `;
+      assigneeName = (userRows[0]?.name as string | undefined) ?? null;
+      if (!assigneeName) {
+        return NextResponse.json([]);
+      }
+    }
 
     const { rows } = await sql`
       SELECT
