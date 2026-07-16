@@ -44,7 +44,7 @@ import { TaskDetailDialog } from "@/components/task-detail-dialog";
 import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, getProjects, createMilestone, createTask, updateTask, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
+import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -290,12 +290,15 @@ function InlineAssigneeSelect({
 function InlineDateInput({
   task,
   onUpdate,
+  isDone = false,
 }: {
   task: Task;
   onUpdate: (t: Task) => void;
+  isDone?: boolean;
 }) {
   const value = toDateInputValue(task.due_date);
   const patchTask = useUndoablePatch<Task>();
+  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
   return (
     <DatePicker
@@ -311,6 +314,7 @@ function InlineDateInput({
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
       size="sm"
+      overdue={isOverdue}
       className="h-7 w-full bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
     />
   );
@@ -392,7 +396,6 @@ function TaskNameCell({
   allowSubtasks,
   onAddSubtask,
   indent = false,
-  isDone = false,
 }: {
   task: Task;
   onOpen: () => void;
@@ -400,12 +403,10 @@ function TaskNameCell({
   allowSubtasks?: boolean;
   onAddSubtask?: () => void;
   indent?: boolean;
-  isDone?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(task.title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
   useEffect(() => {
     if (!editing) setValue(task.title);
@@ -464,17 +465,8 @@ function TaskNameCell({
         onClick={onOpen}
         className="flex-1 min-w-0 text-left cursor-pointer"
       >
-        <p className="text-sm text-neutral-200 flex items-center gap-1.5 min-w-0">
-          <span className="truncate">
-            <BinaryText text={task.title} id={task.id} />
-          </span>
-          {isOverdue && (
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-              title="Overdue"
-              aria-label="Overdue"
-            />
-          )}
+        <p className="text-sm text-neutral-200 truncate">
+          <BinaryText text={task.title} id={task.id} />
         </p>
         {task.description && !indent && (
           <p className="text-xs text-neutral-600 truncate">
@@ -564,7 +556,6 @@ function SubtaskRow({
       <TaskNameCell
         task={task}
         indent
-        isDone={isDone}
         onOpen={() => onClick(task)}
         onRename={(title) => onRename(task.id, title)}
       />
@@ -584,7 +575,7 @@ function SubtaskRow({
       />
 
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
-      <InlineDateInput task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} isDone={isDone} />
       <span className="text-xs text-neutral-700">—</span>
 
       <button
@@ -682,7 +673,6 @@ function SortableTaskRow({
         <TaskNameCell
           task={task}
           allowSubtasks
-          isDone={isDone}
           onOpen={() => onClick(task)}
           onRename={(title) => onRename(task.id, title)}
           onAddSubtask={onAddSubtask}
@@ -704,7 +694,7 @@ function SortableTaskRow({
       />
 
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
-      <InlineDateInput task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} isDone={isDone} />
 
       <InlinePhaseSelect
         task={task}
@@ -1215,6 +1205,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [copiedEdit, setCopiedEdit] = useState(false);
   const [sharingEdit, setSharingEdit] = useState(false);
   const [revokingEdit, setRevokingEdit] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const { requestDelete, confirmDialog } = useConfirmDelete();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1766,6 +1759,43 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  function startEditingName() {
+    if (!project) return;
+    setNameValue(project.name);
+    setEditingName(true);
+    requestAnimationFrame(() => nameInputRef.current?.select());
+  }
+
+  async function commitProjectName() {
+    if (!project) return;
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === project.name) {
+      setEditingName(false);
+      setNameValue(project.name);
+      return;
+    }
+
+    const previousName = project.name;
+    setProject((prev) => (prev ? { ...prev, name: trimmed } : prev));
+    setEditingName(false);
+
+    begin();
+    try {
+      await updateProject(project.id, { name: trimmed });
+      pushUndo({
+        label: "Updated",
+        revert: async () => {
+          await updateProject(project.id, { name: previousName });
+          setProject((prev) => (prev ? { ...prev, name: previousName } : prev));
+        },
+      });
+    } catch {
+      setProject((prev) => (prev ? { ...prev, name: previousName } : prev));
+    } finally {
+      end();
+    }
+  }
+
   function requestDeleteProject() {
     if (!project) return;
     requestDelete({
@@ -1966,9 +1996,37 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             size="lg"
           />
         )}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
-            {project.name}
+            {editingName ? (
+              <Input
+                ref={nameInputRef}
+                autoFocus
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={() => { void commitProjectName(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitProjectName();
+                  }
+                  if (e.key === "Escape") {
+                    setNameValue(project.name);
+                    setEditingName(false);
+                  }
+                }}
+                className="h-8 max-w-md text-xl font-semibold bg-neutral-800 border-neutral-600 text-neutral-100"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={startEditingName}
+                className="text-left hover:text-white transition-colors rounded px-1 -mx-1 cursor-text"
+                title="Click to rename"
+              >
+                {project.name}
+              </button>
+            )}
             {project.edit_token && (
               <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/50 text-amber-400">
                 External

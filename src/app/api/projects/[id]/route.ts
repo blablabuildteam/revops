@@ -65,17 +65,19 @@ export async function PUT(
       status, client_name, client_email, start_date, end_date,
     } = body;
 
+    // Only touch fields present in the body so partial updates (e.g. rename)
+    // do not wipe description, company, dates, or other columns.
     const { rows } = await sql`
       UPDATE projects SET
-        name = COALESCE(${name ?? null}, name),
-        description = ${description ?? null},
-        company_id = ${company_id ?? null},
-        opportunity_id = ${opportunity_id ?? null},
-        status = COALESCE(${status ?? null}, status),
-        client_name = ${client_name ?? null},
-        client_email = ${client_email ?? null},
-        start_date = ${start_date ?? null},
-        end_date = ${end_date ?? null},
+        name = CASE WHEN ${"name" in body} THEN ${name ?? null} ELSE name END,
+        description = CASE WHEN ${"description" in body} THEN ${description ?? null} ELSE description END,
+        company_id = CASE WHEN ${"company_id" in body} THEN ${company_id ?? null} ELSE company_id END,
+        opportunity_id = CASE WHEN ${"opportunity_id" in body} THEN ${opportunity_id ?? null} ELSE opportunity_id END,
+        status = CASE WHEN ${"status" in body} THEN ${status ?? null} ELSE status END,
+        client_name = CASE WHEN ${"client_name" in body} THEN ${client_name ?? null} ELSE client_name END,
+        client_email = CASE WHEN ${"client_email" in body} THEN ${client_email ?? null} ELSE client_email END,
+        start_date = CASE WHEN ${"start_date" in body} THEN ${start_date ?? null} ELSE start_date END,
+        end_date = CASE WHEN ${"end_date" in body} THEN ${end_date ?? null} ELSE end_date END,
         updated_at = now()
       WHERE id = ${id}
       RETURNING *
