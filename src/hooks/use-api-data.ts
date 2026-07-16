@@ -3,6 +3,7 @@
 import { useCallback, useRef } from "react";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import {
+  getAllocations,
   getCompanies,
   getFinanceDeals,
   getFinanceSummary,
@@ -13,7 +14,7 @@ import {
   type ProjectWithStats,
 } from "@/lib/api";
 import { cacheKeys } from "@/lib/query-cache";
-import type { Company, FinanceDeal, Opportunity } from "@/lib/types";
+import type { Allocation, Company, FinanceDeal, Opportunity } from "@/lib/types";
 
 export function useOpportunities() {
   return useCachedQuery<Opportunity[]>(cacheKeys.opportunities, getOpportunities);
@@ -25,6 +26,10 @@ export function useCompanies() {
 
 export function useProjects() {
   return useCachedQuery<ProjectWithStats[]>(cacheKeys.projects, getProjects);
+}
+
+export function useAllocations() {
+  return useCachedQuery<Allocation[]>(cacheKeys.allocations, getAllocations);
 }
 
 export function useUsers() {

@@ -1,4 +1,5 @@
 import {
+  Allocation,
   Company,
   FinanceDeal,
   NewFinanceDeal,
@@ -250,6 +251,30 @@ export function getPublicProject(token: string): Promise<Project> {
 
 export function submitClientTask(token: string, data: { title: string; description?: string; milestone_id?: string }): Promise<Task> {
   return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// Allocations
+export type AllocationEntry = {
+  person: string;
+  target_type: Allocation["target_type"];
+  target_id: string;
+  week: string;
+  percentage: number;
+};
+
+export function getAllocations(): Promise<Allocation[]> {
+  return cachedFetch(cacheKeys.allocations, () => req("/allocations"));
+}
+
+export function saveAllocations(entries: AllocationEntry[]): Promise<Allocation[]> {
+  return req<Allocation[]>("/allocations", {
+    method: "PUT",
+    body: JSON.stringify({ entries }),
+  }).then((result) => {
+    // Replace cache with the full list — don't invalidate (that wipes UI to empty)
+    setCached(cacheKeys.allocations, result);
+    return result;
+  });
 }
 
 // Finance deals

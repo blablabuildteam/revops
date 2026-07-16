@@ -233,6 +233,23 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 
 export const TASK_ASSIGNEES = ["Kevin", "Xennith"] as const;
 
+export type AllocationTargetType = "project" | "opportunity" | "generic";
+
+export const ALLOCATION_GENERIC_ID = "general";
+
+export interface Allocation {
+  id: string;
+  person: string;
+  target_type: AllocationTargetType;
+  target_id: string;
+  week: string;
+  percentage: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const ALLOCATION_PERCENT_PRESETS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
+
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   pending: "Planned",
   in_progress: "In progress",

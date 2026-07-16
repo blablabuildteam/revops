@@ -145,9 +145,80 @@ async function runSchemaMigrations() {
       updated_at TIMESTAMPTZ DEFAULT now()
     )
   `;
+  await ensureAllocationsTable();
   await migrateOpportunityTypes();
   await migrateFinanceDealsToInclVat();
   await backfillMissingStandardPhases();
+}
+
+async function ensureAllocationsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS allocations (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      person TEXT NOT NULL,
+      target_type TEXT NOT NULL
+        CHECK (target_type IN ('project', 'opportunity', 'generic')),
+      target_id TEXT NOT NULL,
+      week DATE NOT NULL,
+      percentage INTEGER NOT NULL DEFAULT 0 CHECK (percentage >= 0 AND percentage <= 100),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(person, target_type, target_id, week)
+    )
+  `;
+
+  // Upgrade from the initial project_id-only schema if present
+  const { rows: cols } = await sql`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'allocations'
+  `;
+  const names = new Set(cols.map((c) => String(c.column_name)));
+
+  if (names.has("project_id") && !names.has("target_type")) {
+    await sql`ALTER TABLE allocations ADD COLUMN IF NOT EXISTS target_type TEXT`;
+    await sql`ALTER TABLE allocations ADD COLUMN IF NOT EXISTS target_id TEXT`;
+    await sql`
+      UPDATE allocations
+      SET target_type = 'project', target_id = project_id::text
+      WHERE target_id IS NULL AND project_id IS NOT NULL
+    `;
+    await sql`ALTER TABLE allocations DROP CONSTRAINT IF EXISTS allocations_person_project_id_week_key`;
+    await sql`ALTER TABLE allocations DROP COLUMN IF EXISTS project_id`;
+    await sql`ALTER TABLE allocations ALTER COLUMN target_type SET NOT NULL`;
+    await sql`ALTER TABLE allocations ALTER COLUMN target_id SET NOT NULL`;
+    try {
+      await sql`
+        ALTER TABLE allocations
+        ADD CONSTRAINT allocations_target_type_check
+        CHECK (target_type IN ('project', 'opportunity', 'generic'))
+      `;
+    } catch {
+      // already present
+    }
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS allocations_person_target_week
+      ON allocations (person, target_type, target_id, week)
+    `;
+  } else if (names.has("project_id") && names.has("target_type")) {
+    // Partial upgrade leftover — finish dropping project_id
+    await sql`
+      UPDATE allocations
+      SET target_type = COALESCE(target_type, 'project'),
+          target_id = COALESCE(target_id, project_id::text)
+      WHERE target_id IS NULL
+    `;
+    await sql`ALTER TABLE allocations DROP CONSTRAINT IF EXISTS allocations_person_project_id_week_key`;
+    await sql`ALTER TABLE allocations DROP COLUMN IF EXISTS project_id`;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS allocations_person_target_week
+      ON allocations (person, target_type, target_id, week)
+    `;
+  }
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS allocations_person_week
+    ON allocations (person, week)
+  `;
 }
 
 async function _init() {
@@ -160,6 +231,8 @@ async function _init() {
       WHERE table_schema = 'public' AND table_name = 'users'
     `;
     if (Number(rows[0].c) > 0) {
+      // Always ensure allocations schema (new feature; safe / idempotent)
+      await ensureAllocationsTable();
       if (runMigrations) {
         await runSchemaMigrations();
       }
@@ -403,6 +476,8 @@ async function _init() {
       updated_at TIMESTAMPTZ DEFAULT now()
     )
   `;
+
+  await ensureAllocationsTable();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
