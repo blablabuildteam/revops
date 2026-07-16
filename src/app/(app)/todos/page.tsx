@@ -1012,12 +1012,6 @@ export default function TodosPage() {
     setFormOpen(true);
   }
 
-  function openNewTask() {
-    setEditingTodo(null);
-    setFormDefaultProject(undefined);
-    setFormOpen(true);
-  }
-
   function openEditTask(todo: Todo) {
     setEditingTodo(todo);
     setFormDefaultProject(undefined);
@@ -1095,18 +1089,12 @@ export default function TodosPage() {
   return (
     <div className="p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
-            {totalOpen} open · {totalInProgress} in progress
-            {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
-          </p>
-        </div>
-        <Button onClick={openNewTask}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
-          <Plus className="w-4 h-4" /> New task
-        </Button>
+      <div>
+        <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
+        <p className="text-sm text-neutral-500 mt-0.5">
+          {totalOpen} open · {totalInProgress} in progress
+          {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
+        </p>
       </div>
 
       {/* Filters */}
