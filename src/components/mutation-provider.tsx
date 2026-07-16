@@ -96,17 +96,55 @@ export function MutationProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<UndoEntry | null>(null);
   const toastRef = useRef<UndoEntry | null>(null);
   const ttlRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remainingMsRef = useRef(UNDO_TTL_MS);
+  const deadlineRef = useRef<number | null>(null);
+  const hoveredRef = useRef(false);
   const idRef = useRef(0);
   const undoingRef = useRef(false);
 
-  const clearUndo = useCallback(() => {
+  const clearTtl = useCallback(() => {
     if (ttlRef.current) {
       clearTimeout(ttlRef.current);
       ttlRef.current = null;
     }
+    deadlineRef.current = null;
+  }, []);
+
+  const scheduleDismiss = useCallback((entryId: number, ms: number) => {
+    clearTtl();
+    remainingMsRef.current = ms;
+    deadlineRef.current = Date.now() + ms;
+    ttlRef.current = setTimeout(() => {
+      if (toastRef.current?.id === entryId) {
+        toastRef.current = null;
+        setToast(null);
+      }
+      ttlRef.current = null;
+      deadlineRef.current = null;
+    }, ms);
+  }, [clearTtl]);
+
+  const clearUndo = useCallback(() => {
+    clearTtl();
+    remainingMsRef.current = UNDO_TTL_MS;
+    hoveredRef.current = false;
     toastRef.current = null;
     setToast(null);
-  }, []);
+  }, [clearTtl]);
+
+  const pauseUndoTimer = useCallback(() => {
+    hoveredRef.current = true;
+    if (!ttlRef.current || deadlineRef.current == null) return;
+    remainingMsRef.current = Math.max(0, deadlineRef.current - Date.now());
+    clearTtl();
+  }, [clearTtl]);
+
+  const resumeUndoTimer = useCallback(() => {
+    hoveredRef.current = false;
+    const entry = toastRef.current;
+    if (!entry || ttlRef.current) return;
+    scheduleDismiss(entry.id, remainingMsRef.current);
+  }, [scheduleDismiss]);
 
   const begin = useCallback(() => {
     setPendingCount((n) => n + 1);
@@ -118,23 +156,20 @@ export function MutationProvider({ children }: { children: ReactNode }) {
 
   const pushUndo = useCallback(
     (opts: { label: string; revert: () => void | Promise<void> }) => {
-      if (ttlRef.current) clearTimeout(ttlRef.current);
+      clearTtl();
       const entry: UndoEntry = {
         id: ++idRef.current,
         label: opts.label,
         revert: opts.revert,
       };
       toastRef.current = entry;
+      remainingMsRef.current = UNDO_TTL_MS;
       setToast(entry);
-      ttlRef.current = setTimeout(() => {
-        if (toastRef.current?.id === entry.id) {
-          toastRef.current = null;
-          setToast(null);
-        }
-        ttlRef.current = null;
-      }, UNDO_TTL_MS);
+      if (!hoveredRef.current) {
+        scheduleDismiss(entry.id, UNDO_TTL_MS);
+      }
     },
-    [],
+    [clearTtl, scheduleDismiss],
   );
 
   const undo = useCallback(async () => {
@@ -189,9 +224,9 @@ export function MutationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return () => {
-      if (ttlRef.current) clearTimeout(ttlRef.current);
+      clearTtl();
     };
-  }, []);
+  }, [clearTtl]);
 
   const value = useMemo(
     () => ({
@@ -211,7 +246,13 @@ export function MutationProvider({ children }: { children: ReactNode }) {
     <MutationContext.Provider value={value}>
       <MutationProgressBar active={pendingCount > 0} />
       {children}
-      <UndoToast toast={toast} onUndo={() => void undo()} />
+      <UndoToast
+        toast={toast}
+        durationMs={UNDO_TTL_MS}
+        onUndo={() => void undo()}
+        onPause={pauseUndoTimer}
+        onResume={resumeUndoTimer}
+      />
     </MutationContext.Provider>
   );
 }
@@ -230,10 +271,16 @@ function MutationProgressBar({ active }: { active: boolean }) {
 
 function UndoToast({
   toast,
+  durationMs,
   onUndo,
+  onPause,
+  onResume,
 }: {
   toast: UndoEntry | null;
+  durationMs: number;
   onUndo: () => void;
+  onPause: () => void;
+  onResume: () => void;
 }) {
   const [modLabel, setModLabel] = useState("⌘");
 
@@ -253,17 +300,27 @@ function UndoToast({
       aria-live="polite"
     >
       {toast && (
-        <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-white px-3.5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
-          <span className="text-sm font-medium text-[#1a1a1a] whitespace-nowrap">
+        <div
+          key={toast.id}
+          className="group/undo relative flex items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a0a] px-3.5 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+          onMouseEnter={onPause}
+          onMouseLeave={onResume}
+        >
+          <span className="text-sm font-medium text-white whitespace-nowrap">
             {toast.label}
           </span>
           <button
             type="button"
             onClick={onUndo}
-            className="inline-flex items-center rounded-lg border border-[#d4d4d4] bg-white px-2.5 py-1 text-sm font-medium text-[#1a1a1a] hover:bg-[#f5f5f5] transition-colors"
+            className="inline-flex items-center rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-sm font-medium text-white hover:bg-white/10 transition-colors"
           >
             Undo {modLabel}Z
           </button>
+          <div
+            className="undo-toast-ttl pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[var(--bb-accent)]"
+            style={{ animationDuration: `${durationMs}ms` }}
+            aria-hidden
+          />
         </div>
       )}
     </div>

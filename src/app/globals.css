@@ -160,3 +160,23 @@ html.light .month-picker-input {
     transform: translateX(400%);
   }
 }
+
+/* Undo toast remaining-time indicator */
+.undo-toast-ttl {
+  animation-name: undo-toast-shrink;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.group\/undo:hover .undo-toast-ttl {
+  animation-play-state: paused;
+}
+
+@keyframes undo-toast-shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
