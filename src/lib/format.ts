@@ -11,11 +11,13 @@ function parseLocalDate(dateStr?: string | Date | null): Date | null {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return dateStr;
   const str = String(dateStr).trim();
-  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (match) {
-    const [, y, m, d] = match;
+  // Plain YYYY-MM-DD from forms/API writes — calendar date, not a timestamp.
+  const dateOnlyMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const [, y, m, d] = dateOnlyMatch;
     return new Date(Number(y), Number(m) - 1, Number(d));
   }
+  // ISO timestamps from Postgres DATE columns (local midnight encoded as UTC).
   const parsed = new Date(str);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

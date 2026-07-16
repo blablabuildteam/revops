@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { normalizeDateParam } from "@/lib/format";
 
 const asNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
-  if (v instanceof Date) return v.toISOString();
   return String(v);
 };
+
+const dateAsNull = (v: unknown): string | null => normalizeDateParam(v as string | Date | null);
 
 export async function GET(
   _req: NextRequest,
@@ -66,9 +68,9 @@ export async function PUT(
         proposal_status = ${val("proposal_status", current.proposal_status)},
         proposal_url = ${val("proposal_url", current.proposal_url)},
         owner = ${val("owner", current.owner)},
-        close_date = ${asNull(has("close_date") ? body.close_date : current.close_date)},
-        start_date = ${asNull(has("start_date") ? body.start_date : current.start_date)},
-        end_date = ${asNull(has("end_date") ? body.end_date : current.end_date)},
+        close_date = ${dateAsNull(has("close_date") ? body.close_date : current.close_date)},
+        start_date = ${dateAsNull(has("start_date") ? body.start_date : current.start_date)},
+        end_date = ${dateAsNull(has("end_date") ? body.end_date : current.end_date)},
         notes = ${val("notes", current.notes)},
         tags = ${val("tags", current.tags)},
         updated_at = now()
