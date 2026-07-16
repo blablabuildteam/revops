@@ -5,8 +5,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "blablabuild · RevOps",
-  description: "Revenue operations — pipeline, opportunities and revenue. Talk less, build more.",
+  title: "Workspace · blablabuild",
+  description: "Talk less, build more.",
   robots: {
     index: false,
     follow: false,
