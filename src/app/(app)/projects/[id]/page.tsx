@@ -368,6 +368,10 @@ function InlinePhaseSelect({
   );
 }
 
+function isDonePhase(name?: string) {
+  return (name ?? "").toLowerCase() === "done";
+}
+
 function TaskNameCell({
   task,
   onOpen,
@@ -375,6 +379,7 @@ function TaskNameCell({
   allowSubtasks,
   onAddSubtask,
   indent = false,
+  isDone = false,
 }: {
   task: Task;
   onOpen: () => void;
@@ -382,10 +387,12 @@ function TaskNameCell({
   allowSubtasks?: boolean;
   onAddSubtask?: () => void;
   indent?: boolean;
+  isDone?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(task.title);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
   useEffect(() => {
     if (!editing) setValue(task.title);
@@ -444,8 +451,17 @@ function TaskNameCell({
         onClick={onOpen}
         className="flex-1 min-w-0 text-left cursor-pointer"
       >
-        <p className="text-sm truncate text-neutral-200">
-          <BinaryText text={task.title} id={task.id} />
+        <p className="text-sm text-neutral-200 flex items-center gap-1.5 min-w-0">
+          <span className="truncate">
+            <BinaryText text={task.title} id={task.id} />
+          </span>
+          {isOverdue && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+              title="Overdue"
+              aria-label="Overdue"
+            />
+          )}
         </p>
         {task.description && !indent && (
           <p className="text-xs text-neutral-600 truncate">
@@ -490,6 +506,7 @@ function SubtaskRow({
   onRename,
   selected,
   onToggleSelect,
+  isDone = false,
 }: {
   task: Task;
   onUpdate: (t: Task) => void;
@@ -498,6 +515,7 @@ function SubtaskRow({
   onRename: (id: string, title: string) => Promise<void>;
   selected: boolean;
   onToggleSelect: (id: string) => void;
+  isDone?: boolean;
 }) {
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -531,6 +549,7 @@ function SubtaskRow({
       <TaskNameCell
         task={task}
         indent
+        isDone={isDone}
         onOpen={() => onClick(task)}
         onRename={(title) => onRename(task.id, title)}
       />
@@ -605,6 +624,9 @@ function SortableTaskRow({
     onDelete(task.id);
   }
 
+  const milestone = milestones.find((m) => m.id === currentMilestoneId);
+  const isDone = milestone ? isDonePhase(milestone.name) : false;
+
   return (
     <div
       ref={setNodeRef}
@@ -639,6 +661,7 @@ function SortableTaskRow({
         <TaskNameCell
           task={task}
           allowSubtasks
+          isDone={isDone}
           onOpen={() => onClick(task)}
           onRename={(title) => onRename(task.id, title)}
           onAddSubtask={onAddSubtask}
@@ -722,6 +745,9 @@ function TaskWithSubtasks({
     setAddingSubtask(false);
   }
 
+  const milestone = milestones.find((m) => m.id === currentMilestoneId);
+  const isDone = milestone ? isDonePhase(milestone.name) : false;
+
   return (
     <div>
       <SortableTaskRow
@@ -747,6 +773,7 @@ function TaskWithSubtasks({
           onRename={onRename}
           selected={selectedIds.has(subtask.id)}
           onToggleSelect={onToggleSelect}
+          isDone={isDone}
         />
       ))}
       {addingSubtask && (

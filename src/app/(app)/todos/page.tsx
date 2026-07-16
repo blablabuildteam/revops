@@ -434,8 +434,17 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
             todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
           }`}
         >
-          <p className="text-sm leading-snug truncate">
-            <BinaryText text={todo.title} id={todo.id} />
+          <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
+            <span className="truncate">
+              <BinaryText text={todo.title} id={todo.id} />
+            </span>
+            {isOverdue && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+                title="Overdue"
+                aria-label="Overdue"
+              />
+            )}
           </p>
         </button>
         <div className="flex items-center gap-2 shrink-0">
@@ -511,8 +520,17 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
             todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
           }`}
         >
-          <p className="text-sm leading-snug">
-            <BinaryText text={todo.title} id={todo.id} />
+          <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
+            <span className="truncate">
+              <BinaryText text={todo.title} id={todo.id} />
+            </span>
+            {isOverdue && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+                title="Overdue"
+                aria-label="Overdue"
+              />
+            )}
           </p>
         </button>
         {todo.description && (
