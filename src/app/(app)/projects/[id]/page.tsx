@@ -19,6 +19,7 @@ import {
   useDroppable,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -47,6 +48,7 @@ import { getProject, getProjects, createMilestone, createTask, updateTask, delet
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
+import { useMutationFeedback } from "@/components/mutation-provider";
 
 const TASK_ROW_GRID =
   "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
@@ -1197,6 +1199,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
   const tasksRef = useRef<TasksByMilestone>({});
+  const dragStartSnapshot = useRef<TasksByMilestone | null>(null);
+  const { begin, end, pushUndo } = useMutationFeedback();
 
   const milestoneIds = [
     ...(project?.milestones.map((m) => m.id) ?? []),
@@ -1358,32 +1362,38 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   async function handleTaskPhaseChange(taskId: string, fromMilestoneId: string, toMilestoneId: string) {
+    if (fromMilestoneId === toMilestoneId) return;
+
     const current = tasksRef.current;
     const childTasks = getChildTasks(current, taskId);
+    const movingIds = new Set([taskId, ...childTasks.map((c) => c.id)]);
+    const parentTask = findTaskInState(current, taskId);
+    if (!parentTask) return;
+
+    const fromSnapshot = [...(current[fromMilestoneId] || [])];
+    const toSnapshot = [...(current[toMilestoneId] || [])];
     const targetApproved = (current[toMilestoneId] || []).filter(isTopLevelTask);
     const newPosition = targetApproved.length;
 
-    const updated = await updateTask(taskId, {
-      milestone_id: toMilestoneId,
+    const optimisticParent: Task = {
+      ...parentTask,
+      milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
       position: newPosition,
-    });
-    const updatedChildren = await Promise.all(
-      childTasks.map((child) =>
-        updateTask(child.id, { milestone_id: toMilestoneId }),
-      ),
-    );
+    };
+    const optimisticChildren = childTasks.map((child) => ({
+      ...child,
+      milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+    }));
 
     setTasksByMilestone((prev) => {
-      const movingIds = new Set([taskId, ...childTasks.map((c) => c.id)]);
       const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
       const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id));
       const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
       const toApproved = [
         ...targetApproved,
-        updated,
-        ...updatedChildren,
+        optimisticParent,
+        ...optimisticChildren,
       ];
-
       const next = {
         ...prev,
         [fromMilestoneId]: [...fromPending, ...fromApproved],
@@ -1393,14 +1403,85 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       return next;
     });
 
-    const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter(isApprovedTask);
-    const toApproved = (tasksRef.current[toMilestoneId] || []).filter(isApprovedTask);
-    await Promise.all([
-      persistContainer(fromMilestoneId, fromApproved),
-      persistContainer(toMilestoneId, toApproved),
-    ]);
+    if (selectedTask?.id === taskId) setSelectedTask(optimisticParent);
 
-    if (selectedTask?.id === taskId) setSelectedTask(updated);
+    begin();
+    try {
+      const updated = await updateTask(taskId, {
+        milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+        position: newPosition,
+      });
+      const updatedChildren = await Promise.all(
+        childTasks.map((child) =>
+          updateTask(child.id, {
+            milestone_id: toMilestoneId === UNASSIGNED_ID ? null : toMilestoneId,
+          }),
+        ),
+      );
+
+      setTasksByMilestone((prev) => {
+        const fromPending = (prev[fromMilestoneId] || []).filter((t) => !isApprovedTask(t));
+        const fromApproved = (prev[fromMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id));
+        const toPending = (prev[toMilestoneId] || []).filter((t) => !isApprovedTask(t));
+        const toApproved = [
+          ...(prev[toMilestoneId] || []).filter((t) => isApprovedTask(t) && !movingIds.has(t.id)),
+          updated,
+          ...updatedChildren,
+        ];
+        const next = {
+          ...prev,
+          [fromMilestoneId]: [...fromPending, ...fromApproved],
+          [toMilestoneId]: [...toPending, ...toApproved],
+        };
+        tasksRef.current = next;
+        return next;
+      });
+
+      const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter(isApprovedTask);
+      const toApproved = (tasksRef.current[toMilestoneId] || []).filter(isApprovedTask);
+      await Promise.all([
+        persistContainer(fromMilestoneId, fromApproved),
+        persistContainer(toMilestoneId, toApproved),
+      ]);
+
+      if (selectedTask?.id === taskId) setSelectedTask(updated);
+
+      pushUndo({
+        label: "Status changed",
+        revert: async () => {
+          setTasksByMilestone((prev) => {
+            const next = {
+              ...prev,
+              [fromMilestoneId]: fromSnapshot,
+              [toMilestoneId]: toSnapshot,
+            };
+            tasksRef.current = next;
+            return next;
+          });
+          await Promise.all([
+            persistContainer(fromMilestoneId, fromSnapshot.filter(isApprovedTask)),
+            persistContainer(toMilestoneId, toSnapshot.filter(isApprovedTask)),
+          ]);
+          if (selectedTask?.id === taskId) {
+            const restored = fromSnapshot.find((t) => t.id === taskId) ?? null;
+            if (restored) setSelectedTask(restored);
+          }
+        },
+      });
+    } catch {
+      setTasksByMilestone((prev) => {
+        const next = {
+          ...prev,
+          [fromMilestoneId]: fromSnapshot,
+          [toMilestoneId]: toSnapshot,
+        };
+        tasksRef.current = next;
+        return next;
+      });
+      if (selectedTask?.id === taskId) setSelectedTask(parentTask);
+    } finally {
+      end();
+    }
   }
 
   async function handleRename(taskId: string, title: string) {
@@ -1480,14 +1561,24 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     });
   }
 
+  function handleDragStart(_event: DragStartEvent) {
+    dragStartSnapshot.current = structuredClone(tasksRef.current);
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over) {
+      dragStartSnapshot.current = null;
+      return;
+    }
 
     const current = tasksRef.current;
     const activeContainer = findContainer(String(active.id), current, milestoneIds);
     const overContainer = findContainer(String(over.id), current, milestoneIds);
-    if (!activeContainer || !overContainer) return;
+    if (!activeContainer || !overContainer) {
+      dragStartSnapshot.current = null;
+      return;
+    }
 
     let nextState = current;
 
@@ -1512,10 +1603,39 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       (nextState[overContainer] || []).filter(isApprovedTask),
     );
 
-    await Promise.all([
-      persistContainer(activeContainer, activeApproved),
-      activeContainer !== overContainer ? persistContainer(overContainer, overApproved) : Promise.resolve(),
-    ]);
+    const containersChanged = activeContainer !== overContainer;
+    const snapshot = dragStartSnapshot.current;
+    dragStartSnapshot.current = null;
+
+    begin();
+    try {
+      await Promise.all([
+        persistContainer(activeContainer, activeApproved),
+        containersChanged ? persistContainer(overContainer, overApproved) : Promise.resolve(),
+      ]);
+
+      if (containersChanged && snapshot) {
+        pushUndo({
+          label: "Status changed",
+          revert: async () => {
+            setTasksByMilestone(snapshot);
+            tasksRef.current = snapshot;
+            await Promise.all([
+              persistContainer(
+                activeContainer,
+                (snapshot[activeContainer] || []).filter(isApprovedTask),
+              ),
+              persistContainer(
+                overContainer,
+                (snapshot[overContainer] || []).filter(isApprovedTask),
+              ),
+            ]);
+          },
+        });
+      }
+    } finally {
+      end();
+    }
   }
 
   async function handleAddMilestone(e: React.FormEvent) {
@@ -1674,13 +1794,41 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   async function handleBulkPhaseChange(toMilestoneId: string) {
     const ids = Array.from(selectedIds);
-    const updates = await Promise.all(
-      ids.map((taskId) =>
-        updateTask(taskId, { milestone_id: toMilestoneId }),
-      ),
-    );
-    for (const u of updates) handleTaskUpdate(u);
-    setSelectedIds(new Set());
+    const previous = ids
+      .map((taskId) => {
+        const task = findTaskInState(tasksRef.current, taskId);
+        return task
+          ? { id: taskId, milestone_id: task.milestone_id ?? null }
+          : null;
+      })
+      .filter((entry): entry is { id: string; milestone_id: string | null } => Boolean(entry));
+
+    begin();
+    try {
+      const updates = await Promise.all(
+        ids.map((taskId) =>
+          updateTask(taskId, { milestone_id: toMilestoneId }),
+        ),
+      );
+      for (const u of updates) handleTaskUpdate(u);
+      setSelectedIds(new Set());
+
+      if (previous.some((p) => p.milestone_id !== toMilestoneId)) {
+        pushUndo({
+          label: "Status changed",
+          revert: async () => {
+            const reverted = await Promise.all(
+              previous.map((p) =>
+                updateTask(p.id, { milestone_id: p.milestone_id }),
+              ),
+            );
+            for (const u of reverted) handleTaskUpdate(u);
+          },
+        });
+      }
+    } finally {
+      end();
+    }
   }
 
   async function handleBulkProjectMove(targetProjectId: string) {
@@ -1839,6 +1987,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
