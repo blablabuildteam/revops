@@ -42,8 +42,7 @@ const fc =
   "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm placeholder:text-neutral-600";
 
 function defaultProjectName(opp: Opportunity) {
-  const company = opp.company?.name ?? "Client";
-  return `${company} — ${opp.name}`;
+  return opp.name;
 }
 
 function monthInputValue(date?: string) {
