@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const PUBLIC = ["/login", "/project"]; // /project/[token] is public client view
+const PUBLIC = ["/login", "/project", "/robots.txt"]; // /project/[token] is public client view
 const COOKIE = "bb_auth";
 
 function secret() {
