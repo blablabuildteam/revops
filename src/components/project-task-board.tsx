@@ -182,12 +182,15 @@ function InlineAssigneeSelect({
 function InlineDateInput({
   task,
   onUpdate,
+  isDone = false,
 }: {
   task: Task;
   onUpdate: (t: Task) => void;
+  isDone?: boolean;
 }) {
   const boardApi = useBoardApi();
   const patchTask = useUndoablePatch<Task>();
+  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
   return (
     <DatePicker
@@ -203,6 +206,7 @@ function InlineDateInput({
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
       size="sm"
+      overdue={isOverdue}
       className="h-7 w-full bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
     />
   );
@@ -272,7 +276,6 @@ function TaskNameCell({
   allowSubtasks,
   onAddSubtask,
   indent = false,
-  isDone = false,
 }: {
   task: Task;
   onOpen: () => void;
@@ -280,12 +283,10 @@ function TaskNameCell({
   allowSubtasks?: boolean;
   onAddSubtask?: () => void;
   indent?: boolean;
-  isDone?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(task.title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isOverdue = !!task.due_date && !isDone && new Date(task.due_date) < new Date();
 
   useEffect(() => {
     if (!editing) setValue(task.title);
@@ -330,17 +331,8 @@ function TaskNameCell({
   return (
     <div className={`min-w-0 flex-1 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}>
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left cursor-pointer">
-        <p className="text-sm text-neutral-200 flex items-center gap-1.5 min-w-0">
-          <span className="truncate">
-            <BinaryText text={task.title} id={task.id} />
-          </span>
-          {isOverdue && (
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-              title="Overdue"
-              aria-label="Overdue"
-            />
-          )}
+        <p className="text-sm text-neutral-200 truncate">
+          <BinaryText text={task.title} id={task.id} />
         </p>
         {task.description && !indent && (
           <p className="text-xs text-neutral-600 truncate">
@@ -398,7 +390,6 @@ function TaskRow({
         task={task}
         indent={indent}
         allowSubtasks={!indent}
-        isDone={isDone}
         onOpen={() => onClick(task)}
         onRename={(title) => onRename(task.id, title)}
         onAddSubtask={onAddSubtask}
@@ -416,7 +407,7 @@ function TaskRow({
         }}
       />
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
-      <InlineDateInput task={task} onUpdate={onUpdate} />
+      <InlineDateInput task={task} onUpdate={onUpdate} isDone={isDone} />
       {indent ? (
         <span className="text-xs text-neutral-700">—</span>
       ) : (

@@ -146,6 +146,7 @@ type DatePickerProps = {
   className?: string
   size?: "default" | "sm"
   showIcon?: boolean
+  overdue?: boolean
   disabled?: boolean
   onClick?: React.MouseEventHandler<HTMLButtonElement>
   onPointerDown?: React.PointerEventHandler<HTMLButtonElement>
@@ -158,6 +159,7 @@ function DatePicker({
   className,
   size = "default",
   showIcon = true,
+  overdue = false,
   disabled,
   onClick,
   onPointerDown,
@@ -192,6 +194,13 @@ function DatePicker({
           />
         )}
         <span className="min-w-0 flex-1 truncate">{displayValue}</span>
+        {overdue && (
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+            title="Overdue"
+            aria-label="Overdue"
+          />
+        )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-3">
         <Calendar
