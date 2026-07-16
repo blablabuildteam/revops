@@ -35,6 +35,7 @@ import {
 } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 import { useMutationFeedbackOptional } from "@/components/mutation-provider";
+import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 export const TASK_ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
@@ -146,11 +147,19 @@ function InlineAssigneeSelect({
 }) {
   const boardApi = useBoardApi();
   const assigneeUsers = useAssigneeUsers();
+  const patchTask = useUndoablePatch<Task>();
+
   return (
     <Select
       value={task.assignee || "none"}
       onValueChange={(v) => {
-        boardApi.updateTask(task.id, { assignee: !v || v === "none" ? undefined : v }).then(onUpdate);
+        const next = !v || v === "none" ? undefined : v;
+        void patchTask({
+          item: task,
+          patch: { assignee: next },
+          apply: boardApi.updateTask,
+          onSuccess: onUpdate,
+        });
       }}
     >
       <SelectTrigger
@@ -178,11 +187,18 @@ function InlineDateInput({
   onUpdate: (t: Task) => void;
 }) {
   const boardApi = useBoardApi();
+  const patchTask = useUndoablePatch<Task>();
+
   return (
     <DatePicker
       value={toDateInputValue(task.due_date)}
       onChange={(v) => {
-        boardApi.updateTask(task.id, { due_date: v || null }).then(onUpdate);
+        void patchTask({
+          item: task,
+          patch: { due_date: v || null },
+          apply: boardApi.updateTask,
+          onSuccess: onUpdate,
+        });
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
@@ -373,6 +389,7 @@ function TaskRow({
   indent?: boolean;
 }) {
   const boardApi = useBoardApi();
+  const patchTask = useUndoablePatch<Task>();
   const milestone = milestones.find((m) => m.id === currentMilestoneId);
   const isDone = milestone ? isDonePhase(milestone.name) : false;
   return (
@@ -389,7 +406,14 @@ function TaskRow({
       <TaskRowIndicators task={task} />
       <PriorityFlag
         priority={task.priority ?? "low"}
-        onChange={(next) => { boardApi.updateTask(task.id, { priority: next }).then(onUpdate); }}
+        onChange={(next) => {
+          void patchTask({
+            item: task,
+            patch: { priority: next },
+            apply: boardApi.updateTask,
+            onSuccess: onUpdate,
+          });
+        }}
       />
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
       <InlineDateInput task={task} onUpdate={onUpdate} />
@@ -752,8 +776,23 @@ export function ProjectTaskBoardPanel({
   }
 
   async function handleRename(id: string, title: string) {
-    const updated = await boardApi.updateTask(id, { title });
-    handleTaskUpdate(updated);
+    const task = localTasks.find((t) => t.id === id);
+    if (!task || task.title === title) return;
+
+    mutation?.begin();
+    try {
+      const updated = await boardApi.updateTask(id, { title });
+      handleTaskUpdate(updated);
+      mutation?.pushUndo({
+        label: "Updated",
+        revert: async () => {
+          const reverted = await boardApi.updateTask(id, { title: task.title });
+          handleTaskUpdate(reverted);
+        },
+      });
+    } finally {
+      mutation?.end();
+    }
   }
 
   const tasksByMilestone = new Map<string, Task[]>();

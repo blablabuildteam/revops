@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { StageBadge } from "@/components/stage-badge";
 import { createCompany } from "@/lib/api";
+import { useUndoToast } from "@/components/mutation-provider";
 import { useCompanies, useOpportunities } from "@/hooks/use-api-data";
 import { Company, Opportunity, RetainerType } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
@@ -45,6 +46,7 @@ function CompanyForm({
   };
   const [form, setForm] = useState<FormState>(blank);
   const [loading, setLoading] = useState(false);
+  const withUndo = useUndoToast();
 
   useEffect(() => {
     if (open) {
@@ -79,15 +81,39 @@ function CompanyForm({
 
       let company: Company;
       if (initial) {
-        const res = await fetch(`/api/companies/${initial.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+        const snapshot = { ...initial };
+        await withUndo({
+          label: "Updated",
+          run: async () => {
+            const res = await fetch(`/api/companies/${initial.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            company = await res.json();
+            onSave(company);
+            onClose();
+          },
+          undo: async () => {
+            const res = await fetch(`/api/companies/${initial.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: snapshot.name,
+                industry: snapshot.industry ?? null,
+                website: snapshot.website ?? null,
+                country: snapshot.country ?? "NL",
+                retainer_type: snapshot.retainer_type ?? "none",
+                retainer_amount: snapshot.retainer_amount ?? 0,
+                commission_pct: snapshot.commission_pct ?? 0,
+              }),
+            });
+            onSave(await res.json());
+          },
         });
-        company = await res.json();
-      } else {
-        company = await createCompany(payload);
+        return;
       }
+      company = await createCompany(payload);
       onSave(company);
       onClose();
     } finally {

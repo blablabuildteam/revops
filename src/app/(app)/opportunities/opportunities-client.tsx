@@ -287,7 +287,11 @@ export default function OpportunitiesPageClient() {
     load();
   }, []);
 
-  const patchOpp = useCallback(async (id: string, updates: Partial<Opportunity>) => {
+  const patchOpp = useCallback(async (
+    id: string,
+    updates: Partial<Opportunity>,
+    opts?: { skipUndo?: boolean },
+  ) => {
     let snapshot: Opportunity | undefined;
     setOpps((prev) => {
       snapshot = prev.find((o) => o.id === id);
@@ -298,6 +302,10 @@ export default function OpportunitiesPageClient() {
     if (updates.stage && stageFilter !== "all" && updates.stage !== stageFilter) {
       setStageFilter("all");
     }
+
+    const hasChanges = snapshot && Object.keys(updates).some(
+      (key) => updates[key as keyof Opportunity] !== snapshot![key as keyof Opportunity],
+    );
 
     const applyServer = (updated: Opportunity) => {
       setOpps((prev) =>
@@ -330,6 +338,15 @@ export default function OpportunitiesPageClient() {
         try {
           const updated = await updateOpportunity(id, updates);
           applyServer(updated);
+          if (!opts?.skipUndo && hasChanges && snapshot) {
+            const revertUpdates = Object.fromEntries(
+              Object.keys(updates).map((key) => [key, snapshot![key as keyof Opportunity]]),
+            ) as Partial<Opportunity>;
+            pushUndo({
+              label: "stage" in updates ? "Status changed" : "Updated",
+              revert: () => patchOpp(id, revertUpdates, { skipUndo: true }),
+            });
+          }
         } catch (err) {
           rollback();
           const message = err instanceof Error ? err.message : "Failed to save changes";
@@ -342,27 +359,10 @@ export default function OpportunitiesPageClient() {
 
     patchQueues.current.set(id, next);
     await next;
-  }, [stageFilter, begin, end]);
+  }, [stageFilter, begin, end, pushUndo]);
 
   async function handleStageChange(id: string, stage: Stage) {
-    const current =
-      opps.find((o) => o.id === id) ??
-      (editingOpp?.id === id ? editingOpp : undefined);
-    const prevStage = current?.stage;
-    const prevProbability = current?.probability;
-
     await patchOpp(id, { stage, probability: STAGE_PROBABILITY[stage] });
-
-    if (prevStage && prevStage !== stage) {
-      pushUndo({
-        label: "Status changed",
-        revert: () =>
-          patchOpp(id, {
-            stage: prevStage,
-            probability: prevProbability ?? STAGE_PROBABILITY[prevStage],
-          }),
-      });
-    }
   }
 
   function handleRowClick(e: React.MouseEvent, opp: Opportunity) {

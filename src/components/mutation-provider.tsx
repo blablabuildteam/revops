@@ -61,6 +61,36 @@ export function useMutationFeedbackOptional() {
   return useContext(MutationContext);
 }
 
+export type UndoToastOptions = {
+  label?: string;
+  run: () => void | Promise<void>;
+  undo: () => void | Promise<void>;
+};
+
+export async function withUndoToast(
+  mutation: Pick<MutationContextValue, "begin" | "end" | "pushUndo"> | null | undefined,
+  options: UndoToastOptions,
+): Promise<void> {
+  mutation?.begin();
+  try {
+    await options.run();
+    mutation?.pushUndo({
+      label: options.label ?? "Updated",
+      revert: options.undo,
+    });
+  } finally {
+    mutation?.end();
+  }
+}
+
+export function useUndoToast() {
+  const mutation = useMutationFeedbackOptional();
+  return useCallback(
+    (options: UndoToastOptions) => withUndoToast(mutation, options),
+    [mutation],
+  );
+}
+
 export function MutationProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [toast, setToast] = useState<UndoEntry | null>(null);

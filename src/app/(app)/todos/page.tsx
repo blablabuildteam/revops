@@ -2,9 +2,9 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import {
-  Plus, CheckCircle2, Trash2,
+  Plus, CheckCircle2, Circle, Clock, Trash2,
   User, Building2, FolderKanban, Calendar,
   ChevronDown, ChevronRight, ListTodo, ArrowLeft,
 } from "lucide-react";
@@ -31,7 +31,8 @@ import { ProjectTaskBoardPanel } from "@/components/project-task-board";
 import { Task } from "@/lib/types";
 import { useSession } from "@/components/session-provider";
 import { cacheKeys, getCached } from "@/lib/query-cache";
-import { useMutationFeedback } from "@/components/mutation-provider";
+import { useMutationFeedback, useUndoToast } from "@/components/mutation-provider";
+import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 interface TodoUser { id: string; email: string; name: string }
 interface Todo {
@@ -52,6 +53,16 @@ interface Todo {
   created_at: string;
   updated_at?: string;
   _source: "todo";
+}
+
+async function putTodo(id: string, patch: Record<string, unknown>): Promise<Todo> {
+  const res = await fetch(`/api/todos/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const data = await res.json();
+  return { ...data, _source: "todo" };
 }
 
 interface ProjectBoardTask {
@@ -106,11 +117,11 @@ function isDonePhase(name?: string) {
 
 type TodoStatus = Todo["status"];
 
-const STATUS_OPTIONS: { value: TodoStatus; label: string; className: string }[] = [
-  { value: "open", label: "Open", className: "text-neutral-300" },
-  { value: "in_progress", label: "In progress", className: "text-blue-400" },
-  { value: "done", label: "Done", className: "text-emerald-400" },
-];
+const statusIcon: Record<TodoStatus, ReactNode> = {
+  open: <Circle className="w-4 h-4 text-neutral-500" />,
+  in_progress: <Clock className="w-4 h-4 text-blue-400" />,
+  done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
+};
 
 const statusLabel: Record<TodoStatus, string> = {
   open: "Open",
@@ -118,11 +129,24 @@ const statusLabel: Record<TodoStatus, string> = {
   done: "Done",
 };
 
-const statusTriggerClass: Record<TodoStatus, string> = {
+const statusTextClass: Record<TodoStatus, string> = {
   open: "text-neutral-400",
   in_progress: "text-blue-400",
   done: "text-emerald-400",
 };
+
+function nextTodoStatus(status: TodoStatus): TodoStatus | null {
+  if (status === "open") return "in_progress";
+  if (status === "in_progress") return "done";
+  return null;
+}
+
+function statusActionLabel(status: TodoStatus, allowReopen = false): string {
+  if (status === "done" && allowReopen) return "Reopen to-do";
+  if (status === "open") return "Mark in progress";
+  if (status === "in_progress") return "Mark done";
+  return "Done";
+}
 
 function sortCompletedLatest(todos: Todo[]) {
   return [...todos].sort((a, b) => {
@@ -187,6 +211,7 @@ function TodoFormDialog({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const withUndo = useUndoToast();
 
   const people = assigneeOptions(users, currentUser);
 
@@ -238,7 +263,29 @@ function TodoFormDialog({
         setError(data?.error ?? (isEdit ? "Failed to update task" : "Failed to create task"));
         return;
       }
-      onSave(data);
+      if (isEdit && todo) {
+        await withUndo({
+          label: "Updated",
+          run: async () => {
+            onSave({ ...data, _source: "todo" });
+            onClose();
+          },
+          undo: async () => {
+            const reverted = await putTodo(todo.id, {
+              title: todo.title,
+              description: todo.description ?? null,
+              priority: todo.priority,
+              assignee_id: todo.assignee_id ?? null,
+              company_id: todo.company_id ?? null,
+              project_id: todo.project_id ?? null,
+              due_date: todo.due_date ?? null,
+            });
+            onSave(reverted);
+          },
+        });
+        return;
+      }
+      onSave({ ...data, _source: "todo" });
       onClose();
     } finally {
       setLoading(false);
@@ -421,13 +468,13 @@ function QuickAddTodo({ onAdd, currentUser }: {
 }
 
 // ---------------------------------------------------------------------------
-// Status dropdown + shared status update
+// Clickable status control + shared status update
 // ---------------------------------------------------------------------------
 
 function useTodoStatusChange(todo: Todo, onUpdate: (t: Todo) => void) {
   const { begin, end, pushUndo } = useMutationFeedback();
 
-  return function changeStatus(next: TodoStatus) {
+  const changeStatus = useCallback((next: TodoStatus) => {
     if (next === todo.status) return;
     const prev = todo.status;
     onUpdate({ ...todo, status: next, _source: "todo" });
@@ -457,35 +504,48 @@ function useTodoStatusChange(todo: Todo, onUpdate: (t: Todo) => void) {
       })
       .catch(() => onUpdate({ ...todo, status: prev, _source: "todo" }))
       .finally(() => end());
-  };
+  }, [todo, onUpdate, begin, end, pushUndo]);
+
+  const cycleStatus = useCallback(() => {
+    const next = nextTodoStatus(todo.status);
+    if (next) changeStatus(next);
+  }, [todo.status, changeStatus]);
+
+  return { changeStatus, cycleStatus };
 }
 
-function TodoStatusSelect({
+function TodoStatusButton({
   status,
-  onChange,
+  onClick,
+  allowReopen = false,
   className,
 }: {
   status: TodoStatus;
-  onChange: (next: TodoStatus) => void;
+  onClick: () => void;
+  allowReopen?: boolean;
   className?: string;
 }) {
+  const canInteract = status !== "done" || allowReopen;
+
   return (
-    <Select value={status} onValueChange={(v) => v && onChange(v as TodoStatus)}>
-      <SelectTrigger
-        size="sm"
-        className={`h-7 w-[7.5rem] shrink-0 bg-neutral-900/80 border-neutral-700 text-xs ${statusTriggerClass[status]} ${className ?? ""}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <SelectValue>{statusLabel[status]}</SelectValue>
-      </SelectTrigger>
-      <SelectContent className="bg-neutral-800 border-neutral-700">
-        {STATUS_OPTIONS.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value} className={opt.className}>
-            {opt.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      disabled={!canInteract}
+      title={statusActionLabel(status, allowReopen)}
+      aria-label={statusActionLabel(status, allowReopen)}
+      className={`flex items-center gap-1.5 shrink-0 transition-colors rounded px-1 py-0.5 ${
+        canInteract
+          ? "hover:bg-neutral-800 cursor-pointer"
+          : "cursor-default"
+      } ${className ?? ""}`}
+    >
+      {statusIcon[status]}
+      <span className={`text-xs ${statusTextClass[status]}`}>{statusLabel[status]}</span>
+    </button>
   );
 }
 
@@ -493,13 +553,23 @@ function TodoStatusSelect({
 // Compact todo row for the checklist
 // ---------------------------------------------------------------------------
 
-function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
+function TodoRow({ todo, onUpdate, onDelete, onEdit, allowReopen = false }: {
   todo: Todo;
   onUpdate: (t: Todo) => void;
   onDelete: (id: string) => void;
   onEdit: (t: Todo) => void;
+  allowReopen?: boolean;
 }) {
-  const changeStatus = useTodoStatusChange(todo, onUpdate);
+  const { changeStatus, cycleStatus } = useTodoStatusChange(todo, onUpdate);
+  const patchTodo = useUndoablePatch<Todo>();
+
+  function handleStatusClick() {
+    if (allowReopen && todo.status === "done") {
+      changeStatus("open");
+      return;
+    }
+    cycleStatus();
+  }
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
     new Date(todo.due_date) < new Date();
@@ -510,7 +580,11 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
         ? "opacity-50 bg-neutral-900/20 border-neutral-800/50"
         : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
     }`}>
-      <TodoStatusSelect status={todo.status} onChange={changeStatus} />
+      <TodoStatusButton
+        status={todo.status}
+        onClick={handleStatusClick}
+        allowReopen={allowReopen}
+      />
       <div className="flex-1 min-w-0 flex items-center gap-3">
         <button
           type="button"
@@ -550,11 +624,12 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
         <PriorityFlag
           priority={todo.priority}
           onChange={(next) => {
-            fetch(`/api/todos/${todo.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ priority: next }),
-            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
+            void patchTodo({
+              item: todo,
+              patch: { priority: next },
+              apply: (id, patch) => putTodo(id, patch),
+              onSuccess: onUpdate,
+            });
           }}
         />
         <button onClick={() => onDelete(todo.id)}
@@ -576,7 +651,8 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
   onDelete: (id: string) => void;
   onEdit: (t: Todo) => void;
 }) {
-  const changeStatus = useTodoStatusChange(todo, onUpdate);
+  const { cycleStatus } = useTodoStatusChange(todo, onUpdate);
+  const patchTodo = useUndoablePatch<Todo>();
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
     new Date(todo.due_date) < new Date();
@@ -586,7 +662,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
       todo.status === "done" ? "opacity-50" : ""
     }`}>
       <div className="shrink-0 mt-0.5">
-        <TodoStatusSelect status={todo.status} onChange={changeStatus} />
+        <TodoStatusButton status={todo.status} onClick={cycleStatus} />
       </div>
       <div className="flex-1 min-w-0">
         <button
@@ -638,11 +714,12 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
         <PriorityFlag
           priority={todo.priority}
           onChange={(next) => {
-            fetch(`/api/todos/${todo.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ priority: next }),
-            }).then((r) => r.json()).then((d) => onUpdate({ ...d, _source: "todo" }));
+            void patchTodo({
+              item: todo,
+              patch: { priority: next },
+              apply: (id, patch) => putTodo(id, patch),
+              onSuccess: onUpdate,
+            });
           }}
         />
         <button onClick={() => onDelete(todo.id)}
@@ -747,6 +824,7 @@ function ProjectGroup({
             projectId={projectId}
             tasks={boardTasks.map(boardTaskToTask)}
             filterStatus={filterStatus}
+            hideToolbar
             onTaskUpdate={onBoardTaskUpdate}
             onTaskDelete={onBoardTaskDelete}
           />
@@ -856,7 +934,19 @@ export default function TodosPage() {
   useEffect(() => { load(); }, [load]);
 
   function handleTodoUpdate(updated: Todo) {
-    setTodos((prev) => prev.map((x) => x.id === updated.id ? { ...x, ...updated } : x));
+    setTodos((prev) => {
+      const existing = prev.find((x) => x.id === updated.id);
+      if (!existing) return prev;
+
+      const merged = { ...existing, ...updated, _source: "todo" as const };
+
+      // Reopening from Recently Completed → pin to top of My To-Dos as Open
+      if (existing.status === "done" && updated.status === "open") {
+        return [merged, ...prev.filter((x) => x.id !== updated.id)];
+      }
+
+      return prev.map((x) => (x.id === updated.id ? merged : x));
+    });
   }
 
   function handleBoardTaskUpdate(updated: Task, milestone?: { name?: string; color?: string }) {
@@ -1113,7 +1203,14 @@ export default function TodosPage() {
               {showCompletedView ? (
                 <>
                   {personalDone.map((t) => (
-                    <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                    <TodoRow
+                      key={t.id}
+                      todo={t}
+                      onUpdate={handleTodoUpdate}
+                      onDelete={handleDelete}
+                      onEdit={openEditTask}
+                      allowReopen
+                    />
                   ))}
                   {personalDone.length === 0 && (
                     <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
@@ -1141,7 +1238,14 @@ export default function TodosPage() {
                         <div className="flex-1 border-t border-neutral-800/60" />
                       </div>
                       {personalDonePreview.map((t) => (
-                        <TodoRow key={t.id} todo={t} onUpdate={handleTodoUpdate} onDelete={handleDelete} onEdit={openEditTask} />
+                        <TodoRow
+                          key={t.id}
+                          todo={t}
+                          onUpdate={handleTodoUpdate}
+                          onDelete={handleDelete}
+                          onEdit={openEditTask}
+                          allowReopen
+                        />
                       ))}
                       {personalDone.length > 3 && (
                         <button

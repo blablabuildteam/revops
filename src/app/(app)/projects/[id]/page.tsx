@@ -49,6 +49,7 @@ import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 import { useMutationFeedback } from "@/components/mutation-provider";
+import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 const TASK_ROW_GRID =
   "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
@@ -254,15 +255,19 @@ function InlineAssigneeSelect({
   onUpdate: (t: Task) => void;
 }) {
   const assigneeUsers = useAssigneeUsers();
+  const patchTask = useUndoablePatch<Task>();
+
   return (
     <Select
       value={task.assignee || "none"}
       onValueChange={(v) => {
-        if (!v || v === "none") {
-          updateTask(task.id, { assignee: undefined }).then(onUpdate);
-        } else {
-          updateTask(task.id, { assignee: v }).then(onUpdate);
-        }
+        const next = !v || v === "none" ? undefined : v;
+        void patchTask({
+          item: task,
+          patch: { assignee: next },
+          apply: updateTask,
+          onSuccess: onUpdate,
+        });
       }}
     >
       <SelectTrigger
@@ -290,12 +295,18 @@ function InlineDateInput({
   onUpdate: (t: Task) => void;
 }) {
   const value = toDateInputValue(task.due_date);
+  const patchTask = useUndoablePatch<Task>();
 
   return (
     <DatePicker
       value={value}
       onChange={(v) => {
-        updateTask(task.id, { due_date: v || null }).then(onUpdate);
+        void patchTask({
+          item: task,
+          patch: { due_date: v || null },
+          apply: updateTask,
+          onSuccess: onUpdate,
+        });
       }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={cancelDrag}
@@ -519,6 +530,8 @@ function SubtaskRow({
   onToggleSelect: (id: string) => void;
   isDone?: boolean;
 }) {
+  const patchTask = useUndoablePatch<Task>();
+
   function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
     onDelete(task.id);
@@ -561,7 +574,12 @@ function SubtaskRow({
       <PriorityFlag
         priority={task.priority ?? "low"}
         onChange={(next) => {
-          updateTask(task.id, { priority: next }).then(onUpdate);
+          void patchTask({
+            item: task,
+            patch: { priority: next },
+            apply: updateTask,
+            onSuccess: onUpdate,
+          });
         }}
       />
 
@@ -606,6 +624,7 @@ function SortableTaskRow({
   selected: boolean;
   onToggleSelect: (id: string) => void;
 }) {
+  const patchTask = useUndoablePatch<Task>();
   const {
     attributes,
     listeners,
@@ -675,7 +694,12 @@ function SortableTaskRow({
       <PriorityFlag
         priority={task.priority ?? "low"}
         onChange={(next) => {
-          updateTask(task.id, { priority: next }).then(onUpdate);
+          void patchTask({
+            item: task,
+            patch: { priority: next },
+            apply: updateTask,
+            onSuccess: onUpdate,
+          });
         }}
       />
 
@@ -1485,8 +1509,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   async function handleRename(taskId: string, title: string) {
-    const updated = await updateTask(taskId, { title });
-    handleTaskUpdate(updated);
+    const task = findTaskInState(tasksRef.current, taskId);
+    if (!task || task.title === title) return;
+
+    begin();
+    try {
+      const updated = await updateTask(taskId, { title });
+      handleTaskUpdate(updated);
+      pushUndo({
+        label: "Updated",
+        revert: async () => {
+          const reverted = await updateTask(taskId, { title: task.title });
+          handleTaskUpdate(reverted);
+        },
+      });
+    } finally {
+      end();
+    }
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -1785,11 +1824,37 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   async function handleBulkUpdate(patch: Partial<Task>) {
     const ids = Array.from(selectedIds);
-    const updates = await Promise.all(
-      ids.map((taskId) => updateTask(taskId, patch)),
-    );
-    for (const u of updates) handleTaskUpdate(u);
-    setSelectedIds(new Set());
+    const previous = ids
+      .map((taskId) => {
+        const task = findTaskInState(tasksRef.current, taskId);
+        if (!task) return null;
+        const snapshot = Object.fromEntries(
+          (Object.keys(patch) as (keyof Task)[]).map((key) => [key, task[key]]),
+        ) as Partial<Task>;
+        return { id: taskId, snapshot };
+      })
+      .filter((entry): entry is { id: string; snapshot: Partial<Task> } => Boolean(entry));
+
+    begin();
+    try {
+      const updates = await Promise.all(
+        ids.map((taskId) => updateTask(taskId, patch)),
+      );
+      for (const u of updates) handleTaskUpdate(u);
+      setSelectedIds(new Set());
+
+      pushUndo({
+        label: "Updated",
+        revert: async () => {
+          const reverted = await Promise.all(
+            previous.map((entry) => updateTask(entry.id, entry.snapshot)),
+          );
+          for (const u of reverted) handleTaskUpdate(u);
+        },
+      });
+    } finally {
+      end();
+    }
   }
 
   async function handleBulkPhaseChange(toMilestoneId: string) {

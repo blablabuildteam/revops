@@ -25,6 +25,7 @@ import { DealActivationWizard } from "@/components/deal-activation-wizard";
 import { VatAmountPair } from "@/components/vat-amount-pair";
 import { removeVat } from "@/lib/vat";
 import { updateFinanceDeal } from "@/lib/api";
+import { useUndoToast } from "@/components/mutation-provider";
 import { useFinanceDeals, useFinanceSummary, useOpportunities } from "@/hooks/use-api-data";
 import {
   DEAL_TYPE_LABELS,
@@ -214,6 +215,7 @@ export default function FinancePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [manualDealOpen, setManualDealOpen] = useState(false);
   const [insightsMonth, setInsightsMonth] = useState(currentMonth);
+  const withUndo = useUndoToast();
 
   const load = useCallback(async () => {
     await Promise.all([mutateSummary(), mutateDeals()]);
@@ -308,22 +310,43 @@ export default function FinancePage() {
     if (!selectedDeal) return;
     setSavingDeal(true);
     setSaveError(null);
+    const snapshot = { ...selectedDeal };
     try {
       const payments = (editForm.payments ?? []).filter((p) => p.amount > 0);
-      const updated = await updateFinanceDeal(selectedDeal.id, {
-        company_name: editForm.company_name,
-        project_name: editForm.project_name,
-        deal_type: editForm.deal_type,
-        total_deal_value: editForm.total_deal_value,
-        monthly_fee: editForm.monthly_fee,
-        monthly_revshare: editForm.monthly_revshare,
-        payment_schedule: editForm.payment_schedule ?? [],
-        payments,
-        start_date: editForm.start_date || null,
-        end_date: editForm.end_date || null,
+      await withUndo({
+        label: "Updated",
+        run: async () => {
+          await updateFinanceDeal(selectedDeal.id, {
+            company_name: editForm.company_name,
+            project_name: editForm.project_name,
+            deal_type: editForm.deal_type,
+            total_deal_value: editForm.total_deal_value,
+            monthly_fee: editForm.monthly_fee,
+            monthly_revshare: editForm.monthly_revshare,
+            payment_schedule: editForm.payment_schedule ?? [],
+            payments,
+            start_date: editForm.start_date || null,
+            end_date: editForm.end_date || null,
+          });
+          await mutateDeals();
+          setSelectedDeal(null);
+        },
+        undo: async () => {
+          await updateFinanceDeal(selectedDeal.id, {
+            company_name: snapshot.company_name,
+            project_name: snapshot.project_name,
+            deal_type: snapshot.deal_type,
+            total_deal_value: snapshot.total_deal_value,
+            monthly_fee: snapshot.monthly_fee,
+            monthly_revshare: snapshot.monthly_revshare,
+            payment_schedule: snapshot.payment_schedule ?? [],
+            payments: snapshot.payments ?? [],
+            start_date: snapshot.start_date || null,
+            end_date: snapshot.end_date || null,
+          });
+          await mutateDeals();
+        },
       });
-      await mutateDeals();
-      setSelectedDeal(null);
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : "Failed to save deal");
     } finally {

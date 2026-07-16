@@ -28,6 +28,7 @@ import {
 } from "@/lib/types";
 import { createOpportunity, updateOpportunity, getCompanies, createCompany } from "@/lib/api";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useMutationFeedbackOptional } from "@/components/mutation-provider";
 
 interface OpportunityFormProps {
   open: boolean;
@@ -71,6 +72,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
+  const mutation = useMutationFeedbackOptional();
 
   const resizeNotes = useCallback(() => {
     const el = notesRef.current;
@@ -103,6 +105,19 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         notes: initial.notes || "",
         tags: initial.tags || [],
       });
+      lastSavedPayloadRef.current = {
+        name: initial.name,
+        company_id: initial.company_id || undefined,
+        type: normalizeOpportunityType(initial.type),
+        stage: initial.stage,
+        probability: Number(initial.probability),
+        expected_value: Number(initial.expected_value),
+        actual_value: Number(initial.actual_value),
+        currency: initial.currency,
+        notes: initial.notes || undefined,
+        start_date: initial.start_date ? initial.start_date.slice(0, 7) + "-01" : undefined,
+        end_date: initial.end_date ? initial.end_date.slice(0, 7) + "-01" : undefined,
+      };
       if (initial.company?.id && initial.company?.name) {
         setCompanies((prev) =>
           prev.some((c) => c.id === initial.company!.id)
@@ -140,6 +155,23 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
     start_date: f.start_date ? f.start_date + "-01" : undefined,
     end_date: f.end_date ? f.end_date + "-01" : undefined,
   }), []);
+  const lastSavedPayloadRef = useRef<ReturnType<typeof buildPayload> | null>(null);
+
+  const notifySaved = useCallback((payload: ReturnType<typeof buildPayload>) => {
+    const snapshot = lastSavedPayloadRef.current;
+    const changed = snapshot && JSON.stringify(snapshot) !== JSON.stringify(payload);
+    if (changed && snapshot && initial) {
+      mutation?.pushUndo({
+        label: "Updated",
+        revert: async () => {
+          const saved = await updateOpportunity(initial.id, snapshot);
+          onSave(saved);
+          lastSavedPayloadRef.current = snapshot;
+        },
+      });
+    }
+    lastSavedPayloadRef.current = payload;
+  }, [initial, mutation, onSave]);
 
   const flushSave = useCallback(async (): Promise<boolean> => {
     if (!initial) return true;
@@ -153,6 +185,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
       setSaveStatus("saving");
       const saved = await updateOpportunity(initial.id, buildPayload(form));
       onSave(saved);
+      notifySaved(buildPayload(form));
       setSaveStatus("saved");
       return true;
     } catch (err) {
@@ -175,6 +208,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         setSaveStatus("saving");
         const saved = await updateOpportunity(initial.id, buildPayload(form));
         onSave(saved);
+        notifySaved(buildPayload(form));
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 1500);
       } catch (err) {

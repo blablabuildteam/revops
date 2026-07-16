@@ -17,6 +17,7 @@ import { Task, TaskComment, TaskAttachment, TaskPriority } from "@/lib/types";
 import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
 import { formatDateTime, toDateInputValue } from "@/lib/format";
 import { TaskAttachments, TaskAttachmentsApi } from "@/components/task-attachments";
+import { useUndoToast } from "@/components/mutation-provider";
 
 export type TaskDetailDialogApi = TaskAttachmentsApi & {
   updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
@@ -54,6 +55,7 @@ export function TaskDetailDialog({
   const [postingComment, setPostingComment] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const assigneeUsers = useAssigneeUsers();
+  const withUndo = useUndoToast();
 
   useEffect(() => {
     if (task && open) {
@@ -92,16 +94,33 @@ export function TaskDetailDialog({
     if (!title) return;
     setLoading(true);
     try {
-      const updated = await api.updateTask(task.id, {
-        title,
-        due_date: form.due_date || null,
-        assignee: form.assignee || null,
-        description: form.description || null,
-        url: form.url || null,
-        priority: form.priority,
+      const snapshot = {
+        title: task.title,
+        due_date: task.due_date ?? null,
+        assignee: task.assignee ?? null,
+        description: task.description ?? null,
+        url: task.url ?? null,
+        priority: task.priority ?? "low",
+      };
+      await withUndo({
+        label: "Updated",
+        run: async () => {
+          const updated = await api.updateTask(task.id, {
+            title,
+            due_date: form.due_date || null,
+            assignee: form.assignee || null,
+            description: form.description || null,
+            url: form.url || null,
+            priority: form.priority,
+          });
+          onSave({ ...updated, comment_count: task.comment_count ?? comments.length, has_attachments: attachments.length > 0 });
+          onClose();
+        },
+        undo: async () => {
+          const reverted = await api.updateTask(task.id, snapshot);
+          onSave({ ...reverted, comment_count: task.comment_count ?? comments.length, has_attachments: attachments.length > 0 });
+        },
       });
-      onSave({ ...updated, comment_count: task.comment_count ?? comments.length, has_attachments: attachments.length > 0 });
-      onClose();
     } finally {
       setLoading(false);
     }

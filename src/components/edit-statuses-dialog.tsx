@@ -40,6 +40,7 @@ import {
 } from "@/lib/types";
 import { batchUpdateMilestones } from "@/lib/api";
 import { batchUpdateEditBoardMilestones } from "@/lib/edit-board-api";
+import { useUndoToast } from "@/components/mutation-provider";
 
 interface StatusEntry {
   _key: string;
@@ -164,6 +165,7 @@ export function EditStatusesDialog({
 }) {
   const [entries, setEntries] = useState<StatusEntry[]>([]);
   const [saving, setSaving] = useState(false);
+  const withUndo = useUndoToast();
 
   useEffect(() => {
     if (open) {
@@ -221,6 +223,7 @@ export function EditStatusesDialog({
     if (valid.length === 0) return;
 
     setSaving(true);
+    const previous = milestones;
     try {
       const payload = valid.map((e, i) => ({
         id: e.id,
@@ -228,11 +231,30 @@ export function EditStatusesDialog({
         color: e.color,
         position: i,
       }));
-      const updated = editToken
-        ? await batchUpdateEditBoardMilestones(editToken, payload)
-        : await batchUpdateMilestones(projectId, payload);
-      onSave(updated);
-      onOpenChange(false);
+      await withUndo({
+        label: "Updated",
+        run: async () => {
+          const updated = editToken
+            ? await batchUpdateEditBoardMilestones(editToken, payload)
+            : await batchUpdateMilestones(projectId, payload);
+          onSave(updated);
+          onOpenChange(false);
+        },
+        undo: async () => {
+          const revertPayload = [...previous]
+            .sort((a, b) => a.position - b.position)
+            .map((m) => ({
+              id: m.id,
+              name: m.name,
+              color: m.color,
+              position: m.position,
+            }));
+          const reverted = editToken
+            ? await batchUpdateEditBoardMilestones(editToken, revertPayload)
+            : await batchUpdateMilestones(projectId, revertPayload);
+          onSave(reverted);
+        },
+      });
     } finally {
       setSaving(false);
     }
