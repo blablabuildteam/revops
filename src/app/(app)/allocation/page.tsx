@@ -590,16 +590,44 @@ function PersonAllocation({
                 Item
               </th>
               {weeks.map((w) => {
+                const weekKey = formatWeekKey(w);
                 const current = isCurrentWeek(w);
+                const total = getWeekTotal(person, weekKey);
+                const fill = Math.min(total, 100);
+                const isOver = total > 100;
+                const isPerfect = total === 100;
                 return (
                   <th
-                    key={formatWeekKey(w)}
+                    key={weekKey}
                     className={cn(
                       "px-2 py-2.5 text-center font-medium min-w-[110px]",
                       current ? "text-[#e8ff47] bg-[#e8ff47]/5" : "text-neutral-500"
                     )}
                   >
                     <div className="whitespace-nowrap leading-tight">{formatWeekRange(w)}</div>
+                    <div
+                      className="mt-1.5 mx-auto h-1 w-full max-w-[72px] rounded-full bg-neutral-800 overflow-hidden"
+                      role="progressbar"
+                      aria-valuenow={total}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${total}% allocated`}
+                      title={`${total}%`}
+                    >
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          isOver
+                            ? "bg-red-400"
+                            : isPerfect
+                              ? "bg-green-500"
+                              : total > 0
+                                ? "bg-amber-400"
+                                : "bg-transparent"
+                        )}
+                        style={{ width: `${fill}%` }}
+                      />
+                    </div>
                   </th>
                 );
               })}
@@ -655,38 +683,6 @@ function PersonAllocation({
               </>
             )}
           </tbody>
-          <tfoot>
-            <tr className="border-t border-neutral-700">
-              <td className="px-4 py-2.5 text-neutral-400 font-semibold sticky left-0 bg-neutral-950 z-10">
-                Total
-              </td>
-              {weeks.map((w) => {
-                const weekKey = formatWeekKey(w);
-                const total = getWeekTotal(person, weekKey);
-                const current = isCurrentWeek(w);
-                const isOver = total > 100;
-                const isPerfect = total === 100;
-                return (
-                  <td
-                    key={weekKey}
-                    className={cn(
-                      "px-2 py-2.5 text-center font-bold",
-                      current && "bg-[#e8ff47]/5",
-                      isOver
-                        ? "text-red-400"
-                        : isPerfect
-                          ? "text-emerald-400"
-                          : total > 0
-                            ? "text-amber-400"
-                            : "text-neutral-600"
-                    )}
-                  >
-                    {total > 0 ? `${total}%` : "–"}
-                  </td>
-                );
-              })}
-            </tr>
-          </tfoot>
         </table>
       </div>
     </div>

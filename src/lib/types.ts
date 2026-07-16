@@ -248,7 +248,7 @@ export interface Allocation {
   updated_at: string;
 }
 
-export const ALLOCATION_PERCENT_PRESETS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
+export const ALLOCATION_PERCENT_PRESETS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   pending: "Planned",
