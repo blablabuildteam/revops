@@ -262,20 +262,28 @@ export const ALLOCATION_DEFAULT_UNIT: Record<string, AllocationUnit> = {
   Xennith: "percent",
 };
 
+/** Round to 2 decimal places (enough for 0.1h steps on a 40h week). */
+export function clampAllocationPercent(percentage: number): number {
+  return Math.max(0, Math.min(100, Math.round(percentage * 100) / 100));
+}
+
 export function percentToHours(percentage: number): number {
   return Math.round((percentage / 100) * ALLOCATION_WEEKLY_HOURS * 10) / 10;
 }
 
 export function hoursToPercent(hours: number): number {
-  return Math.max(
-    0,
-    Math.min(100, Math.round((hours / ALLOCATION_WEEKLY_HOURS) * 100))
-  );
+  return clampAllocationPercent((hours / ALLOCATION_WEEKLY_HOURS) * 100);
 }
 
 export function formatAllocationHours(hours: number): string {
   if (hours <= 0) return "–";
   return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
+}
+
+export function formatAllocationPercent(percentage: number): string {
+  if (percentage <= 0) return "–";
+  const rounded = clampAllocationPercent(percentage);
+  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded}%`;
 }
 
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {

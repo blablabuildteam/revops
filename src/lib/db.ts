@@ -160,7 +160,7 @@ async function ensureAllocationsTable() {
         CHECK (target_type IN ('project', 'opportunity', 'generic')),
       target_id TEXT NOT NULL,
       week DATE NOT NULL,
-      percentage INTEGER NOT NULL DEFAULT 0 CHECK (percentage >= 0 AND percentage <= 100),
+      percentage NUMERIC(6,2) NOT NULL DEFAULT 0 CHECK (percentage >= 0 AND percentage <= 100),
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now(),
       UNIQUE(person, target_type, target_id, week)
@@ -169,10 +169,20 @@ async function ensureAllocationsTable() {
 
   // Upgrade from the initial project_id-only schema if present
   const { rows: cols } = await sql`
-    SELECT column_name FROM information_schema.columns
+    SELECT column_name, data_type
+    FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'allocations'
   `;
   const names = new Set(cols.map((c) => String(c.column_name)));
+  const percentageType = cols.find((c) => c.column_name === "percentage")?.data_type;
+  // Allow fractional % so hour values (e.g. 1.5h → 3.75%) round-trip cleanly
+  if (percentageType === "integer" || percentageType === "bigint" || percentageType === "smallint") {
+    await sql`
+      ALTER TABLE allocations
+      ALTER COLUMN percentage TYPE NUMERIC(6,2)
+      USING percentage::numeric
+    `;
+  }
 
   if (names.has("project_id") && !names.has("target_type")) {
     await sql`ALTER TABLE allocations ADD COLUMN IF NOT EXISTS target_type TEXT`;

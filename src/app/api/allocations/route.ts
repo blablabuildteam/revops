@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureTables, sql } from "@/lib/db";
 import { resolveSessionUser } from "@/lib/auth";
-import type { AllocationTargetType } from "@/lib/types";
+import { clampAllocationPercent, type AllocationTargetType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const weekKey = String(week).slice(0, 10);
-    const pct = Math.max(0, Math.min(100, Math.round(Number(percentage))));
+    const pct = clampAllocationPercent(Number(percentage));
 
     if (pct === 0) {
       await sql`

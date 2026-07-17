@@ -19,7 +19,9 @@ import {
   ALLOCATION_DEFAULT_UNIT,
   percentToHours,
   hoursToPercent,
+  clampAllocationPercent,
   formatAllocationHours,
+  formatAllocationPercent,
   STAGE_ORDER,
   type AllocationTargetType,
   type AllocationUnit,
@@ -285,7 +287,7 @@ export default function AllocationPage() {
       if (!viewerName || person !== viewerName) return;
 
       const key = cellKey(person, targetType, targetId, week);
-      const clamped = Math.max(0, Math.min(100, Math.round(value)));
+      const clamped = clampAllocationPercent(value);
 
       setLocalEdits((prev) => {
         const next = new Map(prev);
@@ -698,12 +700,12 @@ function PersonAllocation({
                 const current = isCurrentWeek(w);
                 const total = getWeekTotal(person, weekKey);
                 const fill = Math.min(total, 100);
-                const isOver = total > 100;
-                const isPerfect = total === 100;
+                const isOver = total > 100.001;
+                const isPerfect = Math.abs(total - 100) < 0.05;
                 const totalLabel =
                   unit === "hours"
                     ? formatAllocationHours(percentToHours(total))
-                    : `${total}%`;
+                    : formatAllocationPercent(total);
                 return (
                   <th
                     key={weekKey}
@@ -998,7 +1000,7 @@ function AllocationCell({
     value > 0
       ? unit === "hours"
         ? formatAllocationHours(hours)
-        : `${value}%`
+        : formatAllocationPercent(value)
       : "–";
 
   if (!canEdit) {
