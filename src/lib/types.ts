@@ -250,6 +250,34 @@ export interface Allocation {
 
 export const ALLOCATION_PERCENT_PRESETS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 
+/** Full-time week used to convert between hours and stored percentages. */
+export const ALLOCATION_WEEKLY_HOURS = 40;
+
+export type AllocationUnit = "percent" | "hours";
+
+export const ALLOCATION_HOUR_PRESETS = [1, 2, 4, 8, 12, 16, 20, 24, 32, 40] as const;
+
+export const ALLOCATION_DEFAULT_UNIT: Record<string, AllocationUnit> = {
+  Kevin: "hours",
+  Xennith: "percent",
+};
+
+export function percentToHours(percentage: number): number {
+  return Math.round((percentage / 100) * ALLOCATION_WEEKLY_HOURS * 10) / 10;
+}
+
+export function hoursToPercent(hours: number): number {
+  return Math.max(
+    0,
+    Math.min(100, Math.round((hours / ALLOCATION_WEEKLY_HOURS) * 100))
+  );
+}
+
+export function formatAllocationHours(hours: number): string {
+  if (hours <= 0) return "–";
+  return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
+}
+
 export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   pending: "Planned",
   in_progress: "In progress",

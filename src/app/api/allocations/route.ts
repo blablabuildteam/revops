@@ -27,13 +27,19 @@ async function listAllocations() {
 
 export async function GET() {
   await ensureTables();
-  await resolveSessionUser();
+  const user = await resolveSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   return NextResponse.json(await listAllocations());
 }
 
 export async function PUT(request: NextRequest) {
   await ensureTables();
-  await resolveSessionUser();
+  const user = await resolveSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await request.json();
   const { entries } = body as {
@@ -54,6 +60,14 @@ export async function PUT(request: NextRequest) {
     const { person, target_type, target_id, week, percentage } = entry;
     if (!person || !target_type || !target_id || !week || percentage == null) continue;
     if (!VALID_TYPES.has(target_type)) continue;
+
+    // Users can only edit their own allocations
+    if (person !== user.name) {
+      return NextResponse.json(
+        { error: "You can only edit your own allocations" },
+        { status: 403 }
+      );
+    }
 
     const weekKey = String(week).slice(0, 10);
     const pct = Math.max(0, Math.min(100, Math.round(Number(percentage))));

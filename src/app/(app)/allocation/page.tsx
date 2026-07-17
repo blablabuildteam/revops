@@ -9,15 +9,32 @@ import { useProjects, useAllocations, useOpportunities, useUsers } from "@/hooks
 import { saveAllocations, type AllocationEntry } from "@/lib/api";
 import { UserAvatar } from "@/components/user-avatar";
 import { avatarForName } from "@/components/assignee-select";
+import { useSession } from "@/components/session-provider";
 import {
   TASK_ASSIGNEES,
   ALLOCATION_GENERIC_ID,
   ALLOCATION_PERCENT_PRESETS,
+  ALLOCATION_HOUR_PRESETS,
+  ALLOCATION_WEEKLY_HOURS,
+  ALLOCATION_DEFAULT_UNIT,
+  percentToHours,
+  hoursToPercent,
+  formatAllocationHours,
   STAGE_ORDER,
   type AllocationTargetType,
+  type AllocationUnit,
   type Stage,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+/** Default unit for the whole page is based on who is logged in. */
+function defaultUnitForViewer(viewerName: string): AllocationUnit {
+  return ALLOCATION_DEFAULT_UNIT[viewerName] ?? "percent";
+}
+
+function unitStorageKey(viewerName: string, person: string) {
+  return `alloc-unit:${viewerName}:${person}`;
+}
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -97,10 +114,22 @@ type DragState = {
 };
 
 export default function AllocationPage() {
+  const { user } = useSession();
+  const viewerName = user?.name ?? "";
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
   const { data: allocations = [], isLoading: allocationsLoading } = useAllocations();
   const { data: users = [] } = useUsers();
+
+  const orderedAssignees = useMemo(() => {
+    const list = [...TASK_ASSIGNEES];
+    if (!viewerName) return list;
+    return list.sort((a, b) => {
+      if (a === viewerName) return -1;
+      if (b === viewerName) return 1;
+      return a.localeCompare(b);
+    });
+  }, [viewerName]);
 
   const loading =
     (projectsLoading && projects.length === 0) ||
@@ -253,6 +282,8 @@ export default function AllocationPage() {
       week: string,
       value: number
     ) => {
+      if (!viewerName || person !== viewerName) return;
+
       const key = cellKey(person, targetType, targetId, week);
       const clamped = Math.max(0, Math.min(100, Math.round(value)));
 
@@ -266,7 +297,7 @@ export default function AllocationPage() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(flushSaves, 500);
     },
-    [flushSaves]
+    [flushSaves, viewerName]
   );
 
   const applyRange = useCallback(
@@ -371,6 +402,7 @@ export default function AllocationPage() {
       percentage: number
     ) => {
       if (percentage <= 0) return;
+      if (!viewerName || person !== viewerName) return;
       dragRef.current = {
         person,
         targetType,
@@ -389,7 +421,7 @@ export default function AllocationPage() {
       });
       document.body.classList.add("select-none");
     },
-    []
+    [viewerName]
   );
 
   if (loading) {
@@ -452,46 +484,54 @@ export default function AllocationPage() {
       </div>
 
       <p className="text-xs text-neutral-600 mb-4">
-        Click a cell to pick a %, or drag horizontally to fill consecutive weeks.
+        Click a cell to set allocation, or drag horizontally to fill consecutive weeks.
+        Hours use a {ALLOCATION_WEEKLY_HOURS}h week (= 100%).
       </p>
 
       <div className="space-y-6">
-        {TASK_ASSIGNEES.map((person) => (
-          <PersonAllocation
-            key={person}
-            person={person}
-            avatarUrl={avatarForName(users, person)}
-            projects={activeProjects}
-            opportunities={openOpportunities}
-            weeks={weeks}
-            getValue={getValue}
-            getWeekTotal={getWeekTotal}
-            onPick={(targetType, targetId, week, pct) => {
-              applyValue(person, targetType, targetId, week, pct);
-              setActivePicker(null);
-            }}
-            activePicker={
-              activePicker?.person === person
-                ? {
-                    targetType: activePicker.targetType,
-                    targetId: activePicker.targetId,
-                    week: activePicker.week,
-                  }
-                : null
-            }
-            onOpenPicker={(targetType, targetId, week) =>
-              setActivePicker({ person, targetType, targetId, week })
-            }
-            onClosePicker={() => setActivePicker(null)}
-            isCurrentWeek={isCurrentWeek}
-            onDragFillStart={(targetType, targetId, weekIdx, pct) =>
-              beginDragFill(person, targetType, targetId, weekIdx, pct)
-            }
-            dragHighlight={
-              dragHighlight?.person === person ? dragHighlight : null
-            }
-          />
-        ))}
+        {orderedAssignees.map((person) => {
+          const canEdit = Boolean(viewerName && person === viewerName);
+          return (
+            <PersonAllocation
+              key={person}
+              person={person}
+              viewerName={viewerName}
+              canEdit={canEdit}
+              avatarUrl={avatarForName(users, person)}
+              projects={activeProjects}
+              opportunities={openOpportunities}
+              weeks={weeks}
+              getValue={getValue}
+              getWeekTotal={getWeekTotal}
+              onPick={(targetType, targetId, week, pct) => {
+                if (!canEdit) return;
+                applyValue(person, targetType, targetId, week, pct);
+                setActivePicker(null);
+              }}
+              activePicker={
+                activePicker?.person === person
+                  ? {
+                      targetType: activePicker.targetType,
+                      targetId: activePicker.targetId,
+                      week: activePicker.week,
+                    }
+                  : null
+              }
+              onOpenPicker={(targetType, targetId, week) => {
+                if (!canEdit) return;
+                setActivePicker({ person, targetType, targetId, week });
+              }}
+              onClosePicker={() => setActivePicker(null)}
+              isCurrentWeek={isCurrentWeek}
+              onDragFillStart={(targetType, targetId, weekIdx, pct) =>
+                beginDragFill(person, targetType, targetId, weekIdx, pct)
+              }
+              dragHighlight={
+                dragHighlight?.person === person ? dragHighlight : null
+              }
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -499,6 +539,8 @@ export default function AllocationPage() {
 
 function PersonAllocation({
   person,
+  viewerName,
+  canEdit,
   avatarUrl,
   projects,
   opportunities,
@@ -514,6 +556,8 @@ function PersonAllocation({
   dragHighlight,
 }: {
   person: string;
+  viewerName: string;
+  canEdit: boolean;
   avatarUrl?: string | null;
   projects: { id: string; name: string; company?: { name: string } | null }[];
   opportunities: {
@@ -561,6 +605,33 @@ function PersonAllocation({
     to: number;
   } | null;
 }) {
+  const [unit, setUnit] = useState<AllocationUnit>(() =>
+    defaultUnitForViewer(viewerName)
+  );
+
+  useEffect(() => {
+    const fallback = defaultUnitForViewer(viewerName);
+    setUnit(fallback);
+    if (!viewerName) return;
+    try {
+      const stored = window.localStorage.getItem(unitStorageKey(viewerName, person));
+      if (stored === "percent" || stored === "hours") setUnit(stored);
+    } catch {
+      // ignore
+    }
+  }, [viewerName, person]);
+
+  const setUnitPersist = (next: AllocationUnit) => {
+    setUnit(next);
+    onClosePicker();
+    if (!viewerName) return;
+    try {
+      window.localStorage.setItem(unitStorageKey(viewerName, person), next);
+    } catch {
+      // ignore quota / private mode
+    }
+  };
+
   const rowProps = {
     person,
     weeks,
@@ -572,13 +643,46 @@ function PersonAllocation({
     isCurrentWeek,
     onDragFillStart,
     dragHighlight,
+    unit,
+    canEdit,
   };
   return (
     <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-950">
-      <div className="px-4 py-3 border-b border-neutral-800 bg-neutral-900/60">
-        <div className="flex items-center gap-2.5">
+      <div className="px-4 py-3 border-b border-neutral-800 bg-neutral-900/60 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
           <UserAvatar name={person} avatarUrl={avatarUrl} size="sm" />
           <h2 className="text-sm font-semibold text-neutral-200">{person}</h2>
+          {!canEdit && (
+            <span className="text-[10px] uppercase tracking-wider text-neutral-600">
+              View only
+            </span>
+          )}
+        </div>
+        <div className="flex items-center rounded-md border border-neutral-700 p-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setUnitPersist("percent")}
+            className={cn(
+              "px-2.5 py-1 text-[11px] font-semibold rounded transition-colors",
+              unit === "percent"
+                ? "bg-[#e8ff47] text-neutral-950"
+                : "text-neutral-500 hover:text-neutral-200"
+            )}
+          >
+            %
+          </button>
+          <button
+            type="button"
+            onClick={() => setUnitPersist("hours")}
+            className={cn(
+              "px-2.5 py-1 text-[11px] font-semibold rounded transition-colors",
+              unit === "hours"
+                ? "bg-[#e8ff47] text-neutral-950"
+                : "text-neutral-500 hover:text-neutral-200"
+            )}
+          >
+            H
+          </button>
         </div>
       </div>
 
@@ -596,6 +700,10 @@ function PersonAllocation({
                 const fill = Math.min(total, 100);
                 const isOver = total > 100;
                 const isPerfect = total === 100;
+                const totalLabel =
+                  unit === "hours"
+                    ? formatAllocationHours(percentToHours(total))
+                    : `${total}%`;
                 return (
                   <th
                     key={weekKey}
@@ -611,8 +719,8 @@ function PersonAllocation({
                       aria-valuenow={total}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-label={`${total}% allocated`}
-                      title={`${total}%`}
+                      aria-label={`${totalLabel} allocated`}
+                      title={totalLabel}
                     >
                       <div
                         className={cn(
@@ -714,6 +822,8 @@ function AllocRowView({
   isCurrentWeek,
   onDragFillStart,
   dragHighlight,
+  unit,
+  canEdit,
 }: {
   person: string;
   row: AllocRow;
@@ -754,6 +864,8 @@ function AllocRowView({
     from: number;
     to: number;
   } | null;
+  unit: AllocationUnit;
+  canEdit: boolean;
 }) {
   const rowDragging =
     dragHighlight?.targetType === row.targetType &&
@@ -800,7 +912,9 @@ function AllocRowView({
           >
             <AllocationCell
               value={value}
-              open={isOpen}
+              unit={unit}
+              canEdit={canEdit}
+              open={isOpen && canEdit}
               onOpen={() => onOpenPicker(row.targetType, row.targetId, weekKey)}
               onClose={onClosePicker}
               onPick={(pct) => onPick(row.targetType, row.targetId, weekKey, pct)}
@@ -817,6 +931,8 @@ function AllocRowView({
 
 function AllocationCell({
   value,
+  unit,
+  canEdit,
   open,
   onOpen,
   onClose,
@@ -824,6 +940,8 @@ function AllocationCell({
   onDragFillStart,
 }: {
   value: number;
+  unit: AllocationUnit;
+  canEdit: boolean;
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
@@ -831,11 +949,14 @@ function AllocationCell({
   onDragFillStart: () => void;
 }) {
   const popRef = useRef<HTMLDivElement>(null);
+  const hoursInputRef = useRef<HTMLInputElement>(null);
   const gestureRef = useRef<{
     x: number;
     y: number;
     dragging: boolean;
   } | null>(null);
+  const hours = percentToHours(value);
+  const [hoursDraft, setHoursDraft] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -848,11 +969,52 @@ function AllocationCell({
     return () => document.removeEventListener("pointerdown", onDoc);
   }, [open, onClose]);
 
-  const pick = (pct: number) => (e: React.PointerEvent | React.MouseEvent) => {
+  useEffect(() => {
+    if (!open || unit !== "hours") return;
+    setHoursDraft(hours > 0 ? String(hours) : "");
+    const id = window.setTimeout(() => {
+      hoursInputRef.current?.focus();
+      hoursInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [open, unit, hours]);
+
+  const pickPercent = (pct: number) => (e: React.PointerEvent | React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     onPick(pct);
   };
+
+  const commitHours = (raw: string) => {
+    const parsed = parseFloat(raw.replace(",", "."));
+    if (raw.trim() === "" || Number.isNaN(parsed) || parsed <= 0) {
+      onPick(0);
+      return;
+    }
+    onPick(hoursToPercent(parsed));
+  };
+
+  const display =
+    value > 0
+      ? unit === "hours"
+        ? formatAllocationHours(hours)
+        : `${value}%`
+      : "–";
+
+  if (!canEdit) {
+    return (
+      <div
+        className={cn(
+          "w-full h-7 px-1.5 rounded text-center text-xs flex items-center justify-center select-none",
+          value > 0
+            ? "bg-neutral-800/60 text-neutral-400 font-medium"
+            : "text-neutral-700"
+        )}
+      >
+        {display}
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
@@ -871,7 +1033,6 @@ function AllocationCell({
           if (e.button !== 0) return;
           gestureRef.current = { x: e.clientX, y: e.clientY, dragging: false };
           if (value > 0) {
-            // Keep receiving moves even after leaving this button
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           }
         }}
@@ -907,10 +1068,10 @@ function AllocationCell({
           open && "ring-1 ring-[#e8ff47]/50"
         )}
       >
-        {value > 0 ? `${value}%` : "–"}
+        {display}
       </button>
 
-      {open && (
+      {open && unit === "percent" && (
         <div
           ref={popRef}
           className="absolute z-30 top-8 left-1/2 -translate-x-1/2 w-44 rounded-md border border-neutral-700 bg-neutral-900 p-2 shadow-xl"
@@ -921,7 +1082,7 @@ function AllocationCell({
               <button
                 key={pct}
                 type="button"
-                onPointerDown={pick(pct)}
+                onPointerDown={pickPercent(pct)}
                 className={cn(
                   "h-7 rounded text-[11px] font-medium transition-colors",
                   value === pct
@@ -935,7 +1096,79 @@ function AllocationCell({
           </div>
           <button
             type="button"
-            onPointerDown={pick(0)}
+            onPointerDown={pickPercent(0)}
+            className="w-full h-7 rounded text-[11px] text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {open && unit === "hours" && (
+        <div
+          ref={popRef}
+          className="absolute z-30 top-8 left-1/2 -translate-x-1/2 w-48 rounded-md border border-neutral-700 bg-neutral-900 p-2 shadow-xl"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <input
+              ref={hoursInputRef}
+              type="text"
+              inputMode="decimal"
+              value={hoursDraft}
+              onChange={(e) =>
+                setHoursDraft(e.target.value.replace(/[^0-9.,]/g, ""))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitHours(hoursDraft);
+                } else if (e.key === "Escape") {
+                  onClose();
+                }
+              }}
+              onBlur={() => {
+                // Don't commit on blur if clicking a preset — presets use pointerdown first
+              }}
+              placeholder="Hours"
+              className="flex-1 h-7 px-2 rounded bg-neutral-800 border border-neutral-700 text-xs text-neutral-100 outline-none focus:border-[#e8ff47]/50"
+            />
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                commitHours(hoursDraft);
+              }}
+              className="h-7 px-2 rounded text-[11px] font-medium bg-[#e8ff47] text-neutral-950 hover:bg-[#e8ff47]/90"
+            >
+              Set
+            </button>
+          </div>
+          <div className="grid grid-cols-5 gap-1 mb-1.5">
+            {ALLOCATION_HOUR_PRESETS.map((h) => (
+              <button
+                key={h}
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPick(hoursToPercent(h));
+                }}
+                className={cn(
+                  "h-7 rounded text-[11px] font-medium transition-colors",
+                  hours === h
+                    ? "bg-[#e8ff47] text-neutral-950"
+                    : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                )}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onPointerDown={pickPercent(0)}
             className="w-full h-7 rounded text-[11px] text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
           >
             Clear
