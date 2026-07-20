@@ -66,7 +66,7 @@ import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 const TASK_ROW_GRID =
   "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
-const taskDetailApi = {
+const baseTaskDetailApi = {
   updateTask,
   getTaskComments,
   createTaskComment,
@@ -1334,6 +1334,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
 
+  const taskDetailApi = useMemo(() => ({
+    ...baseTaskDetailApi,
+    createTask: (data: Partial<Task>) => createTask(id, data),
+  }), [id]);
+
+  function openNewTask() {
+    setSelectedTask(null);
+    setDetailOpen(true);
+  }
+
   function toggleSort(key: TaskBoardSortKey) {
     if (sortKey === key) setSortAsc((a) => !a);
     else {
@@ -2172,6 +2182,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={openNewTask}
+            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add task
+          </Button>
           <Popover>
             <PopoverTrigger
               className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
@@ -2320,9 +2338,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       <TaskDetailDialog
         task={selectedTask}
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={() => { setDetailOpen(false); setSelectedTask(null); }}
         onSave={handleTaskUpdate}
         api={taskDetailApi}
+        milestones={project.milestones}
       />
 
       <form onSubmit={handleAddMilestone} className="flex items-center gap-3">

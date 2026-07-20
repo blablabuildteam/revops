@@ -57,3 +57,8 @@ export function useSession() {
   }
   return ctx;
 }
+
+/** Safe outside the authenticated app shell (e.g. shared board links). */
+export function useSessionOptional() {
+  return useContext(SessionContext);
+}

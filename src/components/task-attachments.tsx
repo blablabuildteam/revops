@@ -21,19 +21,23 @@ export type TaskAttachmentsApi = {
   deleteTaskAttachment: (taskId: string, attachmentId: string) => Promise<void>;
 };
 
-export function TaskAttachments({
-  taskId,
-  attachments,
-  loading,
-  onChange,
-  api,
-}: {
+type LiveProps = {
+  mode?: "live";
   taskId: string;
   attachments: TaskAttachment[];
-  loading: boolean;
+  loading?: boolean;
   onChange: (attachments: TaskAttachment[]) => void;
   api: TaskAttachmentsApi;
-}) {
+};
+
+type PendingProps = {
+  mode: "pending";
+  files: File[];
+  onChange: (files: File[]) => void;
+};
+
+export function TaskAttachments(props: LiveProps | PendingProps) {
+  const isPending = props.mode === "pending";
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -50,10 +54,15 @@ export function TaskAttachments({
       return;
     }
 
+    if (isPending) {
+      props.onChange([...props.files, file]);
+      return;
+    }
+
     setUploading(true);
     try {
-      const attachment = await api.uploadTaskAttachment(taskId, file);
-      onChange([...attachments, attachment]);
+      const attachment = await props.api.uploadTaskAttachment(props.taskId, file);
+      props.onChange([...props.attachments, attachment]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -61,18 +70,27 @@ export function TaskAttachments({
     }
   }
 
-  async function handleDelete(attachmentId: string) {
+  async function handleDeleteAttachment(attachmentId: string) {
+    if (isPending) return;
     setError(null);
     setDeletingId(attachmentId);
     try {
-      await api.deleteTaskAttachment(taskId, attachmentId);
-      onChange(attachments.filter((a) => a.id !== attachmentId));
+      await props.api.deleteTaskAttachment(props.taskId, attachmentId);
+      props.onChange(props.attachments.filter((a) => a.id !== attachmentId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setDeletingId(null);
     }
   }
+
+  function handleRemovePending(index: number) {
+    if (!isPending) return;
+    props.onChange(props.files.filter((_, i) => i !== index));
+  }
+
+  const busy = !isPending && uploading;
+  const loading = !isPending && !!props.loading;
 
   return (
     <div className="space-y-2">
@@ -81,11 +99,11 @@ export function TaskAttachments({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => !uploading && inputRef.current?.click()}
+        onClick={() => !busy && inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            if (!uploading) inputRef.current?.click();
+            if (!busy) inputRef.current?.click();
           }
         }}
         onDragEnter={(e) => {
@@ -107,7 +125,7 @@ export function TaskAttachments({
           e.preventDefault();
           e.stopPropagation();
           setDragging(false);
-          if (!uploading && e.dataTransfer.files.length > 0) {
+          if (!busy && e.dataTransfer.files.length > 0) {
             void handleFiles(e.dataTransfer.files);
           }
         }}
@@ -116,19 +134,21 @@ export function TaskAttachments({
           dragging
             ? "border-[#e8ff47] bg-[#e8ff47]/5"
             : "border-neutral-700 bg-neutral-800/40 hover:border-neutral-600 hover:bg-neutral-800/70",
-          uploading && "pointer-events-none opacity-60",
+          busy && "pointer-events-none opacity-60",
         )}
       >
-        {uploading ? (
+        {busy ? (
           <Loader2 className="w-5 h-5 text-neutral-500 animate-spin" />
         ) : (
           <Upload className="w-5 h-5 text-neutral-500" />
         )}
         <div className="text-center">
           <p className="text-sm text-neutral-300">
-            {uploading ? "Uploading..." : "Click or drag a file here"}
+            {busy ? "Uploading..." : "Click or drag a file here"}
           </p>
-          <p className="text-xs text-neutral-600 mt-1">Max 10MB</p>
+          <p className="text-xs text-neutral-600 mt-1">
+            Max 10MB{isPending ? " · uploaded when you add the task" : ""}
+          </p>
         </div>
         <input
           ref={inputRef}
@@ -146,9 +166,41 @@ export function TaskAttachments({
 
       {loading ? (
         <p className="text-xs text-neutral-600">Loading attachments...</p>
-      ) : attachments.length > 0 ? (
+      ) : isPending ? (
+        props.files.length > 0 ? (
+          <ul className="space-y-2">
+            {props.files.map((file, index) => (
+              <li
+                key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2"
+              >
+                <File className="w-4 h-4 text-neutral-500 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-neutral-200 truncate">{file.name}</p>
+                  <p className="text-[10px] text-neutral-600">{formatFileSize(file.size)}</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleRemovePending(index)}
+                  className="h-8 w-8 text-neutral-500 hover:text-red-400 shrink-0"
+                  title="Remove attachment"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-neutral-600 flex items-center gap-1.5">
+            <Paperclip className="w-3 h-3" />
+            No attachments yet
+          </p>
+        )
+      ) : props.attachments.length > 0 ? (
         <ul className="space-y-2">
-          {attachments.map((attachment) => (
+          {props.attachments.map((attachment) => (
             <li
               key={attachment.id}
               className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2"
@@ -175,7 +227,7 @@ export function TaskAttachments({
                 variant="ghost"
                 size="icon"
                 disabled={deletingId === attachment.id}
-                onClick={() => void handleDelete(attachment.id)}
+                onClick={() => void handleDeleteAttachment(attachment.id)}
                 className="h-8 w-8 text-neutral-500 hover:text-red-400 shrink-0"
                 title="Remove attachment"
               >

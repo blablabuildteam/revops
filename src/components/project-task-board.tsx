@@ -1039,9 +1039,13 @@ export function ProjectTaskBoardPanel({
       <TaskDetailDialog
         task={selectedTask}
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={() => { setDetailOpen(false); setSelectedTask(null); }}
         onSave={handleTaskUpdate}
-        api={boardApi}
+        api={{
+          ...boardApi,
+          createTask: (data) => boardApi.createTask(projectId, data),
+        }}
+        milestones={milestones}
       />
       <EditStatusesDialog
         open={editStatusesOpen}

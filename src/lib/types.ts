@@ -184,7 +184,7 @@ export interface Task {
   title: string;
   description?: string | null;
   status: TaskStatus;
-  created_by: "team" | "client";
+  created_by: "team" | "client" | "external";
   approved: boolean;
   assignee?: string | null;
   due_date?: string | null;

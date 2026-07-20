@@ -182,11 +182,9 @@ export function parseLinkifiedText(input: string): LinkSegment[] {
   while (segments[0]?.type === "text" && !segments[0].value.trim()) {
     segments.shift();
   }
-  while (
-    segments.length > 0 &&
-    segments[segments.length - 1]?.type === "text" &&
-    !segments[segments.length - 1]!.value.trim()
-  ) {
+  while (segments.length > 0) {
+    const last = segments[segments.length - 1];
+    if (last?.type !== "text" || last.value.trim()) break;
     segments.pop();
   }
 

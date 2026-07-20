@@ -94,6 +94,7 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
+  await ensureTaskCreatedByConstraint();
   await sql`
     CREATE TABLE IF NOT EXISTS task_comments (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -150,6 +151,20 @@ async function runSchemaMigrations() {
   await migrateOpportunityTypes();
   await migrateFinanceDealsToInclVat();
   await backfillMissingStandardPhases();
+}
+
+/** Allow share-link board creates (`created_by = 'external'`). Idempotent. */
+async function ensureTaskCreatedByConstraint() {
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_created_by_check`;
+  try {
+    await sql`
+      ALTER TABLE tasks
+      ADD CONSTRAINT tasks_created_by_check
+      CHECK (created_by IN ('team', 'client', 'external'))
+    `;
+  } catch {
+    // Constraint already exists with the updated definition
+  }
 }
 
 async function ensureAllocationsTable() {
@@ -244,6 +259,8 @@ async function _init() {
     if (Number(rows[0].c) > 0) {
       // Always ensure allocations schema (new feature; safe / idempotent)
       await ensureAllocationsTable();
+      // Share-link task creates use created_by = 'external'
+      await ensureTaskCreatedByConstraint();
       // Ensure every project has the current standard phases and Backlog order
       await backfillMissingStandardPhases();
       if (runMigrations) {
@@ -358,7 +375,7 @@ async function _init() {
       status TEXT DEFAULT 'open'
         CHECK (status IN ('open', 'in_progress', 'done')),
       created_by TEXT DEFAULT 'team'
-        CHECK (created_by IN ('team', 'client')),
+        CHECK (created_by IN ('team', 'client', 'external')),
       approved BOOLEAN DEFAULT true,
       assignee TEXT,
       due_date DATE,

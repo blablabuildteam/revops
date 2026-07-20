@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Filter, Check, X } from "lucide-react";
+import { Plus, Pencil, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import {
   AssigneeNamesProvider,
   collectAssigneeNames,
 } from "@/components/assignee-select";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
+import { TaskDetailDialog } from "@/components/task-detail-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
@@ -21,16 +19,11 @@ import {
 } from "@/components/project-task-board";
 import {
   createEditBoardMilestone,
-  createEditBoardTask,
   deleteEditBoardTask,
   getEditBoardProject,
   type EditBoardProject,
 } from "@/lib/edit-board-api";
-import { Milestone, Task, CUSTOM_PHASE_DEFAULT_COLOR, resolvePhaseColor } from "@/lib/types";
-
-function isDonePhase(name: string) {
-  return name.toLowerCase() === "done";
-}
+import { Task, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 
 function upsertTask(prev: Task[], updated: Task): Task[] {
   const idx = prev.findIndex((t) => t.id === updated.id);
@@ -84,10 +77,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
   const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
   const [addingMilestone, setAddingMilestone] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskMilestoneId, setNewTaskMilestoneId] = useState<string>("");
-  const [creatingTask, setCreatingTask] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
 
   async function reload() {
@@ -107,19 +97,6 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editToken]);
 
-  function defaultMilestoneId(milestones: Milestone[]) {
-    return milestones.find((m) => !isDonePhase(m.name))?.id
-      ?? milestones[0]?.id
-      ?? "";
-  }
-
-  function openAddTask() {
-    if (!project) return;
-    setNewTaskMilestoneId(defaultMilestoneId(project.milestones));
-    setNewTaskTitle("");
-    setAddingTask(true);
-  }
-
   function handleTaskUpdate(updated: Task) {
     setTasks((prev) => upsertTask(prev, updated));
   }
@@ -127,24 +104,6 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
   async function handleTaskDelete(id: string) {
     await deleteEditBoardTask(editToken, id);
     setTasks((prev) => prev.filter((t) => t.id !== id && t.parent_id !== id));
-  }
-
-  async function handleCreateTask(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newTaskTitle.trim() || !project || creatingTask) return;
-    setCreatingTask(true);
-    try {
-      const milestoneId = newTaskMilestoneId || defaultMilestoneId(project.milestones) || undefined;
-      const task = await createEditBoardTask(editToken, {
-        title: newTaskTitle.trim(),
-        milestone_id: milestoneId,
-      });
-      setTasks((prev) => upsertTask(prev, task));
-      setNewTaskTitle("");
-      setAddingTask(false);
-    } finally {
-      setCreatingTask(false);
-    }
   }
 
   async function handleAddMilestone(e: React.FormEvent) {
@@ -166,6 +125,11 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
   }
 
   const boardAssigneeNames = useMemo(() => collectAssigneeNames(tasks), [tasks]);
+
+  const createApi = useMemo(() => ({
+    ...boardApi,
+    createTask: (data: Partial<Task>) => boardApi.createTask(project?.id ?? "", data),
+  }), [boardApi, project?.id]);
 
   if (loading) {
     return (
@@ -234,70 +198,13 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
             </button>
             <Button
               type="button"
-              onClick={openAddTask}
+              onClick={() => setCreateOpen(true)}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
             >
               <Plus className="w-3.5 h-3.5" />
               Add task
             </Button>
           </div>
-
-          {addingTask && (
-            <form
-              onSubmit={handleCreateTask}
-              className="mb-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 rounded-lg border border-neutral-800 bg-neutral-900/50 p-3"
-            >
-              <Input
-                autoFocus
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Task description..."
-                className="h-8 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1"
-              />
-              {project.milestones.length > 0 && (
-                <Select
-                  value={newTaskMilestoneId || undefined}
-                  onValueChange={(v) => setNewTaskMilestoneId(v ?? "")}
-                >
-                  <SelectTrigger className="h-8 w-full sm:w-44 text-xs bg-neutral-800 border-neutral-700 text-neutral-300">
-                    <SelectValue placeholder="Phase" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700">
-                    {project.milestones.map((m) => (
-                      <SelectItem key={m.id} value={m.id} className="text-neutral-100 text-xs">
-                        <span className="flex items-center gap-2">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: resolvePhaseColor(m.name, m.color) }}
-                          />
-                          {m.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Button
-                  type="submit"
-                  disabled={creatingTask || !newTaskTitle.trim()}
-                  size="sm"
-                  className="h-8 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2.5"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 text-xs text-neutral-600 hover:text-neutral-400 px-2.5"
-                  onClick={() => { setAddingTask(false); setNewTaskTitle(""); }}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </form>
-          )}
 
           <ProjectTaskBoardPanel
             projectId={project.id}
@@ -326,6 +233,15 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
               <Plus className="w-4 h-4" /> Phase
             </Button>
           </form>
+
+          <TaskDetailDialog
+            task={null}
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            onSave={handleTaskUpdate}
+            api={createApi}
+            milestones={project.milestones}
+          />
 
           <EditStatusesDialog
             open={editStatusesOpen}
