@@ -231,7 +231,7 @@ function TodoFormDialog({
     return a.name.localeCompare(b.name);
   });
   const selectedProject = projects.find((p) => p.id === form.project_id) ?? null;
-  const showPhaseStatus = !!form.project_id && !isEdit;
+  const showPhaseStatus = !!form.project_id;
 
   useEffect(() => {
     if (!open) return;
@@ -243,6 +243,8 @@ function TodoFormDialog({
         description: todo.description ?? "",
         priority: todo.priority,
         assignee_id: todo.assignee_id ?? "",
+        // If this to-do was tagged with a project, prefill the board so saving
+        // converts it into a real board task instead of keeping a project to-do.
         project_id: todo.project_id ?? "",
         milestone_id: "",
         due_date: toDateInputValue(todo.due_date),
@@ -257,7 +259,7 @@ function TodoFormDialog({
   }, [open, todo, currentUser, defaultProjectId]);
 
   useEffect(() => {
-    if (!open || !form.project_id || isEdit) {
+    if (!open || !form.project_id) {
       if (!form.project_id) setMilestones([]);
       return;
     }
@@ -288,40 +290,58 @@ function TodoFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, form.project_id, isEdit]);
+  }, [open, form.project_id]);
+
+  async function resolveMilestoneId(projectId: string, preferredId: string) {
+    if (preferredId && milestones.some((m) => m.id === preferredId)) {
+      return preferredId;
+    }
+    const project = await getProject(projectId);
+    const next = [...(project.milestones ?? [])].sort((a, b) => a.position - b.position);
+    if (preferredId && next.some((m) => m.id === preferredId)) return preferredId;
+    return defaultOpenMilestoneId(next);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    if (!isEdit && form.project_id && !form.milestone_id) {
-      setError(milestonesLoading ? "Loading board statuses..." : "Choose a status for this project board");
+    if (form.project_id && milestonesLoading) {
+      setError("Loading board statuses...");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const selected = projects.find((p) => p.id === form.project_id);
-      const companyId = selected?.company_id ?? selected?.company?.id ?? null;
+      const assigneeName = form.assignee_id
+        ? (people.find((u) => u.id === form.assignee_id)?.name
+          ?? (currentUser?.id === form.assignee_id ? currentUser.name : null))
+        : null;
 
-      // Creating onto a project board → board task with phase status
-      if (!isEdit && form.project_id) {
-        const assigneeName = form.assignee_id
-          ? (people.find((u) => u.id === form.assignee_id)?.name
-            ?? (currentUser?.id === form.assignee_id ? currentUser.name : null))
-          : null;
+      // Any Project Board selection → real board task (never a project-tagged to-do)
+      if (form.project_id) {
+        const milestoneId = await resolveMilestoneId(form.project_id, form.milestone_id);
+        if (!milestoneId) {
+          setError("This project board has no statuses yet");
+          return;
+        }
         await createTask(form.project_id, {
           title: form.title.trim(),
           description: form.description.trim() || null,
           priority: form.priority as Task["priority"],
           assignee: assigneeName,
           due_date: form.due_date || null,
-          milestone_id: form.milestone_id,
+          milestone_id: milestoneId,
         });
+        // Editing a to-do into a board: remove the old to-do row
+        if (isEdit && todo) {
+          await fetch(`/api/todos/${todo.id}`, { method: "DELETE" }).catch(() => null);
+        }
         onSave();
         onClose();
         return;
       }
 
+      // Personal to-do only — never attach project_id from this form
       const payload = {
         title: form.title.trim(),
         description: form.description,
@@ -330,8 +350,8 @@ function TodoFormDialog({
           form.assignee_id === ""
             ? null
             : (form.assignee_id || currentUser?.id || null),
-        company_id: companyId,
-        project_id: form.project_id || null,
+        company_id: null,
+        project_id: null,
         due_date: form.due_date || null,
       };
       const res = await fetch(isEdit ? `/api/todos/${todo!.id}` : "/api/todos", {
