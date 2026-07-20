@@ -6,17 +6,24 @@
  *
  * Setup (add to .env.local, do not commit secrets):
  *   CLICKUP_API_TOKEN=pk_...
- *   CLICKUP_SPACE_URL=https://app.clickup.com/.../v/s/...   (or CLICKUP_SPACE_ID)
- *   IMPORT_PROJECT_ID=<uuid of target RevOps project>
+ *
+ *   # Per-target (recommended when importing several boards):
+ *   CLICKUP_SPACE_URL_COMFORTZZZONE=https://app.clickup.com/.../v/s/...
+ *   IMPORT_PROJECT_ID_COMFORTZZZONE=<uuid of target RevOps project>
+ *
+ *   # Or unsuffixed single-target vars:
+ *   CLICKUP_SPACE_URL=...
+ *   IMPORT_PROJECT_ID=...
  *
  * Also needs your existing DB URL (POSTGRES_URL / DATABASE_URL) and ideally
  * BLOB_READ_WRITE_TOKEN for attachment uploads.
  *
  * Usage:
- *   npm run import:clickup              # dry-run (fetch + report only)
- *   npm run import:clickup -- --apply   # write to the database
- *   npm run import:clickup -- --apply --limit=20
- *   npm run import:clickup -- --list-only   # only discover lists, no tasks
+ *   npm run import:clickup -- --project=COMFORTZZZONE
+ *   npm run import:clickup -- --project=COMFORTZZZONE --apply
+ *   npm run import:clickup -- --project=COMFORTZZZONE --apply --backfill-attachments
+ *   npm run import:clickup -- --project=COMFORTZZZONE --apply --limit=20
+ *   npm run import:clickup -- --project=COMFORTZZZONE --list-only
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -36,6 +43,8 @@ type ClickUpAttachment = {
   id: string;
   title?: string;
   url: string;
+  url_w_query?: string;
+  url_w_host?: string;
   extension?: string;
   size?: number;
   mimetype?: string;
@@ -79,6 +88,10 @@ type Args = {
   apply: boolean;
   limit: number | null;
   listOnly: boolean;
+  /** Re-download attachments for tasks that were already imported. */
+  backfillAttachments: boolean;
+  /** Uppercase key suffix, e.g. COMFORTZZZONE → CLICKUP_SPACE_URL_COMFORTZZZONE */
+  projectKey: string | null;
 };
 
 function loadEnvFile(path: string) {
@@ -105,16 +118,44 @@ function parseArgs(argv: string[]): Args {
   let apply = false;
   let limit: number | null = null;
   let listOnly = false;
+  let backfillAttachments = false;
+  let projectKey: string | null = null;
   for (const arg of argv) {
     if (arg === "--apply") apply = true;
     else if (arg === "--list-only") listOnly = true;
-    else if (arg.startsWith("--limit=")) {
+    else if (arg === "--backfill-attachments") backfillAttachments = true;
+    else if (arg.startsWith("--project=")) {
+      const raw = arg.slice("--project=".length).trim();
+      if (!raw) throw new Error("Empty --project value");
+      projectKey = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+    } else if (arg.startsWith("--limit=")) {
       const n = Number(arg.slice("--limit=".length));
       if (!Number.isFinite(n) || n < 1) throw new Error(`Invalid --limit: ${arg}`);
       limit = Math.floor(n);
     }
   }
-  return { apply, limit, listOnly };
+  return { apply, limit, listOnly, backfillAttachments, projectKey };
+}
+
+function resolveImportTarget(projectKey: string | null): {
+  spaceInput: string | undefined;
+  projectId: string | undefined;
+  label: string;
+} {
+  if (projectKey) {
+    const spaceInput =
+      process.env[`CLICKUP_SPACE_URL_${projectKey}`]?.trim() ||
+      process.env[`CLICKUP_SPACE_ID_${projectKey}`]?.trim();
+    const projectId = process.env[`IMPORT_PROJECT_ID_${projectKey}`]?.trim();
+    return { spaceInput, projectId, label: projectKey };
+  }
+
+  return {
+    spaceInput:
+      process.env.CLICKUP_SPACE_URL?.trim() || process.env.CLICKUP_SPACE_ID?.trim(),
+    projectId: process.env.IMPORT_PROJECT_ID?.trim(),
+    label: "default",
+  };
 }
 
 function parseSpaceId(input: string): string {
@@ -231,16 +272,19 @@ function attachmentFileName(att: ClickUpAttachment, index: number): string {
   return `attachment-${index + 1}${ext}`;
 }
 
+function attachmentDownloadUrl(att: ClickUpAttachment): string {
+  // Prefer signed/query URLs; ClickUp attachment hosts often 401 if an API token is sent.
+  return att.url_w_query || att.url_w_host || att.url;
+}
+
 async function downloadAttachment(
   att: ClickUpAttachment,
-  token: string,
 ): Promise<{ buffer: Buffer; contentType: string; fileName: string } | null> {
-  const res = await fetch(att.url, {
-    headers: { Authorization: token },
-    redirect: "follow",
-  });
+  const url = attachmentDownloadUrl(att);
+  // Do not send Authorization — attachment CDN returns 401 when the API token is present.
+  const res = await fetch(url, { redirect: "follow" });
   if (!res.ok) {
-    console.warn(`  ! attachment download failed (${res.status}): ${att.title || att.url}`);
+    console.warn(`  ! attachment download failed (${res.status}): ${att.title || url}`);
     return null;
   }
   const arrayBuffer = await res.arrayBuffer();
@@ -257,6 +301,63 @@ async function downloadAttachment(
     contentType,
     fileName: attachmentFileName(att, 0),
   };
+}
+
+async function importAttachmentsForTask(
+  localTaskId: string,
+  attachments: ClickUpAttachment[],
+): Promise<{ imported: number; failed: number }> {
+  let imported = 0;
+  let failed = 0;
+  const { rows: existingRows } = await sql`
+    SELECT file_name FROM task_attachments WHERE task_id = ${localTaskId}
+  `;
+  const existingNames = new Set(existingRows.map((r) => r.file_name as string));
+
+  let fileIndex = 0;
+  for (const att of attachments) {
+    fileIndex += 1;
+    const fileName = attachmentFileName(att, fileIndex - 1);
+    if (existingNames.has(fileName)) continue;
+
+    const downloaded = await downloadAttachment(att);
+    if (!downloaded) {
+      failed += 1;
+      continue;
+    }
+    try {
+      const fileUrl = await storeAttachment(
+        localTaskId,
+        fileName,
+        downloaded.buffer,
+        downloaded.contentType,
+      );
+      await sql`
+        INSERT INTO task_attachments (
+          task_id, file_name, file_url, file_size, content_type,
+          uploaded_by_user_id, uploaded_by_name
+        )
+        VALUES (
+          ${localTaskId},
+          ${fileName},
+          ${fileUrl},
+          ${downloaded.buffer.byteLength},
+          ${downloaded.contentType},
+          ${null},
+          ${"ClickUp import"}
+        )
+      `;
+      existingNames.add(fileName);
+      imported += 1;
+    } catch (err) {
+      failed += 1;
+      console.warn(
+        `  ! failed to store attachment ${fileName}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return { imported, failed };
 }
 
 async function storeAttachment(
@@ -359,15 +460,21 @@ async function main() {
 
   const args = parseArgs(process.argv.slice(2));
   const token = process.env.CLICKUP_API_TOKEN?.trim();
-  const spaceInput =
-    process.env.CLICKUP_SPACE_URL?.trim() || process.env.CLICKUP_SPACE_ID?.trim();
-  const projectId = process.env.IMPORT_PROJECT_ID?.trim();
+  const { spaceInput, projectId, label } = resolveImportTarget(args.projectKey);
 
   if (!token) {
     throw new Error("Missing CLICKUP_API_TOKEN in env / .env.local");
   }
+  if (!args.projectKey && !spaceInput) {
+    throw new Error(
+      "Missing import target. Use --project=COMFORTZZZONE (reads CLICKUP_SPACE_URL_COMFORTZZZONE) " +
+        "or set unsuffixed CLICKUP_SPACE_URL / IMPORT_PROJECT_ID.",
+    );
+  }
   if (!spaceInput) {
-    throw new Error("Missing CLICKUP_SPACE_URL or CLICKUP_SPACE_ID in env / .env.local");
+    throw new Error(
+      `Missing CLICKUP_SPACE_URL_${label} or CLICKUP_SPACE_ID_${label} in env / .env.local`,
+    );
   }
   if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
     throw new Error("Missing POSTGRES_URL (or DATABASE_URL) for the RevOps database");
@@ -378,6 +485,7 @@ async function main() {
   }
 
   const spaceId = parseSpaceId(spaceInput);
+  console.log(`Import target: ${label}`);
   console.log(`ClickUp space: ${spaceId}`);
   console.log(`Mode: ${args.apply ? "APPLY (writes enabled)" : "DRY-RUN (no writes)"}`);
 
@@ -394,7 +502,11 @@ async function main() {
   }
 
   if (!projectId) {
-    throw new Error("Missing IMPORT_PROJECT_ID (target RevOps project UUID)");
+    throw new Error(
+      args.projectKey
+        ? `Missing IMPORT_PROJECT_ID_${label} (target RevOps project UUID)`
+        : "Missing IMPORT_PROJECT_ID (target RevOps project UUID)",
+    );
   }
 
   const { rows: projectRows } = await sql`
@@ -441,7 +553,12 @@ async function main() {
     console.log(`Limiting to first ${args.limit} task(s)`);
   }
 
-  console.log(`\nProcessing ${tasks.length} unique task(s)...\n`);
+  const taskNameById = new Map(tasks.map((t) => [t.id, t.name]));
+  const subtaskCount = tasks.filter((t) => t.parent).length;
+  const parentCount = new Set(tasks.filter((t) => t.parent).map((t) => t.parent!)).size;
+  console.log(
+    `\nProcessing ${tasks.length} unique task(s) (${subtaskCount} subtasks under ${parentCount} parents)...\n`,
+  );
 
   const clickupToLocal = new Map<string, string>();
   let imported = 0;
@@ -466,8 +583,14 @@ async function main() {
     const assignee = detail.assignees?.[0]?.username ?? null;
     const dueDate = formatDueDate(detail.due_date);
     const parentLocalId = detail.parent ? clickupToLocal.get(detail.parent) ?? null : null;
+    const parentName = detail.parent ? taskNameById.get(detail.parent) : null;
 
-    console.log(`• ${detail.name}`);
+    if (detail.parent) {
+      console.log(`  ↳ ${detail.name}`);
+      console.log(`    subtask of: ${parentName || detail.parent}`);
+    } else {
+      console.log(`• ${detail.name}`);
+    }
     console.log(
       `  status=${detail.status.status} → ${milestone.name} | priority=${priority} | comments=${comments.length} | files=${attachments.length}`,
     );
@@ -482,10 +605,21 @@ async function main() {
     const { rows: existing } = await sql`
       SELECT id FROM tasks WHERE project_id = ${projectId} AND url = ${detail.url} LIMIT 1
     `;
+    let localTaskId: string;
+
     if (existing[0]) {
-      console.log(`  skip (already imported as ${existing[0].id})`);
-      clickupToLocal.set(detail.id, existing[0].id as string);
+      localTaskId = existing[0].id as string;
+      clickupToLocal.set(detail.id, localTaskId);
       skipped += 1;
+
+      if (args.backfillAttachments && attachments.length > 0) {
+        console.log(`  backfill attachments on ${localTaskId}`);
+        const result = await importAttachmentsForTask(localTaskId, attachments);
+        attachmentsImported += result.imported;
+        attachmentFailures += result.failed;
+      } else {
+        console.log(`  skip (already imported as ${localTaskId})`);
+      }
       continue;
     }
 
@@ -511,7 +645,7 @@ async function main() {
       )
       RETURNING id
     `;
-    const localTaskId = inserted[0]!.id as string;
+    localTaskId = inserted[0]!.id as string;
     clickupToLocal.set(detail.id, localTaskId);
     imported += 1;
 
@@ -527,47 +661,9 @@ async function main() {
       commentsImported += 1;
     }
 
-    let fileIndex = 0;
-    for (const att of attachments) {
-      fileIndex += 1;
-      const downloaded = await downloadAttachment(att, token);
-      if (!downloaded) {
-        attachmentFailures += 1;
-        continue;
-      }
-      const fileName =
-        attachmentFileName(att, fileIndex - 1) || downloaded.fileName;
-      try {
-        const fileUrl = await storeAttachment(
-          localTaskId,
-          fileName,
-          downloaded.buffer,
-          downloaded.contentType,
-        );
-        await sql`
-          INSERT INTO task_attachments (
-            task_id, file_name, file_url, file_size, content_type,
-            uploaded_by_user_id, uploaded_by_name
-          )
-          VALUES (
-            ${localTaskId},
-            ${fileName},
-            ${fileUrl},
-            ${downloaded.buffer.byteLength},
-            ${downloaded.contentType},
-            ${null},
-            ${"ClickUp import"}
-          )
-        `;
-        attachmentsImported += 1;
-      } catch (err) {
-        attachmentFailures += 1;
-        console.warn(
-          `  ! failed to store attachment ${fileName}:`,
-          err instanceof Error ? err.message : err,
-        );
-      }
-    }
+    const result = await importAttachmentsForTask(localTaskId, attachments);
+    attachmentsImported += result.imported;
+    attachmentFailures += result.failed;
   }
 
   console.log("\nDone.");
