@@ -162,3 +162,30 @@ export function BoardLinkChips({
     </div>
   );
 }
+
+/** Live chip row for all links in text — updates as the user types/pastes. */
+export function LiveLinkChips({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  const links = extractLinks(text);
+  const hrefs = links.map((l) => l.href);
+  const titles = useLinkPreviewTitles(hrefs);
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      {links.map((link) => (
+        <LinkChip
+          key={link.href}
+          segment={link}
+          resolvedTitle={titles[link.href]}
+        />
+      ))}
+    </div>
+  );
+}

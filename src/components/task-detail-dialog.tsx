@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -19,6 +19,7 @@ import { formatDateTime, toDateInputValue } from "@/lib/format";
 import { TaskAttachments, TaskAttachmentsApi } from "@/components/task-attachments";
 import { useUndoToast } from "@/components/mutation-provider";
 import { LinkifiedText } from "@/components/linkified-text";
+import { NotesField } from "@/components/notes-field";
 
 export type TaskDetailDialogApi = TaskAttachmentsApi & {
   updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
@@ -54,8 +55,6 @@ export function TaskDetailDialog({
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const [postingComment, setPostingComment] = useState(false);
-  const [editingNotes, setEditingNotes] = useState(false);
-  const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
   const withUndo = useUndoToast();
 
@@ -69,7 +68,6 @@ export function TaskDetailDialog({
         url: task.url ?? "",
         priority: task.priority ?? "low",
       });
-      setEditingNotes(false);
       setCommentDraft("");
       setCommentsLoading(true);
       setAttachmentsLoading(true);
@@ -217,57 +215,10 @@ export function TaskDetailDialog({
                     className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
                   />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Label className="text-neutral-400 text-xs">Notes</Label>
-                    {!editingNotes ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingNotes(true);
-                          requestAnimationFrame(() => notesTextareaRef.current?.focus());
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
-                      >
-                        <Pencil className="size-3" />
-                        Edit
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setEditingNotes(false)}
-                        className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
-                      >
-                        Done
-                      </button>
-                    )}
-                  </div>
-                  {editingNotes ? (
-                    <Textarea
-                      ref={notesTextareaRef}
-                      value={form.description}
-                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                      placeholder="Add notes or details..."
-                      rows={5}
-                      className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none"
-                    />
-                  ) : form.description.trim() ? (
-                    <div className="w-full rounded-lg border border-neutral-800 bg-neutral-900/50 px-3.5 py-3 min-h-[7.5rem]">
-                      <LinkifiedText text={form.description} />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingNotes(true);
-                        requestAnimationFrame(() => notesTextareaRef.current?.focus());
-                      }}
-                      className="w-full text-left rounded-lg border border-neutral-800 bg-neutral-900/50 px-3.5 py-3 min-h-[7.5rem] text-sm text-neutral-600 hover:border-neutral-700 hover:text-neutral-500 transition-colors"
-                    >
-                      Add notes or details...
-                    </button>
-                  )}
-                </div>
+                <NotesField
+                  value={form.description}
+                  onChange={(description) => setForm((f) => ({ ...f, description }))}
+                />
                 <TaskAttachments
                   taskId={task.id}
                   attachments={attachments}
