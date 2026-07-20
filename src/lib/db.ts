@@ -244,7 +244,7 @@ async function _init() {
     if (Number(rows[0].c) > 0) {
       // Always ensure allocations schema (new feature; safe / idempotent)
       await ensureAllocationsTable();
-      // Ensure every project has the current standard phases (e.g. Backlog)
+      // Ensure every project has the current standard phases and Backlog order
       await backfillMissingStandardPhases();
       if (runMigrations) {
         await runSchemaMigrations();

@@ -293,11 +293,11 @@ export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
 };
 
 export const DEFAULT_PROJECT_MILESTONES = [
-  "Backlog",
   "Open",
   "Up Next",
   "In Progress",
   "On Hold",
+  "Backlog",
   "Done",
 ] as const;
 
