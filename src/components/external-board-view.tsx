@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AssigneeNamesProvider,
+  collectAssigneeNames,
+} from "@/components/assignee-select";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -132,8 +136,11 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
     );
   }
 
+  const boardAssigneeNames = useMemo(() => collectAssigneeNames(tasks), [tasks]);
+
   return (
     <BoardApiContext.Provider value={boardApi}>
+      <AssigneeNamesProvider names={boardAssigneeNames}>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         <div className="border-b border-neutral-800 bg-neutral-950/90 sticky top-0 z-10">
           <div className="max-w-6xl mx-auto px-6 py-4">
@@ -224,6 +231,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
           />
         </div>
       </div>
+      </AssigneeNamesProvider>
     </BoardApiContext.Provider>
   );
 }

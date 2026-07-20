@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/date-picker";
-import { Milestone, Task, TASK_ASSIGNEES, resolvePhaseColor } from "@/lib/types";
+import { useAssigneeOptions } from "@/components/assignee-select";
+import { Milestone, Task, resolvePhaseColor } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -267,6 +268,7 @@ function ValueSelect({
   onChange: (val: string) => void;
   milestones: Milestone[];
 }) {
+  const { names: assigneeNames } = useAssigneeOptions();
   const options = useMemo(() => {
     switch (field) {
       case "phase":
@@ -282,7 +284,7 @@ function ValueSelect({
         return PRIORITY_OPTIONS.map((p) => ({ ...p, color: undefined }));
       case "assignee":
         return [
-          ...TASK_ASSIGNEES.map((name) => ({
+          ...assigneeNames.map((name) => ({
             value: name,
             label: name,
             color: undefined,
@@ -294,7 +296,7 @@ function ValueSelect({
       default:
         return [];
     }
-  }, [field, milestones]);
+  }, [field, milestones, assigneeNames]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
   const isDateField = field === "due_date";

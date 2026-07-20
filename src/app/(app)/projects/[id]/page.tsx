@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, use, useCallback, useRef } from "react";
+import { useEffect, useState, use, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
@@ -44,7 +44,14 @@ import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskRowIndicators } from "@/components/task-row-indicators";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
-import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
+import {
+  AssigneeNamesProvider,
+  AssigneeSelect,
+  AssigneeSelectItems,
+  collectAssigneeNames,
+  useAssigneeOptions,
+  useAssigneeSelectChange,
+} from "@/components/assignee-select";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
@@ -265,36 +272,26 @@ function InlineAssigneeSelect({
   task: Task;
   onUpdate: (t: Task) => void;
 }) {
-  const assigneeUsers = useAssigneeUsers();
   const patchTask = useUndoablePatch<Task>();
 
   return (
-    <Select
-      value={task.assignee || "none"}
-      onValueChange={(v) => {
-        const next = !v || v === "none" ? undefined : v;
+    <AssigneeSelect
+      value={task.assignee}
+      onValueChange={(next) => {
         void patchTask({
           item: task,
-          patch: { assignee: next },
+          patch: { assignee: next ?? undefined },
           apply: updateTask,
           onSuccess: onUpdate,
         });
       }}
-    >
-      <SelectTrigger
-        size="sm"
-        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={cancelDrag}
-      >
-        <SelectValue placeholder="—">
-          <AssigneeLabel name={task.assignee} users={assigneeUsers} />
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent className="bg-neutral-800 border-neutral-700">
-        <AssigneeSelectItems users={assigneeUsers} />
-      </SelectContent>
-    </Select>
+      size="sm"
+      triggerClassName="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
+      triggerProps={{
+        onClick: (e) => e.stopPropagation(),
+        onPointerDown: cancelDrag,
+      }}
+    />
   );
 }
 
@@ -407,6 +404,9 @@ function TaskNameCell({
   allowSubtasks,
   onAddSubtask,
   indent = false,
+  subtaskCount = 0,
+  expanded,
+  onToggleExpand,
 }: {
   task: Task;
   onOpen: () => void;
@@ -414,6 +414,9 @@ function TaskNameCell({
   allowSubtasks?: boolean;
   onAddSubtask?: () => void;
   indent?: boolean;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(task.title);
@@ -471,13 +474,32 @@ function TaskNameCell({
     <div
       className={`min-w-0 flex-1 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}
     >
+      {subtaskCount > 0 && onToggleExpand ? (
+        <button
+          type="button"
+          title={expanded ? "Collapse subtasks" : "Expand subtasks"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+          onPointerDown={cancelDrag}
+          className="p-0.5 -ml-0.5 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 shrink-0"
+        >
+          {expanded
+            ? <ChevronDown className="w-3.5 h-3.5" />
+            : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onOpen}
         className="flex-1 min-w-0 text-left cursor-pointer"
       >
-        <p className="text-sm text-neutral-200 truncate">
+        <p className="text-sm text-neutral-200 truncate flex items-center gap-1.5">
           <BinaryText text={task.title} id={task.id} />
+          {subtaskCount > 0 && !expanded && (
+            <span className="text-[10px] text-neutral-600 font-mono shrink-0">{subtaskCount}</span>
+          )}
         </p>
         {task.description && !indent && (
           extractLinks(task.description).length > 0 ? (
@@ -617,6 +639,9 @@ function SortableTaskRow({
   onAddSubtask,
   selected,
   onToggleSelect,
+  subtaskCount = 0,
+  expanded,
+  onToggleExpand,
 }: {
   task: Task;
   currentMilestoneId: string;
@@ -629,6 +654,9 @@ function SortableTaskRow({
   onAddSubtask: () => void;
   selected: boolean;
   onToggleSelect: (id: string) => void;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const patchTask = useUndoablePatch<Task>();
   const {
@@ -691,6 +719,9 @@ function SortableTaskRow({
           onOpen={() => onClick(task)}
           onRename={(title) => onRename(task.id, title)}
           onAddSubtask={onAddSubtask}
+          subtaskCount={subtaskCount}
+          expanded={expanded}
+          onToggleExpand={onToggleExpand}
         />
       </div>
 
@@ -759,6 +790,7 @@ function TaskWithSubtasks({
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(true);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
 
@@ -774,6 +806,7 @@ function TaskWithSubtasks({
     onTaskAdd(newTask);
     setSubtaskTitle("");
     setAddingSubtask(false);
+    setExpanded(true);
   }
 
   const milestone = milestones.find((m) => m.id === currentMilestoneId);
@@ -790,11 +823,17 @@ function TaskWithSubtasks({
         onClick={onClick}
         onPhaseChange={onPhaseChange}
         onRename={onRename}
-        onAddSubtask={() => setAddingSubtask(true)}
+        onAddSubtask={() => {
+          setExpanded(true);
+          setAddingSubtask(true);
+        }}
         selected={selectedIds.has(task.id)}
         onToggleSelect={onToggleSelect}
+        subtaskCount={subtasks.length}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded((v) => !v)}
       />
-      {subtasks.map((subtask) => (
+      {expanded && subtasks.map((subtask) => (
         <SubtaskRow
           key={subtask.id}
           task={subtask}
@@ -807,7 +846,7 @@ function TaskWithSubtasks({
           isDone={isDone}
         />
       ))}
-      {addingSubtask && (
+      {expanded && addingSubtask && (
         <form onSubmit={submitSubtask} className={`${TASK_ROW_GRID} px-3 py-1.5 items-center`}>
           <span />
           <Input
@@ -873,7 +912,9 @@ function BulkActionsBar({
 }) {
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
-  const assigneeUsers = useAssigneeUsers();
+  const { users: assigneeUsers, names: assigneeNames } = useAssigneeOptions();
+  const { handleValueChange: handleAssigneeChange, addUserDialog } =
+    useAssigneeSelectChange((assignee) => onBulkUpdate({ assignee }));
 
   if (count === 0) return null;
 
@@ -967,11 +1008,7 @@ function BulkActionsBar({
         </div>
       )}
 
-      <Select
-        onValueChange={(v: string | null) =>
-          onBulkUpdate({ assignee: !v || v === "none" ? null : v })
-        }
-      >
+      <Select onValueChange={handleAssigneeChange}>
         <SelectTrigger
           size="sm"
           className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
@@ -981,9 +1018,14 @@ function BulkActionsBar({
           <SelectValue placeholder="Assignee" />
         </SelectTrigger>
         <SelectContent className="bg-neutral-800 border-neutral-700">
-          <AssigneeSelectItems users={assigneeUsers} noneLabel="Nobody" />
+          <AssigneeSelectItems
+            users={assigneeUsers}
+            names={assigneeNames}
+            noneLabel="Nobody"
+          />
         </SelectContent>
       </Select>
+      {addUserDialog}
 
       <div className="flex items-center h-8 px-2.5 rounded-md bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors">
         <DatePicker
@@ -1062,6 +1104,7 @@ function MilestoneSection({
   milestones,
   projectId,
   tasks,
+  subtasksByParent,
   onDelete,
   onTaskUpdate,
   onTaskDelete,
@@ -1078,6 +1121,8 @@ function MilestoneSection({
   milestones: Milestone[];
   projectId: string;
   tasks: Task[];
+  /** Project-wide map so subtasks still nest under a parent in another column. */
+  subtasksByParent: Map<string, Task[]>;
   onDelete: (id: string) => void;
   onTaskUpdate: (t: Task) => void;
   onTaskDelete: (id: string) => void;
@@ -1096,7 +1141,6 @@ function MilestoneSection({
   const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
   const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
   const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
-  const subtasksByParent = groupSubtasksByParent(tasks);
   const total = approvedTopLevel.length;
   const titleColor = isUnassigned
     ? "#a3a3a3"
@@ -1847,6 +1891,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     });
   }
 
+  const allTasks = Object.values(tasksByMilestone).flat();
+  const allFilteredTasks = applyTaskFilters(allTasks, filters, project?.milestones ?? []);
+  const subtasksByParent = groupSubtasksByParent(allFilteredTasks);
+  const approvedTasksAll = allTasks.filter(isApprovedTask);
+  const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
+  const hasApprovedTasks = approvedTasksAll.length > 0;
+  const boardAssigneeNames = useMemo(
+    () => collectAssigneeNames(allTasks),
+    [allTasks],
+  );
+
   if (loading) {
     return (
       <div className="p-8 space-y-4">
@@ -1857,11 +1912,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
-
-  const allTasks = Object.values(tasksByMilestone).flat();
-  const approvedTasksAll = allTasks.filter(isApprovedTask);
-  const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
-  const hasApprovedTasks = approvedTasksAll.length > 0;
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -2017,6 +2067,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
+    <AssigneeNamesProvider names={boardAssigneeNames}>
     <div className="w-full p-6 lg:p-8 space-y-6">
       <div className="flex items-center gap-4">
         <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors">
@@ -2170,6 +2221,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               milestones={project.milestones}
               projectId={project.id}
               tasks={applyTaskFilters(tasksByMilestone[UNASSIGNED_ID] || [], filters, project.milestones)}
+              subtasksByParent={subtasksByParent}
               onDelete={() => {}}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={confirmTaskDelete}
@@ -2191,6 +2243,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 milestones={project.milestones}
                 projectId={project.id}
                 tasks={filteredTasks}
+                subtasksByParent={subtasksByParent}
                 onDelete={confirmMilestoneDelete}
                 onTaskUpdate={handleTaskUpdate}
                 onTaskDelete={confirmTaskDelete}
@@ -2251,5 +2304,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         onClear={() => setSelectedIds(new Set())}
       />
     </div>
+    </AssigneeNamesProvider>
   );
 }

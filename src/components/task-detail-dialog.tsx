@@ -14,7 +14,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Task, TaskComment, TaskAttachment, TaskPriority } from "@/lib/types";
-import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
+import { AssigneeSelect } from "@/components/assignee-select";
 import { formatDateTime, toDateInputValue } from "@/lib/format";
 import { TaskAttachments, TaskAttachmentsApi } from "@/components/task-attachments";
 import { useUndoToast } from "@/components/mutation-provider";
@@ -57,7 +57,6 @@ export function TaskDetailDialog({
   const [editingNotes, setEditingNotes] = useState(false);
   const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsEndRef = useRef<HTMLDivElement>(null);
-  const assigneeUsers = useAssigneeUsers();
   const withUndo = useUndoToast();
 
   useEffect(() => {
@@ -182,23 +181,14 @@ export function TaskDetailDialog({
                   </div>
                   <div className="space-y-2">
                     <Label className="text-neutral-400 text-xs">Responsible</Label>
-                    <Select
-                      value={form.assignee || "none"}
-                      onValueChange={(v) => setForm((f) => ({ ...f, assignee: v === "none" ? "" : (v ?? "") }))}
-                    >
-                      <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100 w-full">
-                        <SelectValue placeholder="Choose person">
-                          <AssigneeLabel
-                            name={form.assignee || null}
-                            users={assigneeUsers}
-                            placeholder="Nobody"
-                          />
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="bg-neutral-800 border-neutral-700">
-                        <AssigneeSelectItems users={assigneeUsers} noneLabel="Nobody" itemClassName="text-sm" />
-                      </SelectContent>
-                    </Select>
+                    <AssigneeSelect
+                      value={form.assignee || null}
+                      onValueChange={(v) => setForm((f) => ({ ...f, assignee: v ?? "" }))}
+                      noneLabel="Nobody"
+                      placeholder="Choose person"
+                      triggerClassName="bg-neutral-800 border-neutral-700 text-neutral-100 w-full"
+                      itemClassName="text-sm"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-neutral-400 text-xs">Priority</Label>

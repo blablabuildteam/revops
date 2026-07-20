@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useRef } from "react";
 import {
   Plus, Check, X, Trash2, Pencil, Filter,
   ChevronDown, ChevronRight,
@@ -20,7 +20,11 @@ import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/ta
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { TaskRowIndicators } from "@/components/task-row-indicators";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
-import { AssigneeLabel, AssigneeSelectItems, useAssigneeUsers } from "@/components/assignee-select";
+import {
+  AssigneeNamesProvider,
+  AssigneeSelect,
+  collectAssigneeNames,
+} from "@/components/assignee-select";
 import { getProject, createTask, updateTask, batchUpdateMilestones, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
 import {
   createEditBoardTask,
@@ -149,36 +153,26 @@ function InlineAssigneeSelect({
   onUpdate: (t: Task) => void;
 }) {
   const boardApi = useBoardApi();
-  const assigneeUsers = useAssigneeUsers();
   const patchTask = useUndoablePatch<Task>();
 
   return (
-    <Select
-      value={task.assignee || "none"}
-      onValueChange={(v) => {
-        const next = !v || v === "none" ? undefined : v;
+    <AssigneeSelect
+      value={task.assignee}
+      onValueChange={(next) => {
         void patchTask({
           item: task,
-          patch: { assignee: next },
+          patch: { assignee: next ?? undefined },
           apply: boardApi.updateTask,
           onSuccess: onUpdate,
         });
       }}
-    >
-      <SelectTrigger
-        size="sm"
-        className="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
-        onClick={(e) => e.stopPropagation()}
-        onPointerDown={cancelDrag}
-      >
-        <SelectValue placeholder="—">
-          <AssigneeLabel name={task.assignee} users={assigneeUsers} />
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent className="bg-neutral-800 border-neutral-700">
-        <AssigneeSelectItems users={assigneeUsers} />
-      </SelectContent>
-    </Select>
+      size="sm"
+      triggerClassName="h-7 w-full text-xs bg-neutral-800/50 border-neutral-700/50 text-neutral-400 px-2"
+      triggerProps={{
+        onClick: (e) => e.stopPropagation(),
+        onPointerDown: cancelDrag,
+      }}
+    />
   );
 }
 
@@ -279,6 +273,9 @@ function TaskNameCell({
   allowSubtasks,
   onAddSubtask,
   indent = false,
+  subtaskCount = 0,
+  expanded,
+  onToggleExpand,
 }: {
   task: Task;
   onOpen: () => void;
@@ -286,6 +283,9 @@ function TaskNameCell({
   allowSubtasks?: boolean;
   onAddSubtask?: () => void;
   indent?: boolean;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(task.title);
@@ -333,9 +333,28 @@ function TaskNameCell({
 
   return (
     <div className={`min-w-0 flex-1 flex items-center gap-0.5 ${indent ? "pl-5 border-l border-neutral-800/80 ml-1" : ""}`}>
+      {subtaskCount > 0 && onToggleExpand ? (
+        <button
+          type="button"
+          title={expanded ? "Collapse subtasks" : "Expand subtasks"}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+          onPointerDown={cancelDrag}
+          className="p-0.5 -ml-0.5 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800 shrink-0"
+        >
+          {expanded
+            ? <ChevronDown className="w-3.5 h-3.5" />
+            : <ChevronRight className="w-3.5 h-3.5" />}
+        </button>
+      ) : null}
       <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left cursor-pointer">
-        <p className="text-sm text-neutral-200 truncate">
+        <p className="text-sm text-neutral-200 truncate flex items-center gap-1.5">
           <BinaryText text={task.title} id={task.id} />
+          {subtaskCount > 0 && !expanded && (
+            <span className="text-[10px] text-neutral-600 font-mono shrink-0">{subtaskCount}</span>
+          )}
         </p>
         {task.description && !indent && (
           extractLinks(task.description).length > 0 ? (
@@ -375,6 +394,9 @@ function TaskRow({
   onRename,
   onAddSubtask,
   indent = false,
+  subtaskCount = 0,
+  expanded,
+  onToggleExpand,
 }: {
   task: Task;
   currentMilestoneId: string;
@@ -386,6 +408,9 @@ function TaskRow({
   onRename: (id: string, title: string) => Promise<void>;
   onAddSubtask?: () => void;
   indent?: boolean;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const boardApi = useBoardApi();
   const patchTask = useUndoablePatch<Task>();
@@ -400,6 +425,9 @@ function TaskRow({
         onOpen={() => onClick(task)}
         onRename={(title) => onRename(task.id, title)}
         onAddSubtask={onAddSubtask}
+        subtaskCount={subtaskCount}
+        expanded={expanded}
+        onToggleExpand={onToggleExpand}
       />
       <TaskRowIndicators task={task} />
       <PriorityFlag
@@ -460,6 +488,7 @@ function TaskWithSubtasks({
   onTaskAdd: (t: Task) => void;
 }) {
   const boardApi = useBoardApi();
+  const [expanded, setExpanded] = useState(true);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
 
@@ -475,6 +504,7 @@ function TaskWithSubtasks({
     onTaskAdd(newTask);
     setSubtaskTitle("");
     setAddingSubtask(false);
+    setExpanded(true);
   }
 
   return (
@@ -488,9 +518,15 @@ function TaskWithSubtasks({
         onClick={onClick}
         onPhaseChange={onPhaseChange}
         onRename={onRename}
-        onAddSubtask={() => setAddingSubtask(true)}
+        onAddSubtask={() => {
+          setExpanded(true);
+          setAddingSubtask(true);
+        }}
+        subtaskCount={subtasks.length}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded((v) => !v)}
       />
-      {subtasks.map((subtask) => (
+      {expanded && subtasks.map((subtask) => (
         <TaskRow
           key={subtask.id}
           task={subtask}
@@ -504,7 +540,7 @@ function TaskWithSubtasks({
           onRename={onRename}
         />
       ))}
-      {addingSubtask && (
+      {expanded && addingSubtask && (
         <form onSubmit={submitSubtask} className={`${TASK_ROW_GRID} px-3 py-1.5 items-center`}>
           <Input
             autoFocus
@@ -588,6 +624,7 @@ function MilestoneTasksSection({
   milestones,
   projectId,
   tasks,
+  subtasksByParent,
   onTaskUpdate,
   onTaskDelete,
   onTaskAdd,
@@ -601,6 +638,8 @@ function MilestoneTasksSection({
   milestones: Milestone[];
   projectId: string;
   tasks: Task[];
+  /** Project-wide map so subtasks still nest under a parent in another column. */
+  subtasksByParent: Map<string, Task[]>;
   onTaskUpdate: (t: Task) => void;
   onTaskDelete: (id: string) => void;
   onTaskAdd: (t: Task) => void;
@@ -612,7 +651,6 @@ function MilestoneTasksSection({
 }) {
   const [expanded, setExpanded] = useState(() => !isDonePhase(milestone.name));
   const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
-  const subtasksByParent = groupSubtasksByParent(tasks);
   const titleColor = isUnassigned
     ? "#a3a3a3"
     : resolvePhaseColor(milestone.name, milestone.color);
@@ -853,9 +891,16 @@ export function ProjectTaskBoardPanel({
   }
 
   const hasVisibleTasks = visibleMilestones.length > 0 || showUnassigned;
+  const boardAssigneeNames = useMemo(
+    () => collectAssigneeNames(localTasks),
+    [localTasks],
+  );
+  const subtasksByParent = groupSubtasksByParent(
+    applyTaskFilters(localTasks, filters, milestones),
+  );
 
   return (
-    <>
+    <AssigneeNamesProvider names={boardAssigneeNames}>
       <div className="px-3 py-3 space-y-3">
         {!hideToolbar && (
         <div className="flex items-center justify-end gap-2 px-1">
@@ -900,6 +945,7 @@ export function ProjectTaskBoardPanel({
             milestones={milestones}
             projectId={projectId}
             tasks={applyTaskFilters(tasksByMilestone.get(milestone.id) ?? [], filters, milestones)}
+            subtasksByParent={subtasksByParent}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}
@@ -915,6 +961,7 @@ export function ProjectTaskBoardPanel({
             milestones={milestones}
             projectId={projectId}
             tasks={applyTaskFilters(unassigned, filters, milestones)}
+            subtasksByParent={subtasksByParent}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}
@@ -940,6 +987,6 @@ export function ProjectTaskBoardPanel({
         milestones={milestones}
         onSave={(updated) => setMilestones(updated)}
       />
-    </>
+    </AssigneeNamesProvider>
   );
 }

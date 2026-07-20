@@ -208,6 +208,20 @@ function mapPriority(priority: ClickUpPriority): TaskPriority {
   return "low";
 }
 
+/** Map ClickUp usernames onto RevOps workspace display names when known. */
+const CLICKUP_ASSIGNEE_MAP: Record<string, string> = {
+  kevin: "Kevin",
+  xennith: "Xennith",
+  "xennith oosterveer": "Xennith",
+};
+
+function mapAssigneeName(username: string | null | undefined): string | null {
+  if (!username) return null;
+  const trimmed = username.trim();
+  if (!trimmed) return null;
+  return CLICKUP_ASSIGNEE_MAP[trimmed.toLowerCase()] ?? trimmed;
+}
+
 function mapStatusToMilestoneName(
   statusName: string,
   statusType: string,
@@ -578,12 +592,24 @@ async function main() {
       detail.status.type,
       milestoneNames,
     );
-    const milestone = milestoneByName.get(milestoneName) ?? milestones[0]!;
-    const status = mapTaskStatus(detail.status.type, milestone.name);
-    const assignee = detail.assignees?.[0]?.username ?? null;
+    let milestone = milestoneByName.get(milestoneName) ?? milestones[0]!;
+    const assignee = mapAssigneeName(detail.assignees?.[0]?.username);
     const dueDate = formatDueDate(detail.due_date);
     const parentLocalId = detail.parent ? clickupToLocal.get(detail.parent) ?? null : null;
     const parentName = detail.parent ? taskNameById.get(detail.parent) : null;
+
+    // Subtasks inherit the parent's board column so they nest under the parent in the UI.
+    if (parentLocalId) {
+      const { rows: parentRows } = await sql`
+        SELECT milestone_id FROM tasks WHERE id = ${parentLocalId} LIMIT 1
+      `;
+      const parentMilestoneId = parentRows[0]?.milestone_id as string | null | undefined;
+      if (parentMilestoneId) {
+        const parentMilestone = milestones.find((m) => m.id === parentMilestoneId);
+        if (parentMilestone) milestone = parentMilestone;
+      }
+    }
+    const status = mapTaskStatus(detail.status.type, milestone.name);
 
     if (detail.parent) {
       console.log(`  ↳ ${detail.name}`);
@@ -651,7 +677,7 @@ async function main() {
 
     for (const comment of [...comments].reverse()) {
       // ClickUp returns newest-first; store oldest-first for natural reading order
-      const author = comment.user?.username || "ClickUp";
+      const author = mapAssigneeName(comment.user?.username) || "ClickUp";
       const body = commentBody(comment);
       const createdAt = new Date(Number(comment.date)).toISOString();
       await sql`
