@@ -1080,24 +1080,57 @@ export default function TodosPage() {
   }
 
   function handleBoardTaskUpdate(updated: Task, milestone?: { name?: string; color?: string }) {
-    setBoardTasks((prev) => prev.map((x) => {
-      if (x.id !== updated.id) return x;
-      return {
-        ...x,
-        title: updated.title,
-        description: updated.description ?? undefined,
-        status: updated.status,
-        priority: updated.priority,
-        assignee: updated.assignee ?? undefined,
-        due_date: updated.due_date ?? undefined,
-        milestone_id: updated.milestone_id,
-        parent_id: updated.parent_id,
-        position: updated.position,
-        url: updated.url ?? undefined,
-        milestone_name: milestone?.name ?? (updated.milestone_id ? x.milestone_name : undefined),
-        milestone_color: milestone?.color ?? (updated.milestone_id ? x.milestone_color : undefined),
-      };
-    }));
+    setBoardTasks((prev) => {
+      const existing = prev.find((x) => x.id === updated.id);
+      if (!existing) {
+        const projectMeta = prev.find((x) => x.project_id === updated.project_id);
+        return [
+          ...prev,
+          {
+            id: updated.id,
+            title: updated.title,
+            description: updated.description ?? undefined,
+            status: updated.status,
+            priority: updated.priority,
+            assignee: updated.assignee ?? undefined,
+            due_date: updated.due_date ?? undefined,
+            project_id: updated.project_id,
+            project_name: projectMeta?.project_name ?? "Project",
+            company_name: projectMeta?.company_name,
+            company_id: projectMeta?.company_id,
+            company_logo_url: projectMeta?.company_logo_url,
+            milestone_id: updated.milestone_id,
+            milestone_name: milestone?.name,
+            milestone_color: milestone?.color,
+            parent_id: updated.parent_id,
+            position: updated.position,
+            approved: updated.approved,
+            url: updated.url ?? undefined,
+            created_at: updated.created_at,
+            updated_at: updated.updated_at,
+            _source: "task" as const,
+          },
+        ];
+      }
+      return prev.map((x) => {
+        if (x.id !== updated.id) return x;
+        return {
+          ...x,
+          title: updated.title,
+          description: updated.description ?? undefined,
+          status: updated.status,
+          priority: updated.priority,
+          assignee: updated.assignee ?? undefined,
+          due_date: updated.due_date ?? undefined,
+          milestone_id: updated.milestone_id,
+          parent_id: updated.parent_id,
+          position: updated.position,
+          url: updated.url ?? undefined,
+          milestone_name: milestone?.name ?? (updated.milestone_id ? x.milestone_name : undefined),
+          milestone_color: milestone?.color ?? (updated.milestone_id ? x.milestone_color : undefined),
+        };
+      });
+    });
   }
 
   function handleBoardTaskDelete(id: string) {

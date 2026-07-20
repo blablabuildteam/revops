@@ -6,6 +6,8 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
+import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
+import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import { BinaryText } from "@/components/binary-text";
 import { BoardLinkChips } from "@/components/linkified-text";
 import { extractLinks } from "@/lib/linkify";
@@ -109,18 +111,11 @@ function isTopLevelTask(task: Task) {
   return isApprovedTask(task) && !task.parent_id;
 }
 
-const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-function sortByPosition(tasks: Task[]) {
-  return [...tasks].sort((a, b) => {
-    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
-    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
-    if (pa !== pb) return pa - pb;
-    return a.position - b.position || a.created_at.localeCompare(b.created_at);
-  });
-}
-
-function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
+function groupSubtasksByParent(
+  tasks: Task[],
+  sortKey: TaskBoardSortKey = "priority",
+  sortAsc = true,
+): Map<string, Task[]> {
   const map = new Map<string, Task[]>();
   for (const task of tasks) {
     if (!isApprovedTask(task) || !task.parent_id) continue;
@@ -129,7 +124,7 @@ function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
     map.set(task.parent_id, list);
   }
   for (const [parentId, list] of map) {
-    map.set(parentId, sortByPosition(list));
+    map.set(parentId, sortTasks(list, sortKey, sortAsc));
   }
   return map;
 }
@@ -138,14 +133,47 @@ function cancelDrag(e: React.PointerEvent) {
   e.stopPropagation();
 }
 
-function TaskColumnHeader() {
+function TaskColumnHeader({
+  sortKey,
+  sortAsc,
+  onToggleSort,
+}: {
+  sortKey: TaskBoardSortKey;
+  sortAsc: boolean;
+  onToggleSort: (key: TaskBoardSortKey) => void;
+}) {
   return (
-    <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
-      <span>Task</span>
+    <div className={`${TASK_ROW_GRID} px-3 py-2 text-xs font-medium tracking-wide text-neutral-400 border-b border-neutral-800/60`}>
+      <TaskSortHeaderButton
+        label="Task"
+        sortKey="title"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span />
-      <span />
-      <span>Responsible</span>
-      <span>Date</span>
+      <TaskSortHeaderButton
+        label="Priority"
+        sortKey="priority"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+        iconOnly
+      />
+      <TaskSortHeaderButton
+        label="Responsible"
+        sortKey="assignee"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
+      <TaskSortHeaderButton
+        label="Date"
+        sortKey="due_date"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span>Phase</span>
       <span />
     </div>
@@ -632,6 +660,9 @@ function MilestoneTasksSection({
   projectId,
   tasks,
   subtasksByParent,
+  sortKey,
+  sortAsc,
+  onToggleSort,
   onTaskUpdate,
   onTaskDelete,
   onTaskAdd,
@@ -647,6 +678,9 @@ function MilestoneTasksSection({
   tasks: Task[];
   /** Project-wide map so subtasks still nest under a parent in another column. */
   subtasksByParent: Map<string, Task[]>;
+  sortKey: TaskBoardSortKey;
+  sortAsc: boolean;
+  onToggleSort: (key: TaskBoardSortKey) => void;
   onTaskUpdate: (t: Task) => void;
   onTaskDelete: (id: string) => void;
   onTaskAdd: (t: Task) => void;
@@ -657,7 +691,7 @@ function MilestoneTasksSection({
   showEmptyPhases?: boolean;
 }) {
   const [expanded, setExpanded] = useState(() => !isDonePhase(milestone.name));
-  const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
+  const approvedTopLevel = sortTasks(tasks.filter(isTopLevelTask), sortKey, sortAsc);
   const titleColor = isUnassigned
     ? "#a3a3a3"
     : resolvePhaseColor(milestone.name, milestone.color);
@@ -679,7 +713,7 @@ function MilestoneTasksSection({
           ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
           : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />}
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: titleColor }} />
-        <h3 className="text-sm font-medium truncate flex-1" style={{ color: titleColor }}>
+        <h3 className="text-base font-medium truncate flex-1" style={{ color: titleColor }}>
           {milestone.name}
         </h3>
         <span className="text-xs text-neutral-600 font-mono">
@@ -688,7 +722,11 @@ function MilestoneTasksSection({
       </button>
       {expanded && (
         <>
-          <TaskColumnHeader />
+          <TaskColumnHeader
+            sortKey={sortKey}
+            sortAsc={sortAsc}
+            onToggleSort={onToggleSort}
+          />
           <div className="divide-y divide-neutral-800/40">
             {approvedTopLevel.map((task) => (
               <TaskWithSubtasks
@@ -745,7 +783,17 @@ export function ProjectTaskBoardPanel({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<TaskBoardSortKey>("priority");
+  const [sortAsc, setSortAsc] = useState(true);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
+
+  function toggleSort(key: TaskBoardSortKey) {
+    if (sortKey === key) setSortAsc((a) => !a);
+    else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  }
 
   useEffect(() => {
     setLocalTasks(tasks);
@@ -779,7 +827,7 @@ export function ProjectTaskBoardPanel({
   }
 
   function handleTaskAdd(task: Task) {
-    setLocalTasks((prev) => [...prev, task]);
+    setLocalTasks((prev) => (prev.some((t) => t.id === task.id) ? prev : [...prev, task]));
     onTaskUpdate(task, milestoneMeta(task.milestone_id));
   }
 
@@ -904,6 +952,8 @@ export function ProjectTaskBoardPanel({
   );
   const subtasksByParent = groupSubtasksByParent(
     applyTaskFilters(localTasks, filters, milestones),
+    sortKey,
+    sortAsc,
   );
 
   return (
@@ -953,6 +1003,9 @@ export function ProjectTaskBoardPanel({
             projectId={projectId}
             tasks={applyTaskFilters(tasksByMilestone.get(milestone.id) ?? [], filters, milestones)}
             subtasksByParent={subtasksByParent}
+            sortKey={sortKey}
+            sortAsc={sortAsc}
+            onToggleSort={toggleSort}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}
@@ -969,6 +1022,9 @@ export function ProjectTaskBoardPanel({
             projectId={projectId}
             tasks={applyTaskFilters(unassigned, filters, milestones)}
             subtasksByParent={subtasksByParent}
+            sortKey={sortKey}
+            sortAsc={sortAsc}
+            onToggleSort={toggleSort}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={onTaskDelete}
             onTaskAdd={handleTaskAdd}

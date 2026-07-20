@@ -9,6 +9,8 @@ import {
   ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
+import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
+import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import Link from "next/link";
 import {
   DndContext,
@@ -82,26 +84,15 @@ function isApprovedTask(task: Task) {
   return task.approved !== false;
 }
 
-const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
-
-function sortByPosition(tasks: Task[]) {
-  return [...tasks].sort((a, b) => {
-    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
-    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
-    if (pa !== pb) return pa - pb;
-    return a.position - b.position || a.created_at.localeCompare(b.created_at);
-  });
-}
-
 function buildTasksByMilestone(
   milestones: (Milestone & { tasks: Task[] })[],
   unassignedTasks: Task[] = [],
 ): TasksByMilestone {
   const map: TasksByMilestone = {};
   for (const m of milestones) {
-    map[m.id] = sortByPosition(m.tasks || []);
+    map[m.id] = sortTasks(m.tasks || []);
   }
-  const unassigned = sortByPosition(unassignedTasks.filter(isApprovedTask));
+  const unassigned = sortTasks(unassignedTasks.filter(isApprovedTask));
   if (unassigned.length > 0) {
     map[UNASSIGNED_ID] = unassigned;
   }
@@ -125,7 +116,11 @@ function isTopLevelTask(task: Task) {
   return isApprovedTask(task) && !task.parent_id;
 }
 
-function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
+function groupSubtasksByParent(
+  tasks: Task[],
+  sortKey: TaskBoardSortKey = "priority",
+  sortAsc = true,
+): Map<string, Task[]> {
   const map = new Map<string, Task[]>();
   for (const task of tasks) {
     if (!isApprovedTask(task) || !task.parent_id) continue;
@@ -134,13 +129,13 @@ function groupSubtasksByParent(tasks: Task[]): Map<string, Task[]> {
     map.set(task.parent_id, list);
   }
   for (const [parentId, list] of map) {
-    map.set(parentId, sortByPosition(list));
+    map.set(parentId, sortTasks(list, sortKey, sortAsc));
   }
   return map;
 }
 
 function getChildTasks(tasksByMilestone: TasksByMilestone, parentId: string): Task[] {
-  return sortByPosition(
+  return sortTasks(
     Object.values(tasksByMilestone)
       .flat()
       .filter((t) => t.parent_id === parentId),
@@ -159,7 +154,7 @@ function reorderTopLevelInContainer(
 ): Task[] | null {
   const pending = containerTasks.filter((t) => !isApprovedTask(t));
   const approved = containerTasks.filter(isApprovedTask);
-  const topLevel = sortByPosition(approved.filter(isTopLevelTask));
+  const topLevel = sortTasks(approved.filter(isTopLevelTask));
   const subtasks = approved.filter((t) => t.parent_id);
 
   const oldIndex = topLevel.findIndex((t) => t.id === activeId);
@@ -178,7 +173,7 @@ function reorderTopLevelInContainer(
   const reorderedTop = arrayMove(topLevel, oldIndex, newIndex);
   const rebuilt = reorderedTop.flatMap((t) => [
     t,
-    ...sortByPosition(subtasks.filter((s) => s.parent_id === t.id)),
+    ...sortTasks(subtasks.filter((s) => s.parent_id === t.id)),
   ]);
   return [...pending, ...rebuilt];
 }
@@ -216,15 +211,48 @@ function PhaseColorInput({
   );
 }
 
-function TaskColumnHeader() {
+function TaskColumnHeader({
+  sortKey,
+  sortAsc,
+  onToggleSort,
+}: {
+  sortKey: TaskBoardSortKey;
+  sortAsc: boolean;
+  onToggleSort: (key: TaskBoardSortKey) => void;
+}) {
   return (
-    <div className={`${TASK_ROW_GRID} px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-600 border-b border-neutral-800/60`}>
+    <div className={`${TASK_ROW_GRID} px-3 py-2 text-xs font-medium tracking-wide text-neutral-400 border-b border-neutral-800/60`}>
       <span />
-      <span>Task</span>
+      <TaskSortHeaderButton
+        label="Task"
+        sortKey="title"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span />
-      <span />
-      <span>Responsible</span>
-      <span>Date</span>
+      <TaskSortHeaderButton
+        label="Priority"
+        sortKey="priority"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+        iconOnly
+      />
+      <TaskSortHeaderButton
+        label="Responsible"
+        sortKey="assignee"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
+      <TaskSortHeaderButton
+        label="Date"
+        sortKey="due_date"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span>Phase</span>
       <span />
     </div>
@@ -1112,6 +1140,8 @@ function MilestoneSection({
   projectId,
   tasks,
   subtasksByParent,
+  sortKey,
+  sortAsc,
   onDelete,
   onTaskUpdate,
   onTaskDelete,
@@ -1130,6 +1160,8 @@ function MilestoneSection({
   tasks: Task[];
   /** Project-wide map so subtasks still nest under a parent in another column. */
   subtasksByParent: Map<string, Task[]>;
+  sortKey: TaskBoardSortKey;
+  sortAsc: boolean;
   onDelete: (id: string) => void;
   onTaskUpdate: (t: Task) => void;
   onTaskDelete: (id: string) => void;
@@ -1146,8 +1178,8 @@ function MilestoneSection({
   const [expanded, setExpanded] = useState(() => !isDonePhase(milestone.name));
 
   const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
-  const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
-  const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
+  const approvedTasks = sortTasks(tasks.filter(isApprovedTask), sortKey, sortAsc);
+  const approvedTopLevel = sortTasks(tasks.filter(isTopLevelTask), sortKey, sortAsc);
   const total = approvedTopLevel.length;
   const titleColor = isUnassigned
     ? "#a3a3a3"
@@ -1207,7 +1239,7 @@ function MilestoneSection({
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: titleColor }}
           />
-          <h3 className="font-medium truncate flex-1" style={{ color: titleColor }}>
+          <h3 className="text-base font-medium truncate flex-1" style={{ color: titleColor }}>
             {milestone.name}
           </h3>
           <div className="flex items-center gap-3 shrink-0">
@@ -1297,8 +1329,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<TaskBoardSortKey>("priority");
+  const [sortAsc, setSortAsc] = useState(true);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
+
+  function toggleSort(key: TaskBoardSortKey) {
+    if (sortKey === key) setSortAsc((a) => !a);
+    else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  }
   const tasksRef = useRef<TasksByMilestone>({});
   const dragStartSnapshot = useRef<TasksByMilestone | null>(null);
   const { begin, end, pushUndo } = useMutationFeedback();
@@ -1329,7 +1371,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }, [id]);
 
   const persistContainer = useCallback(async (containerId: string, tasks: Task[]) => {
-    const approved = sortByPosition(tasks.filter(isApprovedTask));
+    const approved = sortTasks(tasks.filter(isApprovedTask));
     const topLevel = approved.filter((t) => !t.parent_id);
     const subtasks = approved.filter((t) => t.parent_id);
     const milestoneId = containerToMilestoneId(containerId);
@@ -1366,12 +1408,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
 
       if (isApprovedTask(updated)) {
-        next[newContainer] = sortByPosition([
+        next[newContainer] = sortTasks([
           ...(next[newContainer] || []).filter((t) => t.id !== updated.id),
           updated,
         ]);
       } else if (oldContainer) {
-        next[oldContainer] = sortByPosition([...(next[oldContainer] || []), updated]);
+        next[oldContainer] = sortTasks([...(next[oldContainer] || []), updated]);
       }
 
       if (next[UNASSIGNED_ID]?.length === 0) {
@@ -1458,7 +1500,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const bucket = task.milestone_id ?? UNASSIGNED_ID;
     setTasksByMilestone((prev) => ({
       ...prev,
-      [bucket]: sortByPosition([...(prev[bucket] || []), task]),
+      [bucket]: sortTasks([...(prev[bucket] || []), task]),
     }));
   }
 
@@ -1712,10 +1754,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
     }
 
-    const activeApproved = sortByPosition(
+    const activeApproved = sortTasks(
       (nextState[activeContainer] || []).filter(isApprovedTask),
     );
-    const overApproved = sortByPosition(
+    const overApproved = sortTasks(
       (nextState[overContainer] || []).filter(isApprovedTask),
     );
 
@@ -1900,7 +1942,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const allTasks = Object.values(tasksByMilestone).flat();
   const allFilteredTasks = applyTaskFilters(allTasks, filters, project?.milestones ?? []);
-  const subtasksByParent = groupSubtasksByParent(allFilteredTasks);
+  const subtasksByParent = groupSubtasksByParent(allFilteredTasks, sortKey, sortAsc);
   const approvedTasksAll = allTasks.filter(isApprovedTask);
   const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
   const hasApprovedTasks = approvedTasksAll.length > 0;
@@ -2208,7 +2250,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <div className="space-y-3">
           {hasApprovedTasks && (
             <div className="px-3">
-              <TaskColumnHeader />
+              <TaskColumnHeader
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onToggleSort={toggleSort}
+              />
             </div>
           )}
           {(tasksByMilestone[UNASSIGNED_ID]?.length ?? 0) > 0 && (
@@ -2229,6 +2275,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               projectId={project.id}
               tasks={applyTaskFilters(tasksByMilestone[UNASSIGNED_ID] || [], filters, project.milestones)}
               subtasksByParent={subtasksByParent}
+              sortKey={sortKey}
+              sortAsc={sortAsc}
               onDelete={() => {}}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={confirmTaskDelete}
@@ -2251,6 +2299,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 projectId={project.id}
                 tasks={filteredTasks}
                 subtasksByParent={subtasksByParent}
+                sortKey={sortKey}
+                sortAsc={sortAsc}
                 onDelete={confirmMilestoneDelete}
                 onTaskUpdate={handleTaskUpdate}
                 onTaskDelete={confirmTaskDelete}
