@@ -16,6 +16,23 @@ export async function backfillMissingStandardPhases() {
   for (let i = 0; i < DEFAULT_PROJECT_MILESTONES.length; i++) {
     const name = DEFAULT_PROJECT_MILESTONES[i];
     const color = DEFAULT_PHASE_COLORS[name];
+
+    // New first-column phases (e.g. Backlog) should appear before existing columns.
+    if (i === 0) {
+      await sql`
+        UPDATE milestones m
+        SET position = m.position + 1
+        WHERE EXISTS (
+          SELECT 1 FROM projects p
+          WHERE p.id = m.project_id
+          AND NOT EXISTS (
+            SELECT 1 FROM milestones m2
+            WHERE m2.project_id = p.id AND m2.name = ${name}
+          )
+        )
+      `;
+    }
+
     await sql`
       INSERT INTO milestones (project_id, name, position, status, color)
       SELECT p.id, ${name}, ${i}, 'pending', ${color}

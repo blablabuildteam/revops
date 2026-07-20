@@ -23,12 +23,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { getCompanies, getProjects, getUsers } from "@/lib/api";
-import { Company, Project } from "@/lib/types";
+import { createTask, getCompanies, getProject, getProjects, getUsers } from "@/lib/api";
+import { Company, Milestone, Project, Task } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { ProjectTaskBoardPanel } from "@/components/project-task-board";
-import { Task } from "@/lib/types";
 import { useSession } from "@/components/session-provider";
 import { cacheKeys, getCached } from "@/lib/query-cache";
 import { useMutationFeedback, useUndoToast } from "@/components/mutation-provider";
@@ -180,6 +179,17 @@ function namedOptionLabel(
   return items.find((i) => i.id === id)?.name ?? emptyLabel;
 }
 
+function projectBoardLabel(project: Project) {
+  return project.company?.name
+    ? `${project.company.name} – ${project.name}`
+    : project.name;
+}
+
+function defaultOpenMilestoneId(milestones: Milestone[]) {
+  const open = milestones.find((m) => m.name.toLowerCase() === "open");
+  return open?.id ?? milestones[0]?.id ?? "";
+}
+
 const statusFilterLabels: Record<string, string> = {
   active: "Active",
   all: "All",
@@ -191,14 +201,13 @@ const statusFilterLabels: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 function TodoFormDialog({
-  open, onClose, onSave, todo, users, companies, projects, currentUser, defaultProjectId,
+  open, onClose, onSave, todo, users, projects, currentUser, defaultProjectId,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (t: Todo) => void;
+  onSave: () => void;
   todo?: Todo | null;
   users: TodoUser[];
-  companies: Company[];
   projects: Project[];
   currentUser: TodoUser | null;
   defaultProjectId?: string;
@@ -207,25 +216,35 @@ function TodoFormDialog({
   const [form, setForm] = useState({
     title: "", description: "", priority: "low",
     assignee_id: "",
-    company_id: "", project_id: defaultProjectId ?? "", due_date: "",
+    project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
   });
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const withUndo = useUndoToast();
 
   const people = assigneeOptions(users, currentUser);
+  const projectOptions = [...projects].sort((a, b) => {
+    const companyCmp = (a.company?.name ?? "").localeCompare(b.company?.name ?? "");
+    if (companyCmp !== 0) return companyCmp;
+    return a.name.localeCompare(b.name);
+  });
+  const selectedProject = projects.find((p) => p.id === form.project_id) ?? null;
+  const showPhaseStatus = !!form.project_id && !isEdit;
 
   useEffect(() => {
     if (!open) return;
     setError("");
+    setMilestones([]);
     if (todo) {
       setForm({
         title: todo.title,
         description: todo.description ?? "",
         priority: todo.priority,
         assignee_id: todo.assignee_id ?? "",
-        company_id: todo.company_id ?? "",
         project_id: todo.project_id ?? "",
+        milestone_id: "",
         due_date: toDateInputValue(todo.due_date),
       });
       return;
@@ -233,23 +252,85 @@ function TodoFormDialog({
     setForm({
       title: "", description: "", priority: "low",
       assignee_id: currentUser?.id ?? "",
-      company_id: "", project_id: defaultProjectId ?? "", due_date: "",
+      project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
     });
   }, [open, todo, currentUser, defaultProjectId]);
+
+  useEffect(() => {
+    if (!open || !form.project_id || isEdit) {
+      if (!form.project_id) setMilestones([]);
+      return;
+    }
+
+    let cancelled = false;
+    setMilestonesLoading(true);
+    getProject(form.project_id)
+      .then((project) => {
+        if (cancelled) return;
+        const next = [...(project.milestones ?? [])].sort((a, b) => a.position - b.position);
+        setMilestones(next);
+        setForm((f) => {
+          if (f.project_id !== form.project_id) return f;
+          if (f.milestone_id && next.some((m) => m.id === f.milestone_id)) return f;
+          return { ...f, milestone_id: defaultOpenMilestoneId(next) };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMilestones([]);
+          setForm((f) => (f.project_id === form.project_id ? { ...f, milestone_id: "" } : f));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMilestonesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form.project_id, isEdit]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
+    if (!isEdit && form.project_id && !form.milestone_id) {
+      setError(milestonesLoading ? "Loading board statuses..." : "Choose a status for this project board");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
+      const selected = projects.find((p) => p.id === form.project_id);
+      const companyId = selected?.company_id ?? selected?.company?.id ?? null;
+
+      // Creating onto a project board → board task with phase status
+      if (!isEdit && form.project_id) {
+        const assigneeName = form.assignee_id
+          ? (people.find((u) => u.id === form.assignee_id)?.name
+            ?? (currentUser?.id === form.assignee_id ? currentUser.name : null))
+          : null;
+        await createTask(form.project_id, {
+          title: form.title.trim(),
+          description: form.description.trim() || null,
+          priority: form.priority as Task["priority"],
+          assignee: assigneeName,
+          due_date: form.due_date || null,
+          milestone_id: form.milestone_id,
+        });
+        onSave();
+        onClose();
+        return;
+      }
+
       const payload = {
-        ...form,
+        title: form.title.trim(),
+        description: form.description,
+        priority: form.priority,
         assignee_id:
           form.assignee_id === ""
             ? null
             : (form.assignee_id || currentUser?.id || null),
-        company_id: form.company_id || null,
+        company_id: companyId,
         project_id: form.project_id || null,
         due_date: form.due_date || null,
       };
@@ -267,11 +348,11 @@ function TodoFormDialog({
         await withUndo({
           label: "Updated",
           run: async () => {
-            onSave({ ...data, _source: "todo" });
+            onSave();
             onClose();
           },
           undo: async () => {
-            const reverted = await putTodo(todo.id, {
+            await putTodo(todo.id, {
               title: todo.title,
               description: todo.description ?? null,
               priority: todo.priority,
@@ -280,13 +361,15 @@ function TodoFormDialog({
               project_id: todo.project_id ?? null,
               due_date: todo.due_date ?? null,
             });
-            onSave(reverted);
+            onSave();
           },
         });
         return;
       }
-      onSave({ ...data, _source: "todo" });
+      onSave();
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : (isEdit ? "Failed to update task" : "Failed to create task"));
     } finally {
       setLoading(false);
     }
@@ -343,39 +426,66 @@ function TodoFormDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Client</Label>
-              <Select value={form.company_id || "none"} onValueChange={(v) => s("company_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optional">
-                    {namedOptionLabel(companies, form.company_id, "No client")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">No client</SelectItem>
-                  {companies.map((c) => (
-                    <SelectItem key={c.id} value={c.id} className="text-neutral-100">{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-neutral-400 text-xs">Project</Label>
-              <Select value={form.project_id || "none"} onValueChange={(v) => s("project_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Optional">
-                    {namedOptionLabel(projects, form.project_id, "No project")}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">No project</SelectItem>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="text-neutral-100">{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">Project Board</Label>
+            <Select
+              value={form.project_id || "none"}
+              onValueChange={(v) => {
+                const projectId = v === "none" ? "" : (v ?? "");
+                setForm((f) => ({ ...f, project_id: projectId, milestone_id: "" }));
+                if (!projectId) setMilestones([]);
+              }}
+            >
+              <SelectTrigger className="w-full bg-neutral-800 border-neutral-700 text-neutral-100">
+                <SelectValue placeholder="Optional">
+                  {selectedProject ? projectBoardLabel(selectedProject) : "No project board"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                align="start"
+                className="bg-neutral-800 border-neutral-700 max-h-60 min-w-[min(360px,90vw)] w-max"
+              >
+                <SelectItem value="none" className="text-neutral-400">No project board</SelectItem>
+                {projectOptions.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-neutral-100">
+                    <span className="whitespace-normal">{projectBoardLabel(p)}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {showPhaseStatus && (
+            <div className="space-y-1.5">
+              <Label className="text-neutral-400 text-xs">Status</Label>
+              <Select
+                value={form.milestone_id}
+                onValueChange={(v) => s("milestone_id", v ?? "")}
+                disabled={milestonesLoading || milestones.length === 0}
+              >
+                <SelectTrigger className="w-full bg-neutral-800 border-neutral-700 text-neutral-100">
+                  <SelectValue placeholder={milestonesLoading ? "Loading statuses..." : "Choose status"}>
+                    {milestones.find((m) => m.id === form.milestone_id)?.name
+                      ?? (milestonesLoading ? "Loading statuses..." : "Choose status")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-neutral-800 border-neutral-700">
+                  {milestones.map((m) => (
+                    <SelectItem key={m.id} value={m.id} className="text-neutral-100">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: m.color ?? "#9ca3af" }}
+                        />
+                        {m.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Due date</Label>
             <DatePicker
@@ -389,7 +499,7 @@ function TodoFormDialog({
             <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
-            <Button type="submit" disabled={loading}
+            <Button type="submit" disabled={loading || (showPhaseStatus && (milestonesLoading || !form.milestone_id))}
               className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
               {loading ? (isEdit ? "Saving..." : "Adding...") : (isEdit ? "Save" : "Add")}
             </Button>
@@ -1006,6 +1116,12 @@ export default function TodosPage() {
     });
   }
 
+  function openNewTask() {
+    setEditingTodo(null);
+    setFormDefaultProject(undefined);
+    setFormOpen(true);
+  }
+
   function openNewTaskForProject(projectId: string) {
     setEditingTodo(null);
     setFormDefaultProject(projectId);
@@ -1089,12 +1205,18 @@ export default function TodosPage() {
   return (
     <div className="p-8 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">
-          {totalOpen} open · {totalInProgress} in progress
-          {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">
+            {totalOpen} open · {totalInProgress} in progress
+            {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
+          </p>
+        </div>
+        <Button onClick={openNewTask}
+          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
+          <Plus className="w-4 h-4" /> New task
+        </Button>
       </div>
 
       {/* Filters */}
@@ -1311,7 +1433,6 @@ export default function TodosPage() {
         onSave={() => { load(); }}
         todo={editingTodo}
         users={users}
-        companies={companies}
         projects={projects as Project[]}
         currentUser={currentUser}
         defaultProjectId={formDefaultProject}

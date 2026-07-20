@@ -80,6 +80,7 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
   await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
+  await sql`UPDATE milestones SET color = '#9ca3af' WHERE name = 'Backlog' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#e8ff47' WHERE name = 'In Progress' AND color IS NULL`;
@@ -243,6 +244,8 @@ async function _init() {
     if (Number(rows[0].c) > 0) {
       // Always ensure allocations schema (new feature; safe / idempotent)
       await ensureAllocationsTable();
+      // Ensure every project has the current standard phases (e.g. Backlog)
+      await backfillMissingStandardPhases();
       if (runMigrations) {
         await runSchemaMigrations();
       }

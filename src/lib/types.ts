@@ -293,6 +293,7 @@ export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
 };
 
 export const DEFAULT_PROJECT_MILESTONES = [
+  "Backlog",
   "Open",
   "Up Next",
   "In Progress",
@@ -301,6 +302,7 @@ export const DEFAULT_PROJECT_MILESTONES = [
 ] as const;
 
 export const DEFAULT_PHASE_COLORS: Record<(typeof DEFAULT_PROJECT_MILESTONES)[number], string> = {
+  Backlog: "#9ca3af",
   Open: "#60a5fa",
   "Up Next": "#c084fc",
   "In Progress": "#e8ff47",
