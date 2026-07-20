@@ -6,6 +6,7 @@ import { useEffect, useState, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import Link from "next/link";
@@ -36,6 +37,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { BinaryText } from "@/components/binary-text";
+import { BoardLinkChips } from "@/components/linkified-text";
+import { extractLinks } from "@/lib/linkify";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
@@ -228,7 +231,15 @@ function PendingTaskRow({
       <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-orange-200">{task.title}</p>
-        {task.description && <p className="text-xs text-orange-400/60 mt-0.5 truncate"><BinaryText text={task.description} id={`${task.id}-desc`} /></p>}
+        {task.description && (
+          extractLinks(task.description).length > 0 ? (
+            <BoardLinkChips text={task.description} max={2} />
+          ) : (
+            <p className="text-xs text-orange-400/60 mt-0.5 truncate">
+              <BinaryText text={task.description} id={`${task.id}-desc`} />
+            </p>
+          )
+        )}
         <p className="text-xs text-orange-600 mt-0.5">Client request</p>
       </div>
       <button onClick={() => onApprove(task.id)}
@@ -469,9 +480,13 @@ function TaskNameCell({
           <BinaryText text={task.title} id={task.id} />
         </p>
         {task.description && !indent && (
-          <p className="text-xs text-neutral-600 truncate">
-            <BinaryText text={task.description} id={`${task.id}-desc`} />
-          </p>
+          extractLinks(task.description).length > 0 ? (
+            <BoardLinkChips text={task.description} max={2} />
+          ) : (
+            <p className="text-xs text-neutral-600 truncate">
+              <BinaryText text={task.description} id={`${task.id}-desc`} />
+            </p>
+          )
         )}
       </button>
       <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1076,6 +1091,7 @@ function MilestoneSection({
   onRename: (id: string, title: string) => Promise<void>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: milestone.id });
+  const [expanded, setExpanded] = useState(() => !isDonePhase(milestone.name));
 
   const pendingTasks = tasks.filter((t) => !isApprovedTask(t));
   const approvedTasks = sortByPosition(tasks.filter(isApprovedTask));
@@ -1100,12 +1116,15 @@ function MilestoneSection({
         ? "border-amber-900/50 bg-amber-950/10"
         : "border-neutral-800"
     } ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
-      <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900/60 border-b border-neutral-800 group/phase">
+      <div
+        className={`flex items-center gap-3 px-4 py-3 bg-neutral-900/60 group/phase ${
+          expanded ? "border-b border-neutral-800" : ""
+        }`}
+      >
         <label
           className={`flex items-center justify-center cursor-pointer transition-opacity ${
             somePhaseSelected || allPhaseSelected ? "opacity-100" : "opacity-0 group-hover/phase:opacity-100"
           }`}
-          onClick={(e) => e.stopPropagation()}
         >
           <input
             type="checkbox"
@@ -1125,70 +1144,84 @@ function MilestoneSection({
             {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#e8ff47]/60" />}
           </span>
         </label>
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left rounded-sm hover:opacity-90 transition-opacity"
+        >
+          {expanded
+            ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+            : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />}
           <span
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: titleColor }}
           />
-          <h3 className="font-medium truncate" style={{ color: titleColor }}>
+          <h3 className="font-medium truncate flex-1" style={{ color: titleColor }}>
             {milestone.name}
           </h3>
-        </div>
-        <div className="flex items-center gap-3">
-          {!isUnassigned && pendingTasks.length > 0 && (
-            <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
-          )}
-          <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
-          {!isUnassigned && milestone.due_date && (
-            <span className="text-xs text-neutral-700 font-mono">{formatDate(milestone.due_date)}</span>
-          )}
-          {!isUnassigned && (
-            <button onClick={() => onDelete(milestone.id)}
-              className="text-neutral-700 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {pendingTasks.map((task) => (
-        <PendingTaskRow
-          key={task.id}
-          task={task}
-          onDelete={onTaskDelete}
-          onApprove={handleApprove}
-        />
-      ))}
-
-      <div ref={setNodeRef} className="min-h-[2rem]">
-        <SortableContext items={approvedTopLevel.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-          <div className="divide-y divide-neutral-800/40">
-            {approvedTopLevel.map((task) => (
-              <TaskWithSubtasks
-                key={task.id}
-                task={task}
-                subtasks={subtasksByParent.get(task.id) ?? []}
-                projectId={projectId}
-                currentMilestoneId={milestone.id}
-                milestones={milestones}
-                onUpdate={onTaskUpdate}
-                onDelete={onTaskDelete}
-                onClick={onTaskClick}
-                onPhaseChange={onPhaseChange}
-                onRename={onRename}
-                onTaskAdd={onTaskAdd}
-                selectedIds={selectedIds}
-                onToggleSelect={onToggleSelect}
-              />
-            ))}
+          <div className="flex items-center gap-3 shrink-0">
+            {!isUnassigned && pendingTasks.length > 0 && (
+              <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
+            )}
+            <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
+            {!isUnassigned && milestone.due_date && (
+              <span className="text-xs text-neutral-700 font-mono">{formatDate(milestone.due_date)}</span>
+            )}
           </div>
-        </SortableContext>
-        {approvedTopLevel.length === 0 && pendingTasks.length === 0 && (
-          <p className="text-xs text-neutral-700 px-4 py-3">Drop tasks here</p>
+        </button>
+        {!isUnassigned && (
+          <button
+            type="button"
+            onClick={() => onDelete(milestone.id)}
+            className="text-neutral-700 hover:text-red-400 transition-colors p-1 rounded hover:bg-neutral-800 shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
 
-      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
+      {expanded && (
+        <>
+          {pendingTasks.map((task) => (
+            <PendingTaskRow
+              key={task.id}
+              task={task}
+              onDelete={onTaskDelete}
+              onApprove={handleApprove}
+            />
+          ))}
+
+          <div ref={setNodeRef} className="min-h-[2rem]">
+            <SortableContext items={approvedTopLevel.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              <div className="divide-y divide-neutral-800/40">
+                {approvedTopLevel.map((task) => (
+                  <TaskWithSubtasks
+                    key={task.id}
+                    task={task}
+                    subtasks={subtasksByParent.get(task.id) ?? []}
+                    projectId={projectId}
+                    currentMilestoneId={milestone.id}
+                    milestones={milestones}
+                    onUpdate={onTaskUpdate}
+                    onDelete={onTaskDelete}
+                    onClick={onTaskClick}
+                    onPhaseChange={onPhaseChange}
+                    onRename={onRename}
+                    onTaskAdd={onTaskAdd}
+                    selectedIds={selectedIds}
+                    onToggleSelect={onToggleSelect}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+            {approvedTopLevel.length === 0 && pendingTasks.length === 0 && (
+              <p className="text-xs text-neutral-700 px-4 py-3">Drop tasks here</p>
+            )}
+          </div>
+
+          <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
+        </>
+      )}
     </div>
   );
 }

@@ -3,9 +3,12 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import {
   Plus, Check, X, Trash2, Pencil, Filter,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import { BinaryText } from "@/components/binary-text";
+import { BoardLinkChips } from "@/components/linkified-text";
+import { extractLinks } from "@/lib/linkify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -335,9 +338,13 @@ function TaskNameCell({
           <BinaryText text={task.title} id={task.id} />
         </p>
         {task.description && !indent && (
-          <p className="text-xs text-neutral-600 truncate">
-            <BinaryText text={task.description} id={`${task.id}-desc`} />
-          </p>
+          extractLinks(task.description).length > 0 ? (
+            <BoardLinkChips text={task.description} max={2} />
+          ) : (
+            <p className="text-xs text-neutral-600 truncate">
+              <BinaryText text={task.description} id={`${task.id}-desc`} />
+            </p>
+          )
         )}
       </button>
       <div className="flex items-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -572,6 +579,10 @@ function AddTaskInline({
   );
 }
 
+function isDonePhase(name: string) {
+  return name.toLowerCase() === "done";
+}
+
 function MilestoneTasksSection({
   milestone,
   milestones,
@@ -599,6 +610,7 @@ function MilestoneTasksSection({
   isUnassigned?: boolean;
   showEmptyPhases?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(() => !isDonePhase(milestone.name));
   const approvedTopLevel = sortByPosition(tasks.filter(isTopLevelTask));
   const subtasksByParent = groupSubtasksByParent(tasks);
   const titleColor = isUnassigned
@@ -611,7 +623,16 @@ function MilestoneTasksSection({
     <div className={`border rounded-lg overflow-hidden ${
       isUnassigned ? "border-amber-900/50 bg-amber-950/10" : "border-neutral-800"
     }`}>
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-neutral-900/60 border-b border-neutral-800">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className={`flex items-center gap-3 w-full px-4 py-2.5 bg-neutral-900/60 hover:bg-neutral-900/80 transition-colors text-left ${
+          expanded ? "border-b border-neutral-800" : ""
+        }`}
+      >
+        {expanded
+          ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />}
         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: titleColor }} />
         <h3 className="text-sm font-medium truncate flex-1" style={{ color: titleColor }}>
           {milestone.name}
@@ -619,33 +640,33 @@ function MilestoneTasksSection({
         <span className="text-xs text-neutral-600 font-mono">
           {approvedTopLevel.length} task{approvedTopLevel.length !== 1 ? "s" : ""}
         </span>
-      </div>
-      <TaskColumnHeader />
-      <div className="divide-y divide-neutral-800/40">
-        {approvedTopLevel.map((task) => (
-          <TaskWithSubtasks
-            key={task.id}
-            task={task}
-            subtasks={subtasksByParent.get(task.id) ?? []}
-            projectId={projectId}
-            currentMilestoneId={milestone.id}
-            milestones={milestones}
-            onUpdate={onTaskUpdate}
-            onDelete={onTaskDelete}
-            onClick={onTaskClick}
-            onPhaseChange={onPhaseChange}
-            onRename={onRename}
-            onTaskAdd={onTaskAdd}
-          />
-        ))}
-      </div>
-      <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
+      </button>
+      {expanded && (
+        <>
+          <TaskColumnHeader />
+          <div className="divide-y divide-neutral-800/40">
+            {approvedTopLevel.map((task) => (
+              <TaskWithSubtasks
+                key={task.id}
+                task={task}
+                subtasks={subtasksByParent.get(task.id) ?? []}
+                projectId={projectId}
+                currentMilestoneId={milestone.id}
+                milestones={milestones}
+                onUpdate={onTaskUpdate}
+                onDelete={onTaskDelete}
+                onClick={onTaskClick}
+                onPhaseChange={onPhaseChange}
+                onRename={onRename}
+                onTaskAdd={onTaskAdd}
+              />
+            ))}
+          </div>
+          <AddTaskInline onAdd={onTaskAdd} projectId={projectId} milestoneId={isUnassigned ? undefined : milestone.id} />
+        </>
+      )}
     </div>
   );
-}
-
-function isDonePhase(name: string) {
-  return name.toLowerCase() === "done";
 }
 
 type ProjectDetail = {
