@@ -36,7 +36,10 @@ export async function GET(
         GROUP BY task_id
       ) cc ON cc.task_id = t.id
       WHERE t.project_id = ${id}
-      ORDER BY t.position, t.created_at
+      ORDER BY
+        CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        t.position,
+        t.created_at
     `;
 
     project.milestones = milestones.map((m) => ({

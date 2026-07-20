@@ -32,7 +32,10 @@ export async function GET(
       FROM tasks
       WHERE project_id = ${project.id}
         AND (approved = true OR created_by = 'client')
-      ORDER BY position, created_at
+      ORDER BY
+        CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        position,
+        created_at
     `;
 
     project.milestones = milestones.map((m) => ({

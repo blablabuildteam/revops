@@ -82,8 +82,15 @@ function isApprovedTask(task: Task) {
   return task.approved !== false;
 }
 
+const PRIORITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
 function sortByPosition(tasks: Task[]) {
-  return [...tasks].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at));
+  return [...tasks].sort((a, b) => {
+    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
+    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
+    if (pa !== pb) return pa - pb;
+    return a.position - b.position || a.created_at.localeCompare(b.created_at);
+  });
 }
 
 function buildTasksByMilestone(
