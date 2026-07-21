@@ -935,6 +935,11 @@ export function ProjectTaskBoardPanel({
 
   const showUnassigned = unassigned.some(isTopLevelTask) && (showAllPhases || filterStatus !== "done");
 
+  const boardAssigneeNames = useMemo(
+    () => collectAssigneeNames(localTasks),
+    [localTasks],
+  );
+
   if (loading) {
     return (
       <div className="px-4 py-6 space-y-3">
@@ -946,10 +951,6 @@ export function ProjectTaskBoardPanel({
   }
 
   const hasVisibleTasks = visibleMilestones.length > 0 || showUnassigned;
-  const boardAssigneeNames = useMemo(
-    () => collectAssigneeNames(localTasks),
-    [localTasks],
-  );
   const subtasksByParent = groupSubtasksByParent(
     applyTaskFilters(localTasks, filters, milestones),
     sortKey,
