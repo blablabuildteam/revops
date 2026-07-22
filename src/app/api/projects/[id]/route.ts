@@ -7,7 +7,6 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    await ensureTables();
     const { rows: projectRows } = await sql`
       SELECT p.*, json_build_object('id', c.id, 'name', c.name, 'logo_url', c.logo_url) AS company
       FROM projects p
@@ -26,15 +25,16 @@ export async function GET(
       SELECT
         t.*,
         COALESCE(cc.count, 0)::int AS comment_count,
-        EXISTS (
-          SELECT 1 FROM task_attachments ta WHERE ta.task_id = t.id
-        ) AS has_attachments
+        (ha.task_id IS NOT NULL) AS has_attachments
       FROM tasks t
       LEFT JOIN (
         SELECT task_id, COUNT(*)::int AS count
         FROM task_comments
         GROUP BY task_id
       ) cc ON cc.task_id = t.id
+      LEFT JOIN (
+        SELECT DISTINCT task_id FROM task_attachments
+      ) ha ON ha.task_id = t.id
       WHERE t.project_id = ${id}
       ORDER BY
         CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,

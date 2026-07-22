@@ -30,15 +30,25 @@ export function useUndoablePatch<T extends { id: string }>() {
         Object.keys(patch).map((key) => [key, item[key as keyof T]]),
       ) as Partial<T>;
 
-      await withUndo({
-        label,
-        run: async () => {
-          onSuccess(await apply(item.id, patch));
-        },
-        undo: async () => {
-          onSuccess(await apply(item.id, previous));
-        },
-      });
+      try {
+        await withUndo({
+          label,
+          run: async () => {
+            onSuccess({ ...item, ...patch });
+            try {
+              onSuccess(await apply(item.id, patch));
+            } catch (err) {
+              onSuccess(item);
+              throw err;
+            }
+          },
+          undo: async () => {
+            onSuccess(await apply(item.id, previous));
+          },
+        });
+      } catch {
+        // Rolled back; swallow so fire-and-forget callers don't get unhandled rejections.
+      }
     },
     [withUndo],
   );

@@ -884,6 +884,7 @@ export function ProjectTaskBoardPanel({
     const task = localTasks.find((t) => t.id === id);
     if (!task || task.title === title) return;
 
+    handleTaskUpdate({ ...task, title });
     mutation?.begin();
     try {
       const updated = await boardApi.updateTask(id, { title });
@@ -895,6 +896,8 @@ export function ProjectTaskBoardPanel({
           handleTaskUpdate(reverted);
         },
       });
+    } catch {
+      handleTaskUpdate(task);
     } finally {
       mutation?.end();
     }

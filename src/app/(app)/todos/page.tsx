@@ -867,7 +867,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
 
 function ProjectGroup({
   projectId, projectName, companyName, companyLogoUrl,
-  todos, boardTasks, filterStatus,
+  todos, boardTasks, milestones, filterStatus,
   onTodoUpdate, onTodoDelete, onTodoEdit,
   onBoardTaskUpdate, onBoardTaskDelete, onNewTask,
 }: {
@@ -877,6 +877,7 @@ function ProjectGroup({
   companyLogoUrl?: string;
   todos: Todo[];
   boardTasks: ProjectBoardTask[];
+  milestones?: Milestone[];
   filterStatus: "active" | "all" | "done";
   onTodoUpdate: (t: Todo) => void;
   onTodoDelete: (id: string) => void;
@@ -953,6 +954,7 @@ function ProjectGroup({
           <ProjectTaskBoardPanel
             projectId={projectId}
             tasks={boardTasks.map(boardTaskToTask)}
+            milestonesOverride={milestones}
             filterStatus={filterStatus}
             hideToolbar
             onTaskUpdate={onBoardTaskUpdate}
@@ -990,6 +992,7 @@ export default function TodosPage() {
   const { user: sessionUser, ready: sessionReady } = useSession();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [boardTasks, setBoardTasks] = useState<ProjectBoardTask[]>([]);
+  const [milestonesByProject, setMilestonesByProject] = useState<Record<string, Milestone[]>>({});
   const [users, setUsers] = useState<TodoUser[]>(
     () => (getCached<TodoUser[]>(cacheKeys.users) ?? [])
   );
@@ -1039,21 +1042,29 @@ export default function TodosPage() {
     if (filterAssignee !== "all") boardParams.set("assignee", filterAssignee);
     if (filterStatus !== "all") boardParams.set("status", filterStatus);
 
-    const [todoData, userData, companyData, projectData, boardData] = await Promise.all([
+    const [todoData, userData, companyData, projectData, boardPayload] = await Promise.all([
       fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
       getUsers().catch(() => [] as TodoUser[]),
       getCompanies(),
       getProjects(),
       fetch(`/api/tasks/assigned?${boardParams}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
+        .then((r) => (r.ok ? r.json() : { tasks: [], milestonesByProject: {} }))
+        .catch(() => ({ tasks: [], milestonesByProject: {} })),
     ]);
+
+    const boardTasksRaw = Array.isArray(boardPayload)
+      ? boardPayload
+      : (boardPayload.tasks ?? []);
+    const milestonesRaw = Array.isArray(boardPayload)
+      ? {}
+      : (boardPayload.milestonesByProject ?? {});
 
     setUsers(userData);
     setCompanies(companyData);
     setProjects(projectData as Project[]);
     setTodos(todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })));
-    setBoardTasks(boardData.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })));
+    setBoardTasks(boardTasksRaw.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })));
+    setMilestonesByProject(milestonesRaw);
     setCurrentUser((prev) => {
       const me = userData.find((u: TodoUser) => u.id === prev?.id) ?? prev;
       return me;
@@ -1458,6 +1469,7 @@ export default function TodosPage() {
                       companyLogoUrl={group.companyLogoUrl}
                       todos={group.todos}
                       boardTasks={group.boardTasks}
+                      milestones={milestonesByProject[pid]}
                       filterStatus={filterStatus as "active" | "all" | "done"}
                       onTodoUpdate={handleTodoUpdate}
                       onTodoDelete={handleDelete}

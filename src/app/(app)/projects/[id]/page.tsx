@@ -1590,15 +1590,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         return next;
       });
 
-      const fromApproved = (tasksRef.current[fromMilestoneId] || []).filter(isApprovedTask);
-      const toApproved = (tasksRef.current[toMilestoneId] || []).filter(isApprovedTask);
-      await Promise.all([
-        persistContainer(fromMilestoneId, fromApproved),
-        persistContainer(toMilestoneId, toApproved),
-      ]);
-
       if (selectedTask?.id === taskId) setSelectedTask(updated);
 
+      const prevMilestoneId = fromMilestoneId === UNASSIGNED_ID ? null : fromMilestoneId;
       pushUndo({
         label: "Status changed",
         revert: async () => {
@@ -1611,10 +1605,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             tasksRef.current = next;
             return next;
           });
-          await Promise.all([
-            persistContainer(fromMilestoneId, fromSnapshot.filter(isApprovedTask)),
-            persistContainer(toMilestoneId, toSnapshot.filter(isApprovedTask)),
-          ]);
+          await updateTask(taskId, {
+            milestone_id: prevMilestoneId,
+            position: parentTask.position,
+          });
+          await Promise.all(
+            childTasks.map((child) =>
+              updateTask(child.id, {
+                milestone_id: prevMilestoneId,
+              }),
+            ),
+          );
           if (selectedTask?.id === taskId) {
             const restored = fromSnapshot.find((t) => t.id === taskId) ?? null;
             if (restored) setSelectedTask(restored);

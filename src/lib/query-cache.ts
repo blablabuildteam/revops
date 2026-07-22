@@ -134,6 +134,7 @@ export const cacheKeys = {
   opportunities: "opportunities",
   companies: "companies",
   projects: "projects",
+  project: (id: string) => `project:${id}`,
   users: "users",
   allocations: "allocations",
   financeDeals: (opportunityId?: string) =>

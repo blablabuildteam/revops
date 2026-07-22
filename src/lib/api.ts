@@ -128,7 +128,12 @@ export function getProjects(): Promise<ProjectWithStats[]> {
 }
 
 export function getProject(id: string): Promise<Project> {
-  return req(`/projects/${id}`);
+  return cachedFetch(cacheKeys.project(id), () => req(`/projects/${id}`));
+}
+
+function invalidateProjectDetail(projectId?: string | null) {
+  if (projectId) invalidateCache(cacheKeys.project(projectId));
+  else invalidateCachePrefix("project:");
 }
 
 export function createProject(data: Partial<Project>): Promise<Project> {
@@ -147,6 +152,7 @@ export function updateProject(id: string, data: Partial<Project>): Promise<Proje
     body: JSON.stringify(data),
   }).then((updated) => {
     invalidateCache(cacheKeys.projects);
+    invalidateProjectDetail(id);
     return updated;
   });
 }
@@ -154,6 +160,7 @@ export function updateProject(id: string, data: Partial<Project>): Promise<Proje
 export function deleteProject(id: string): Promise<void> {
   return req<void>(`/projects/${id}`, { method: "DELETE" }).then(() => {
     invalidateCache(cacheKeys.projects);
+    invalidateProjectDetail(id);
   });
 }
 
@@ -163,24 +170,41 @@ export function getUsers(): Promise<ApiUser[]> {
 
 // Milestones
 export function createMilestone(projectId: string, data: Partial<Milestone>): Promise<Milestone> {
-  return req(`/projects/${projectId}/milestones`, { method: "POST", body: JSON.stringify(data) });
+  return req<Milestone>(`/projects/${projectId}/milestones`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    invalidateProjectDetail(projectId);
+    return created;
+  });
 }
 
 export function updateMilestone(id: string, data: Partial<Milestone>): Promise<Milestone> {
-  return req(`/milestones/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  return req<Milestone>(`/milestones/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    invalidateProjectDetail(updated.project_id);
+    return updated;
+  });
 }
 
 export function deleteMilestone(id: string): Promise<void> {
-  return req(`/milestones/${id}`, { method: "DELETE" });
+  return req(`/milestones/${id}`, { method: "DELETE" }).then(() => {
+    invalidateProjectDetail();
+  });
 }
 
 export function batchUpdateMilestones(
   projectId: string,
   milestones: { id?: string; name: string; color?: string | null; position: number }[]
 ): Promise<Milestone[]> {
-  return req(`/projects/${projectId}/milestones/batch`, {
+  return req<Milestone[]>(`/projects/${projectId}/milestones/batch`, {
     method: "PUT",
     body: JSON.stringify({ milestones }),
+  }).then((updated) => {
+    invalidateProjectDetail(projectId);
+    return updated;
   });
 }
 
@@ -191,17 +215,24 @@ export function createTask(projectId: string, data: Partial<Task>): Promise<Task
     body: JSON.stringify(data),
   }).then((created) => {
     invalidateCache(cacheKeys.projects);
+    invalidateProjectDetail(projectId);
     return created;
   });
 }
 
 export function updateTask(id: string, data: Partial<Task>): Promise<Task> {
-  return req(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  return req<Task>(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }).then(
+    (updated) => {
+      invalidateProjectDetail(updated.project_id);
+      return updated;
+    },
+  );
 }
 
 export function deleteTask(id: string): Promise<void> {
   return req(`/tasks/${id}`, { method: "DELETE" }).then(() => {
     invalidateCache(cacheKeys.projects);
+    invalidateProjectDetail();
   });
 }
 

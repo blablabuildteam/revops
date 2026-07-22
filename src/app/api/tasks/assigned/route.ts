@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       `;
       assigneeName = (userRows[0]?.name as string | undefined) ?? null;
       if (!assigneeName) {
-        return NextResponse.json([]);
+        return NextResponse.json({ tasks: [], milestonesByProject: {} });
       }
     }
 
@@ -58,7 +58,26 @@ export async function GET(req: NextRequest) {
         t.due_date ASC NULLS LAST,
         t.created_at ASC
     `;
-    return NextResponse.json(rows);
+
+    const projectIds = [...new Set(rows.map((r) => r.project_id as string))];
+    const milestonesByProject: Record<string, unknown[]> = {};
+
+    if (projectIds.length > 0) {
+      // @vercel/postgres Primitive doesn't accept arrays; pass as csv + uuid[].
+      const projectIdCsv = projectIds.join(",");
+      const { rows: milestoneRows } = await sql`
+        SELECT * FROM milestones
+        WHERE project_id = ANY(string_to_array(${projectIdCsv}, ',')::uuid[])
+        ORDER BY position, created_at
+      `;
+      for (const m of milestoneRows) {
+        const pid = m.project_id as string;
+        if (!milestonesByProject[pid]) milestonesByProject[pid] = [];
+        milestonesByProject[pid].push({ ...m, tasks: [] });
+      }
+    }
+
+    return NextResponse.json({ tasks: rows, milestonesByProject });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
