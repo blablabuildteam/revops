@@ -1,4 +1,5 @@
 import { addVat } from "@/lib/vat";
+import { parseLocalDate, toMonthInputValue } from "@/lib/format";
 
 export type Stage =
   | "prospect"
@@ -505,39 +506,94 @@ export function monthlyInsights(deals: FinanceDeal[], month: string) {
   return { expected, actual, actualIncomeTax, availableSalary, salaryTarget: SALARY_MONTHLY };
 }
 
-export function forecastRevenueForMonth(opportunities: Opportunity[], month: string): number {
-  let total = 0;
-  for (const opp of opportunities) {
-    if (opp.stage === "won" || opp.stage === "lost") continue;
-    if (!opp.start_date) continue;
-    const startMonth = opp.start_date.slice(0, 7);
-    const weighted = addVat(
-      (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100)
+function forecastAmountForOpportunityInMonth(
+  opp: Opportunity,
+  month: string,
+): { amount: number; label: string } | null {
+  if (opp.stage === "won" || opp.stage === "lost") return null;
+  if (!opp.start_date) return null;
+
+  const startMonth = toMonthInputValue(opp.start_date);
+  const weighted = addVat(
+    (Number(opp.expected_value) || 0) * ((Number(opp.probability) || 0) / 100),
+  );
+
+  if (opp.type === "retainer") {
+    const endMonth = opp.end_date ? toMonthInputValue(opp.end_date) : null;
+    if (month < startMonth || (endMonth && month > endMonth)) return null;
+
+    const startDate = parseLocalDate(opp.start_date);
+    const endDate = opp.end_date
+      ? parseLocalDate(opp.end_date)
+      : startDate
+        ? new Date(startDate.getFullYear(), startDate.getMonth() + 12, 1)
+        : null;
+    if (!startDate || !endDate) return null;
+    const months = Math.max(
+      1,
+      (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+        (endDate.getMonth() - startDate.getMonth()) +
+        1,
     );
 
-    if (opp.type === "retainer") {
-      const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;
-      if (month >= startMonth && (!endMonth || month <= endMonth)) {
-        const startDate = new Date(opp.start_date);
-        const endDate = opp.end_date ? new Date(opp.end_date) : new Date(startDate.getFullYear(), startDate.getMonth() + 12, 1);
-        const months = Math.max(1,
-          (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1
-        );
-        total += (weighted / months);
-      }
-    } else {
-      // Project: 50% on start, 50% on delivery
-      const endMonth = opp.end_date ? opp.end_date.slice(0, 7) : null;
-      if (!endMonth || endMonth === startMonth) {
-        // No delivery date or same month — full amount in start month
-        if (month === startMonth) total += weighted;
-      } else {
-        if (month === startMonth) total += weighted * 0.5;
-        if (month === endMonth) total += weighted * 0.5;
-      }
-    }
+    return {
+      amount: weighted / months,
+      label: `Monthly retainer · ${opp.probability}%`,
+    };
   }
-  return total;
+
+  const endMonth = opp.end_date ? toMonthInputValue(opp.end_date) : null;
+  if (!endMonth || endMonth === startMonth) {
+    if (month !== startMonth) return null;
+    return {
+      amount: weighted,
+      label: `Full project value · ${opp.probability}%`,
+    };
+  }
+
+  if (month === startMonth) {
+    return {
+      amount: weighted * 0.5,
+      label: `50% at start · ${opp.probability}%`,
+    };
+  }
+  if (month === endMonth) {
+    return {
+      amount: weighted * 0.5,
+      label: `50% at delivery · ${opp.probability}%`,
+    };
+  }
+
+  return null;
+}
+
+export function forecastRevenueBreakdownForMonth(
+  opportunities: Opportunity[],
+  month: string,
+): RevenueBreakdownItem[] {
+  const items: RevenueBreakdownItem[] = [];
+
+  for (const opp of opportunities) {
+    const forecast = forecastAmountForOpportunityInMonth(opp, month);
+    if (!forecast || forecast.amount <= 0) continue;
+
+    items.push({
+      dealId: opp.id,
+      projectName: opp.name,
+      companyName: opp.company?.name ?? "—",
+      amount: forecast.amount,
+      label: forecast.label,
+    });
+  }
+
+  return items.sort((a, b) => b.amount - a.amount);
+}
+
+export function forecastRevenueForMonth(opportunities: Opportunity[], month: string): number {
+  return forecastRevenueBreakdownForMonth(opportunities, month).reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
 }
 
 export function buildInsightSeries(

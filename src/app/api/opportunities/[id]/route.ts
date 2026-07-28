@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { normalizeDateParam } from "@/lib/format";
+import { normalizeDateParam, formatOpportunityRow } from "@/lib/format";
 
 const asNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
@@ -25,7 +25,7 @@ export async function GET(
       WHERE o.id = ${id}
     `;
     if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(formatOpportunityRow(rows[0]));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -95,7 +95,7 @@ export async function PUT(
 
     if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(formatOpportunityRow(rows[0]));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

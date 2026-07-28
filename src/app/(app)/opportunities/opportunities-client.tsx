@@ -31,7 +31,7 @@ import {
   STAGE_LABELS,
   STAGE_ORDER,
 } from "@/lib/types";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, toMonthInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutationFeedback } from "@/components/mutation-provider";
 import { cacheKeys, getCached } from "@/lib/query-cache";
@@ -183,17 +183,17 @@ function InlineMonth({
   onSave: (value: string | null) => void;
   className?: string;
 }) {
-  const month = value?.slice(0, 7) ?? "";
+  const month = toMonthInputValue(value);
   const [local, setLocal] = useState(month);
 
   useEffect(() => {
-    setLocal(value?.slice(0, 7) ?? "");
+    setLocal(toMonthInputValue(value));
   }, [value]);
 
   function commit(next: string) {
     const iso = next ? `${next}-01` : null;
-    const current = value?.slice(0, 7) ? `${value.slice(0, 7)}-01` : null;
-    if (iso !== current) onSave(iso);
+    const current = toMonthInputValue(value);
+    if (next !== current) onSave(iso);
   }
 
   return (
@@ -552,12 +552,11 @@ export default function OpportunitiesPageClient() {
           <table className="w-full table-fixed text-sm">
             <colgroup>
               <col className="w-[10%]" />
-              <col className="w-[16%]" />
-              <col className="w-[11%]" />
-              <col className="w-[30%]" />
-              <col className="w-[9%]" />
-              <col className="w-[8%]" />
+              <col className="w-[18%]" />
               <col className="w-[12%]" />
+              <col className="w-[32%]" />
+              <col className="w-[10%]" />
+              <col className="w-[14%]" />
               <col className="w-[4%]" />
             </colgroup>
             <thead>
@@ -583,9 +582,6 @@ export default function OpportunitiesPageClient() {
                     Deal Order <SortBtn col="expected_value" />
                   </div>
                 </th>
-                <th className="text-right px-1.5 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
-                  Committed
-                </th>
                 <th className="text-left px-2 py-3.5 text-xs text-neutral-500 font-medium whitespace-nowrap">
                   <div className="flex items-center gap-1">
                     Probability % <SortBtn col="probability" />
@@ -598,7 +594,7 @@ export default function OpportunitiesPageClient() {
               {loading
                 ? [...Array(5)].map((_, i) => (
                     <tr key={i}>
-                      {[...Array(8)].map((_, j) => (
+                      {[...Array(7)].map((_, j) => (
                         <td key={j} className="px-4 py-4">
                           <div className="h-5 bg-neutral-800 rounded animate-pulse" />
                         </td>
@@ -642,7 +638,7 @@ export default function OpportunitiesPageClient() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-2 py-4">
+                      <td className="px-2 py-4" onPointerDown={(e) => e.stopPropagation()}>
                         <InlinePeriod
                           startDate={opp.start_date}
                           endDate={opp.end_date}
@@ -655,13 +651,6 @@ export default function OpportunitiesPageClient() {
                           value={Number(opp.expected_value)}
                           onSave={(v) => patchOpp(opp.id, { expected_value: v })}
                           className="text-right text-neutral-300 w-16 ml-auto"
-                        />
-                      </td>
-                      <td className="px-1.5 py-4 text-right">
-                        <InlineNumber
-                          value={Number(opp.actual_value)}
-                          onSave={(v) => patchOpp(opp.id, { actual_value: v })}
-                          className="text-right text-emerald-400 w-16 ml-auto"
                         />
                       </td>
                       <td className="px-2 py-4" onClick={(e) => e.stopPropagation()}>

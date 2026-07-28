@@ -14,8 +14,10 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   FinanceDeal,
+  Opportunity,
   expectedRevenueBreakdownForMonth,
   actualRevenueBreakdownForMonth,
+  forecastRevenueBreakdownForMonth,
   type RevenueBreakdownItem,
 } from "@/lib/types";
 
@@ -76,16 +78,16 @@ function BreakdownItems({
 function InsightChartTooltip({
   active,
   label,
-  forecast,
   netAfterSalary,
   deals,
+  opportunities,
   onDealClick,
 }: {
   active?: boolean;
   label?: string | number;
-  forecast: number;
   netAfterSalary: number;
   deals: FinanceDeal[];
+  opportunities: Opportunity[];
   onDealClick?: (dealId: string) => void;
 }) {
   if (!active || label == null) return null;
@@ -97,8 +99,10 @@ function InsightChartTooltip({
   });
   const expectedBreakdown = expectedRevenueBreakdownForMonth(deals, month);
   const actualBreakdown = actualRevenueBreakdownForMonth(deals, month);
+  const forecastBreakdown = forecastRevenueBreakdownForMonth(opportunities, month);
   const expected = expectedBreakdown.reduce((sum, item) => sum + item.amount, 0);
   const actual = actualBreakdown.reduce((sum, item) => sum + item.amount, 0);
+  const forecast = forecastBreakdown.reduce((sum, item) => sum + item.amount, 0);
 
   return (
     <div className="w-72 rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-xs shadow-xl shadow-black/40">
@@ -139,11 +143,24 @@ function InsightChartTooltip({
           )}
         </div>
 
-        <div className="border-t border-neutral-800 pt-2 space-y-1">
-          <div className="flex items-center justify-between text-neutral-500">
-            <span>Forecasted</span>
-            <span className="font-mono text-violet-300">{formatCurrency(forecast)}</span>
+        <div className="border-t border-neutral-800" />
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-neutral-400">Forecasted</span>
+            <span className="font-mono font-semibold text-violet-300">{formatCurrency(forecast)}</span>
           </div>
+          {forecastBreakdown.length === 0 ? (
+            <p className="text-neutral-600">No pipeline forecast</p>
+          ) : (
+            <BreakdownItems
+              breakdown={forecastBreakdown}
+              amountClassName="text-violet-300"
+            />
+          )}
+        </div>
+
+        <div className="border-t border-neutral-800 pt-2">
           <div className="flex items-center justify-between text-neutral-500">
             <span>Net after salary</span>
             <span className="font-mono text-orange-400">{formatCurrency(netAfterSalary)}</span>
@@ -157,10 +174,12 @@ function InsightChartTooltip({
 export function FinanceOutlookChart({
   data,
   deals,
+  opportunities,
   onDealClick,
 }: {
   data: InsightPoint[];
   deals: FinanceDeal[];
+  opportunities: Opportunity[];
   onDealClick?: (dealId: string) => void;
 }) {
   return (
@@ -194,13 +213,11 @@ export function FinanceOutlookChart({
               <InsightChartTooltip
                 active={props.active}
                 label={props.label}
-                forecast={Number(
-                  props.payload?.find((entry) => entry.dataKey === "forecast")?.value ?? 0,
-                )}
                 netAfterSalary={Number(
                   props.payload?.find((entry) => entry.dataKey === "netAfterSalary")?.value ?? 0,
                 )}
                 deals={deals}
+                opportunities={opportunities}
                 onDealClick={onDealClick}
               />
             )}

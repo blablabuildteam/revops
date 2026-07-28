@@ -394,6 +394,7 @@ export default function FinancePage() {
             <FinanceOutlookChart
               data={insightSeries}
               deals={deals}
+              opportunities={opportunities}
               onDealClick={handleDealBreakdownClick}
             />
 

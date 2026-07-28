@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { formatOpportunityRow } from "@/lib/format";
 
 const asNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
@@ -24,7 +25,7 @@ export async function GET() {
       LEFT JOIN companies c ON c.id = o.company_id
       ORDER BY o.updated_at DESC
     `;
-    return NextResponse.json(rows);
+    return NextResponse.json(rows.map((row) => formatOpportunityRow(row)));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
       opp.company = null;
     }
 
-    return NextResponse.json(opp, { status: 201 });
+    return NextResponse.json(formatOpportunityRow(opp), { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

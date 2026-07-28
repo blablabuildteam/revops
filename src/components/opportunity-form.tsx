@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Calendar } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,10 @@ import {
   normalizeOpportunityType,
 } from "@/lib/types";
 import { createOpportunity, updateOpportunity, getCompanies, createCompany } from "@/lib/api";
+import { toMonthInputValue } from "@/lib/format";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { useMutationFeedbackOptional } from "@/components/mutation-provider";
+import { cn } from "@/lib/utils";
 
 interface OpportunityFormProps {
   open: boolean;
@@ -60,6 +63,29 @@ const defaultForm: NewOpportunity = {
 };
 
 const fc = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm placeholder:text-neutral-600";
+
+function MonthField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        type="month"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(fc, "month-picker-input relative pr-9 font-mono")}
+      />
+      <Calendar
+        aria-hidden
+        className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-white"
+      />
+    </div>
+  );
+}
 
 export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: OpportunityFormProps) {
   const [form, setForm] = useState<NewOpportunity>(defaultForm);
@@ -100,8 +126,8 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         proposal_url: initial.proposal_url || "",
         owner: initial.owner || "",
         close_date: initial.close_date || "",
-        start_date: initial.start_date ? initial.start_date.slice(0, 7) : "",
-        end_date: initial.end_date ? initial.end_date.slice(0, 7) : "",
+        start_date: toMonthInputValue(initial.start_date),
+        end_date: toMonthInputValue(initial.end_date),
         notes: initial.notes || "",
         tags: initial.tags || [],
       });
@@ -115,8 +141,12 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         actual_value: Number(initial.actual_value),
         currency: initial.currency,
         notes: initial.notes || undefined,
-        start_date: initial.start_date ? initial.start_date.slice(0, 7) + "-01" : undefined,
-        end_date: initial.end_date ? initial.end_date.slice(0, 7) + "-01" : undefined,
+        start_date: toMonthInputValue(initial.start_date)
+          ? `${toMonthInputValue(initial.start_date)}-01`
+          : undefined,
+        end_date: toMonthInputValue(initial.end_date)
+          ? `${toMonthInputValue(initial.end_date)}-01`
+          : undefined,
       };
       if (initial.company?.id && initial.company?.name) {
         setCompanies((prev) =>
@@ -390,45 +420,29 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                 </div>
               </div>
 
-              {/* Deal Order + Committed */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Deal Order (€, excl. VAT)</Label>
-                  <Input
-                    type="number" min="0"
-                    value={form.expected_value}
-                    onChange={(e) => set("expected_value", e.target.value)}
-                    className={`${fc} font-mono`}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Committed (€, excl. VAT)</Label>
-                  <Input
-                    type="number" min="0"
-                    value={form.actual_value}
-                    onChange={(e) => set("actual_value", e.target.value)}
-                    className={`${fc} font-mono`}
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-neutral-400 text-xs">Deal Order (€, excl. VAT)</Label>
+                <Input
+                  type="number" min="0"
+                  value={form.expected_value}
+                  onChange={(e) => set("expected_value", e.target.value)}
+                  className={`${fc} font-mono`}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Expected start</Label>
-                  <Input
-                    type="month"
+                  <MonthField
                     value={form.start_date ?? ""}
-                    onChange={(e) => set("start_date", e.target.value)}
-                    className={fc}
+                    onChange={(value) => set("start_date", value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Expected delivery</Label>
-                  <Input
-                    type="month"
+                  <MonthField
                     value={form.end_date ?? ""}
-                    onChange={(e) => set("end_date", e.target.value)}
-                    className={fc}
+                    onChange={(value) => set("end_date", value)}
                   />
                 </div>
               </div>

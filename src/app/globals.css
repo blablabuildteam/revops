@@ -139,12 +139,23 @@ html.light .month-picker-input {
 }
 
 .month-picker-input::-webkit-calendar-picker-indicator {
-  display: none;
-  -webkit-appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .month-picker-input::-moz-calendar-picker-indicator {
-  display: none;
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 /* Global in-flight mutation progress bar */

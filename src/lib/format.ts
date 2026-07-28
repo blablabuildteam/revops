@@ -7,7 +7,7 @@ export function formatCurrency(value: number, currency = "EUR"): string {
   }).format(value);
 }
 
-function parseLocalDate(dateStr?: string | Date | null): Date | null {
+export function parseLocalDate(dateStr?: string | Date | null): Date | null {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return dateStr;
   const str = String(dateStr).trim();
@@ -79,7 +79,7 @@ function toISODateString(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function toMonthInputValue(month?: string | Date | null): string {
+export function toMonthInputValue(month?: string | Date | null): string {
   if (!month) return "";
   if (month instanceof Date) {
     const y = month.getFullYear();
@@ -129,6 +129,19 @@ export function formatFinanceDealRow(row: Record<string, unknown>) {
       date: toDateInputValue(p.date),
       amount: Number(p.amount) || 0,
     })),
+  };
+}
+
+export function formatOpportunityRow(row: Record<string, unknown>) {
+  return {
+    ...row,
+    expected_value: Number(row.expected_value),
+    actual_value: Number(row.actual_value),
+    probability: Number(row.probability),
+    weighted_value: Number(row.weighted_value),
+    start_date: row.start_date ? toDateInputValue(row.start_date as string | Date) : undefined,
+    end_date: row.end_date ? toDateInputValue(row.end_date as string | Date) : undefined,
+    close_date: row.close_date ? toDateInputValue(row.close_date as string | Date) : undefined,
   };
 }
 
