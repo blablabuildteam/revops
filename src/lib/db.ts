@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Ensures the schema is ready for requests.
  * Warm path: no-op after first call in this isolate.
  * Cold path when tables already exist: single existence check only.
- * Set RUN_DB_MIGRATIONS=true to apply DDL, constraint fixes, and phase backfill.
+ * Set RUN_DB_MIGRATIONS=true to apply DDL, constraint fixes, and one-shot data migrations.
  * Fresh databases still run full CREATE + migrations.
  */
 export async function ensureTables() {
@@ -51,6 +51,40 @@ async function migrateFinanceDealsToInclVat() {
   await sql`
     INSERT INTO finance_settings (key, value, updated_at)
     VALUES ('finance_deals_incl_vat', 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
+}
+
+/**
+ * One-shot: add missing standard phases / place Backlog once.
+ * Must not re-run — Edit statuses owns column order after this.
+ * If Backlog already exists, the historical migration already applied; only stamp the flag.
+ */
+async function migrateStandardPhasesOnce() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS finance_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  const { rows } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'standard_phases_backfilled'
+  `;
+  if (rows.length > 0 && rows[0].value === "true") return;
+
+  const { rows: backlogRows } = await sql`
+    SELECT 1 AS ok FROM milestones WHERE name = 'Backlog' LIMIT 1
+  `;
+  // Already applied in production — do not re-enforce order or revive deleted phases.
+  if (backlogRows.length === 0) {
+    await backfillMissingStandardPhases();
+  }
+
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES ('standard_phases_backfilled', 'true', now())
     ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
   `;
 }
@@ -150,7 +184,7 @@ async function runSchemaMigrations() {
   await ensureAllocationsTable();
   await migrateOpportunityTypes();
   await migrateFinanceDealsToInclVat();
-  await backfillMissingStandardPhases();
+  await migrateStandardPhasesOnce();
 }
 
 /** Allow share-link board creates (`created_by = 'external'`). Idempotent. */

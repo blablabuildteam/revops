@@ -11,7 +11,10 @@ export async function ensureDefaultMilestones(projectId: string) {
   }
 }
 
-/** Idempotent: adds any missing standard phases to existing projects. */
+/**
+ * One-shot migration helper: adds any missing standard phases to existing projects.
+ * Do not call on every boot — overwrites user-edited status order / deletions.
+ */
 export async function backfillMissingStandardPhases() {
   for (let i = 0; i < DEFAULT_PROJECT_MILESTONES.length; i++) {
     const name = DEFAULT_PROJECT_MILESTONES[i];
@@ -32,8 +35,9 @@ export async function backfillMissingStandardPhases() {
 }
 
 /**
- * Idempotent: places Backlog after On Hold and before Done on every board.
+ * One-shot migration helper: places Backlog after On Hold and before Done.
  * Preserves relative order of all other phases (including custom ones).
+ * Do not call after users can edit status order via Edit statuses.
  */
 export async function ensureBacklogPhaseOrder() {
   const { rows: projects } = await sql`
