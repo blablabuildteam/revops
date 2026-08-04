@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import {
   Plus, CheckCircle2, Circle, Clock, Trash2,
   User, Building2, FolderKanban, Calendar,
-  ChevronDown, ChevronRight, ListTodo, ArrowLeft,
+  ChevronDown, ChevronRight, ListTodo, ArrowLeft, Search,
 } from "lucide-react";
 import Link from "next/link";
 import { BinaryText } from "@/components/binary-text";
@@ -26,6 +26,7 @@ import {
 import { createTask, getCompanies, getProject, getProjects, getUsers } from "@/lib/api";
 import { Company, Milestone, Project, Task } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
+import { matchesTaskSearch, normalizeTaskSearchQuery } from "@/lib/task-search";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { ProjectTaskBoardPanel } from "@/components/project-task-board";
 import { useSession } from "@/components/session-provider";
@@ -112,6 +113,30 @@ function boardTaskToTask(t: ProjectBoardTask): Task {
 
 function isDonePhase(name?: string) {
   return (name ?? "").toLowerCase() === "done";
+}
+
+function todoMatchesSearch(todo: Todo, query: string): boolean {
+  return matchesTaskSearch(
+    query,
+    todo.title,
+    todo.description,
+    todo.assignee_name,
+    todo.company_name,
+    todo.project_name,
+    todo.project_company_name,
+  );
+}
+
+function boardTaskMatchesSearch(task: ProjectBoardTask, query: string): boolean {
+  return matchesTaskSearch(
+    query,
+    task.title,
+    task.description,
+    task.assignee,
+    task.project_name,
+    task.company_name,
+    task.milestone_name,
+  );
 }
 
 type TodoStatus = Todo["status"];
@@ -1010,6 +1035,7 @@ export default function TodosPage() {
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterCompany, setFilterCompany] = useState("all");
   const [filterStatus, setFilterStatus] = useState("active");
+  const [search, setSearch] = useState("");
   const [myTodosView, setMyTodosView] = useState<"active" | "completed">("active");
   const [filtersReady, setFiltersReady] = useState(false);
   const defaultAssigneeApplied = useRef(false);
@@ -1205,6 +1231,7 @@ export default function TodosPage() {
   }
 
   const people = assigneeOptions(users, currentUser);
+  const searchActive = !!normalizeTaskSearchQuery(search);
 
   // Split todos into personal vs project-linked
   const personalTodos = todos.filter((t) => !t.project_id);
@@ -1250,13 +1277,30 @@ export default function TodosPage() {
     group.boardTasks.push(t);
   }
 
+  if (searchActive) {
+    for (const [pid, group] of Array.from(projectGroups.entries())) {
+      const groupNameMatch = matchesTaskSearch(search, group.name, group.companyName);
+      if (!groupNameMatch) {
+        group.todos = group.todos.filter((t) => todoMatchesSearch(t, search));
+        group.boardTasks = group.boardTasks.filter((t) => boardTaskMatchesSearch(t, search));
+      }
+      if (group.todos.length === 0 && group.boardTasks.length === 0) {
+        projectGroups.delete(pid);
+      }
+    }
+  }
+
+  const searchedPersonalTodos = searchActive
+    ? personalTodos.filter((t) => todoMatchesSearch(t, search))
+    : personalTodos;
+
   // Further split personal to-dos
-  const personalActive = filterStatus === "done" ? [] : personalTodos.filter((t) => t.status !== "done");
-  const personalDone = sortCompletedLatest(personalTodos.filter((t) => t.status === "done"));
+  const personalActive = filterStatus === "done" ? [] : searchedPersonalTodos.filter((t) => t.status !== "done");
+  const personalDone = sortCompletedLatest(searchedPersonalTodos.filter((t) => t.status === "done"));
   const personalDonePreview = personalDone.slice(0, 3);
   const showCompletedView = myTodosView === "completed" || filterStatus === "done";
 
-  // Stats (include both sources)
+  // Stats (include both sources) — based on unfiltered lists so header counts stay stable
   const totalOpen = personalTodos.filter((t) => t.status === "open").length
     + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.status === "open").length;
   const totalInProgress = personalTodos.filter((t) => t.status === "in_progress").length
@@ -1285,6 +1329,15 @@ export default function TodosPage() {
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks..."
+            className="pl-9 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-sm"
+          />
+        </div>
         <Select value={filterAssignee} onValueChange={(v) => setFilterAssignee(v ?? "all")}>
           <SelectTrigger className="w-40 bg-neutral-900 border-neutral-700 text-neutral-100 h-8 text-sm">
             <SelectValue>
@@ -1389,7 +1442,9 @@ export default function TodosPage() {
                   {personalDone.length === 0 && (
                     <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
                       <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                      <p className="text-neutral-600 text-xs">No completed to-dos yet</p>
+                      <p className="text-neutral-600 text-xs">
+                        {searchActive ? "No completed to-dos match your search" : "No completed to-dos yet"}
+                      </p>
                     </div>
                   )}
                 </>
@@ -1435,7 +1490,9 @@ export default function TodosPage() {
                   {personalActive.length === 0 && personalDone.length === 0 && (
                     <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
                       <CheckCircle2 className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                      <p className="text-neutral-600 text-xs">No personal to-dos — all caught up!</p>
+                      <p className="text-neutral-600 text-xs">
+                        {searchActive ? "No personal to-dos match your search" : "No personal to-dos — all caught up!"}
+                      </p>
                     </div>
                   )}
                 </>
@@ -1483,8 +1540,12 @@ export default function TodosPage() {
               ) : (
                 <div className="py-8 text-center border border-dashed border-neutral-800 rounded-lg">
                   <FolderKanban className="w-6 h-6 text-neutral-700 mx-auto mb-2" />
-                  <p className="text-neutral-600 text-xs">No project tasks yet</p>
-                  <p className="text-neutral-700 text-xs mt-1">Assign a project when creating a task to see it here</p>
+                  <p className="text-neutral-600 text-xs">
+                    {searchActive ? "No project tasks match your search" : "No project tasks yet"}
+                  </p>
+                  {!searchActive && (
+                    <p className="text-neutral-700 text-xs mt-1">Assign a project when creating a task to see it here</p>
+                  )}
                 </div>
               )}
             </section>

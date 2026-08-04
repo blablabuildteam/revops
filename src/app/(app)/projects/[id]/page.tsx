@@ -6,7 +6,7 @@ import { useEffect, useState, use, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Search,
 } from "lucide-react";
 import { PriorityFlag } from "@/components/priority-flag";
 import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
@@ -55,6 +55,7 @@ import {
   useAssigneeSelectChange,
 } from "@/components/assignee-select";
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
+import { filterTasksBySearch } from "@/lib/task-search";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
@@ -1333,6 +1334,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [sortAsc, setSortAsc] = useState(true);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
+  const [search, setSearch] = useState("");
 
   const taskDetailApi = useMemo(() => ({
     ...baseTaskDetailApi,
@@ -1952,8 +1954,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const allTasks = Object.values(tasksByMilestone).flat();
-  const allFilteredTasks = applyTaskFilters(allTasks, filters, project?.milestones ?? []);
+  const allFilteredTasks = applyTaskFilters(
+    filterTasksBySearch(allTasks, search),
+    filters,
+    project?.milestones ?? [],
+  );
   const subtasksByParent = groupSubtasksByParent(allFilteredTasks, sortKey, sortAsc);
+
+  function filterMilestoneTasks(tasks: Task[]) {
+    return applyTaskFilters(
+      filterTasksBySearch(tasks, search),
+      filters,
+      project?.milestones ?? [],
+    );
+  }
   const approvedTasksAll = allTasks.filter(isApprovedTask);
   const pendingRequests = allTasks.filter((t) => !isApprovedTask(t)).length;
   const hasApprovedTasks = approvedTasksAll.length > 0;
@@ -2183,6 +2197,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative w-52">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              className="pl-8 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-xs"
+            />
+          </div>
           <Button
             type="button"
             onClick={openNewTask}
@@ -2292,7 +2315,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               }}
               milestones={project.milestones}
               projectId={project.id}
-              tasks={applyTaskFilters(tasksByMilestone[UNASSIGNED_ID] || [], filters, project.milestones)}
+              tasks={filterMilestoneTasks(tasksByMilestone[UNASSIGNED_ID] || [])}
               subtasksByParent={subtasksByParent}
               sortKey={sortKey}
               sortAsc={sortAsc}
@@ -2309,7 +2332,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             />
           )}
           {project.milestones.map((milestone) => {
-            const filteredTasks = applyTaskFilters(tasksByMilestone[milestone.id] || [], filters, project.milestones);
+            const filteredTasks = filterMilestoneTasks(tasksByMilestone[milestone.id] || []);
             return (
               <MilestoneSection
                 key={milestone.id}
