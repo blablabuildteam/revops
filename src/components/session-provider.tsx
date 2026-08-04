@@ -20,9 +20,16 @@ type SessionContextValue = {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [ready, setReady] = useState(false);
+type SessionProviderProps = {
+  children: ReactNode;
+  /** When provided (including null), session is ready immediately; still refreshed in background. */
+  initialUser?: SessionUser | null;
+};
+
+export function SessionProvider({ children, initialUser }: SessionProviderProps) {
+  const hasInitial = initialUser !== undefined;
+  const [user, setUser] = useState<SessionUser | null>(initialUser ?? null);
+  const [ready, setReady] = useState(hasInitial);
 
   const refresh = useCallback(async () => {
     try {

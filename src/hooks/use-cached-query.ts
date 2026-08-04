@@ -18,7 +18,8 @@ export function useCachedQuery<T>(key: string, fetcher: () => Promise<T>) {
   const cached = useSyncExternalStore(
     (onStoreChange) => subscribe<T>(key, () => onStoreChange()),
     () => getCached<T>(key),
-    () => undefined
+    // Same snapshot as client so layout-seeded cache hydrates without mismatch
+    () => getCached<T>(key)
   );
 
   const [isLoading, setIsLoading] = useState(() => getCached<T>(key) === undefined);

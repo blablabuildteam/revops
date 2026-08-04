@@ -8,8 +8,8 @@ let initPromise: Promise<void> | null = null;
 /**
  * Ensures the schema is ready for requests.
  * Warm path: no-op after first call in this isolate.
- * Cold path when tables already exist: single existence check (no ALTERs/migrations).
- * Set RUN_DB_MIGRATIONS=true to apply pending column/data migrations on boot.
+ * Cold path when tables already exist: single existence check only.
+ * Set RUN_DB_MIGRATIONS=true to apply DDL, constraint fixes, and phase backfill.
  * Fresh databases still run full CREATE + migrations.
  */
 export async function ensureTables() {
@@ -257,12 +257,8 @@ async function _init() {
       WHERE table_schema = 'public' AND table_name = 'users'
     `;
     if (Number(rows[0].c) > 0) {
-      // Always ensure allocations schema (new feature; safe / idempotent)
-      await ensureAllocationsTable();
-      // Share-link task creates use created_by = 'external'
-      await ensureTaskCreatedByConstraint();
-      // Ensure every project has the current standard phases and Backlog order
-      await backfillMissingStandardPhases();
+      // Fast path: skip all DDL/backfill unless explicitly requested.
+      // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
         await runSchemaMigrations();
       }
