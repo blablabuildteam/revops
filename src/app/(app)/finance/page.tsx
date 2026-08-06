@@ -24,9 +24,15 @@ import { formatCurrency, toDateInputValue } from "@/lib/format";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
 import { VatAmountPair } from "@/components/vat-amount-pair";
 import { removeVat } from "@/lib/vat";
-import { updateFinanceDeal } from "@/lib/api";
+import { updateFinanceDeal, updateTaxSettings } from "@/lib/api";
 import { useUndoToast } from "@/components/mutation-provider";
-import { useFinanceDeals, useFinanceSummary, useOpportunities } from "@/hooks/use-api-data";
+import {
+  useFinanceDeals,
+  useFinanceSummary,
+  useOpportunities,
+  useTaxSettings,
+} from "@/hooks/use-api-data";
+import { DEFAULT_TAX_SETTINGS, type TaxSettings } from "@/lib/tax-settings";
 import {
   DEAL_TYPE_LABELS,
   DealType,
@@ -54,6 +60,34 @@ const FinanceOutlookChart = dynamicImport(
     ),
   }
 );
+
+const TaxReservePanel = dynamicImport(
+  () => import("./tax-reserve-panel").then((m) => m.TaxReservePanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-96 border border-neutral-800 rounded-lg bg-neutral-900/40 animate-pulse" />
+    ),
+  }
+);
+
+const BvCheckPanel = dynamicImport(
+  () => import("./bv-check-panel").then((m) => m.BvCheckPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-96 border border-neutral-800 rounded-lg bg-neutral-900/40 animate-pulse" />
+    ),
+  }
+);
+
+const TABS = [
+  { id: "overview", label: "Overview", sub: "Finance deals (incl. VAT), allocation & salary pot" },
+  { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax as a VOF" },
+  { id: "bv", label: "BV check", sub: "Whether converting to a BV is worth it yet" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
 
 interface Summary {
   month: string;
@@ -215,7 +249,22 @@ export default function FinancePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [manualDealOpen, setManualDealOpen] = useState(false);
   const [insightsMonth, setInsightsMonth] = useState(currentMonth);
+  const [tab, setTab] = useState<TabId>("overview");
   const withUndo = useUndoToast();
+
+  const { data: savedTaxSettings } = useTaxSettings();
+  const [taxOverrides, setTaxOverrides] = useState<Partial<TaxSettings>>({});
+  const taxSettings: TaxSettings = {
+    ...DEFAULT_TAX_SETTINGS,
+    ...savedTaxSettings,
+    ...taxOverrides,
+  };
+
+  // Keep the panels responsive while the save round-trips in the background.
+  const handleTaxSettingsChange = useCallback((patch: Partial<TaxSettings>) => {
+    setTaxOverrides((prev) => ({ ...prev, ...patch }));
+    void updateTaxSettings(patch).catch((err) => console.error(err));
+  }, []);
 
   const load = useCallback(async () => {
     await Promise.all([mutateSummary(), mutateDeals()]);
@@ -369,23 +418,64 @@ export default function FinancePage() {
   );
   const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
 
+  const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
+
   return (
-    <div className="p-8 space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="p-8 space-y-6">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Finance overview</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">Finance deals (incl. VAT), allocation & salary pot</p>
+          <h1 className="text-xl font-semibold text-neutral-100">Finance</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">{activeTab.sub}</p>
         </div>
-        <Button
-          onClick={() => setManualDealOpen(true)}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add deal
-        </Button>
+        {tab === "overview" && (
+          <Button
+            onClick={() => setManualDealOpen(true)}
+            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add deal
+          </Button>
+        )}
       </div>
 
-      {loading ? (
+      <div className="flex items-center gap-1 border-b border-neutral-800">
+        {TABS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setTab(entry.id)}
+            aria-current={tab === entry.id ? "page" : undefined}
+            className={cn(
+              "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
+              tab === entry.id
+                ? "text-[#e8ff47] border-[#e8ff47]"
+                : "text-neutral-500 border-transparent hover:text-neutral-200",
+            )}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "tax" && (
+        <TaxReservePanel
+          deals={deals}
+          opportunities={opportunities}
+          settings={taxSettings}
+          onSettingsChange={handleTaxSettingsChange}
+        />
+      )}
+
+      {tab === "bv" && (
+        <BvCheckPanel
+          deals={deals}
+          opportunities={opportunities}
+          settings={taxSettings}
+          onSettingsChange={handleTaxSettingsChange}
+        />
+      )}
+
+      {tab === "overview" && (loading ? (
         <div className="h-64 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
       ) : summary && (
         <>
@@ -647,7 +737,7 @@ export default function FinancePage() {
               )}
           </div>
         </>
-      )}
+      ))}
 
       <Dialog open={!!selectedDeal} onOpenChange={(o) => !o && setSelectedDeal(null)}>
         <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-2xl w-[92vw] p-0 overflow-hidden">

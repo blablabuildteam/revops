@@ -12,6 +12,7 @@ import {
   TaskComment,
   TaskAttachment,
 } from "./types";
+import type { TaxSettings } from "./tax-settings";
 import {
   cachedFetch,
   cacheKeys,
@@ -350,6 +351,21 @@ export function getFinanceSummary<T = unknown>(month: string): Promise<T> {
   return cachedFetch(cacheKeys.financeSummary(month), () =>
     req<T>(`/finance/summary?month=${month}`)
   );
+}
+
+// Tax assumptions behind the reserve and BV comparison
+export function getTaxSettings(): Promise<TaxSettings> {
+  return cachedFetch(cacheKeys.taxSettings, () => req<TaxSettings>("/finance/tax-settings"));
+}
+
+export function updateTaxSettings(data: Partial<TaxSettings>): Promise<TaxSettings> {
+  return req<TaxSettings>("/finance/tax-settings", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((saved) => {
+    setCached(cacheKeys.taxSettings, saved);
+    return saved;
+  });
 }
 
 /** Optimistically patch a cached opportunities list after local edits. */

@@ -149,4 +149,5 @@ export const cacheKeys = {
   financeDeals: (opportunityId?: string) =>
     opportunityId ? `finance-deals:${opportunityId}` : "finance-deals",
   financeSummary: (month: string) => `finance-summary:${month}`,
+  taxSettings: "tax-settings",
 } as const;

@@ -9,11 +9,13 @@ import {
   getFinanceSummary,
   getOpportunities,
   getProjects,
+  getTaxSettings,
   getUsers,
   type ApiUser,
   type ProjectWithStats,
 } from "@/lib/api";
 import { cacheKeys } from "@/lib/query-cache";
+import type { TaxSettings } from "@/lib/tax-settings";
 import type { Allocation, Company, FinanceDeal, Opportunity } from "@/lib/types";
 
 export function useOpportunities() {
@@ -57,4 +59,8 @@ function useStableFinanceSummaryFetcher(month: string) {
 export function useFinanceSummary<T = unknown>(month: string) {
   const fetcher = useStableFinanceSummaryFetcher(month);
   return useCachedQuery<T>(cacheKeys.financeSummary(month), fetcher as () => Promise<T>);
+}
+
+export function useTaxSettings() {
+  return useCachedQuery<TaxSettings>(cacheKeys.taxSettings, getTaxSettings);
 }
