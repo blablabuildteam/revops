@@ -5,7 +5,7 @@ import {
   Plus, Check, X, Trash2, Pencil, Filter,
   ChevronDown, ChevronRight,
 } from "lucide-react";
-import { PriorityFlag } from "@/components/priority-flag";
+import { PrioritySelect } from "@/components/priority-select";
 import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
 import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import { BinaryText } from "@/components/binary-text";
@@ -465,7 +465,8 @@ function TaskRow({
         onToggleExpand={onToggleExpand}
       />
       <TaskRowIndicators task={task} />
-      <PriorityFlag
+      <PrioritySelect
+        iconOnly
         priority={task.priority ?? "low"}
         onChange={(next) => {
           void patchTask({
@@ -765,6 +766,7 @@ export function ProjectTaskBoardPanel({
   showAllPhases,
   milestonesOverride,
   hideToolbar,
+  sortKeyOverride,
 }: {
   projectId: string;
   tasks: Task[];
@@ -774,6 +776,8 @@ export function ProjectTaskBoardPanel({
   showAllPhases?: boolean;
   milestonesOverride?: Milestone[];
   hideToolbar?: boolean;
+  /** Lets an embedding page drive ordering from its own sort control. */
+  sortKeyOverride?: TaskBoardSortKey;
 }) {
   const boardApi = useBoardApi();
   const mutation = useMutationFeedbackOptional();
@@ -783,9 +787,11 @@ export function ProjectTaskBoardPanel({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [editStatusesOpen, setEditStatusesOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<TaskBoardSortKey>("priority");
+  const [localSortKey, setSortKey] = useState<TaskBoardSortKey>("priority");
   const [sortAsc, setSortAsc] = useState(true);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
+
+  const sortKey = sortKeyOverride ?? localSortKey;
 
   function toggleSort(key: TaskBoardSortKey) {
     if (sortKey === key) setSortAsc((a) => !a);

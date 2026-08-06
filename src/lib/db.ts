@@ -182,9 +182,23 @@ async function runSchemaMigrations() {
     )
   `;
   await ensureAllocationsTable();
+  await ensurePerformanceIndexes();
   await migrateOpportunityTypes();
   await migrateFinanceDealsToInclVat();
   await migrateStandardPhasesOnce();
+}
+
+/** Indexes backing the task/todo list queries that run on every page load. */
+async function ensurePerformanceIndexes() {
+  await sql`CREATE INDEX IF NOT EXISTS todos_assignee_id ON todos (assignee_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS todos_project_id ON todos (project_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS todos_company_id ON todos (company_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS todos_status ON todos (status)`;
+  await sql`CREATE INDEX IF NOT EXISTS tasks_project_id ON tasks (project_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS tasks_milestone_id ON tasks (milestone_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS tasks_parent_id ON tasks (parent_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS tasks_assignee_approved ON tasks (assignee, approved)`;
+  await sql`CREATE INDEX IF NOT EXISTS milestones_project_id_position ON milestones (project_id, position)`;
 }
 
 /** Allow share-link board creates (`created_by = 'external'`). Idempotent. */

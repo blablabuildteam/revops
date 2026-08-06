@@ -31,10 +31,12 @@ function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
 function SelectTrigger({
   className,
   size = "default",
+  hideIcon = false,
   children,
   ...props
 }: SelectPrimitive.Trigger.Props & {
   size?: "sm" | "default"
+  hideIcon?: boolean
 }) {
   return (
     <SelectPrimitive.Trigger
@@ -47,11 +49,13 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon
-        render={
-          <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
-        }
-      />
+      {!hideIcon && (
+        <SelectPrimitive.Icon
+          render={
+            <ChevronDownIcon className="pointer-events-none size-4 text-muted-foreground" />
+          }
+        />
+      )}
     </SelectPrimitive.Trigger>
   )
 }

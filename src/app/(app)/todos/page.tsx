@@ -2,15 +2,16 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Plus, CheckCircle2, Circle, Clock, Trash2,
-  User, Building2, FolderKanban, Calendar,
+  Plus, CheckCircle2, Trash2,
+  User, Building2, FolderKanban, ArrowUpDown,
   ChevronDown, ChevronRight, ListTodo, ArrowLeft, Search,
 } from "lucide-react";
 import Link from "next/link";
 import { BinaryText } from "@/components/binary-text";
-import { PriorityFlag, type Priority } from "@/components/priority-flag";
+import { PrioritySelect, type Priority } from "@/components/priority-select";
+import { TodoStatusSelect, type TodoStatus } from "@/components/todo-status-select";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +26,15 @@ import {
 } from "@/components/ui/dialog";
 import { createTask, getCompanies, getProject, getProjects, getUsers } from "@/lib/api";
 import { Company, Milestone, Project, Task } from "@/lib/types";
-import { formatDate, toDateInputValue } from "@/lib/format";
+import { toDateInputValue } from "@/lib/format";
 import { matchesTaskSearch, normalizeTaskSearchQuery } from "@/lib/task-search";
+import {
+  sortTodos, todoSortToBoardSortKey, TODO_SORT_LABELS, type TodoSortKey,
+} from "@/lib/todo-sort";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { ProjectTaskBoardPanel } from "@/components/project-task-board";
 import { useSession } from "@/components/session-provider";
-import { cacheKeys, getCached } from "@/lib/query-cache";
+import { cacheKeys, getCached, invalidateTaskLists, setCached } from "@/lib/query-cache";
 import { useMutationFeedback, useUndoToast } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
@@ -39,7 +43,7 @@ interface Todo {
   id: string;
   title: string;
   description?: string;
-  status: "open" | "in_progress" | "done";
+  status: TodoStatus;
   priority: "low" | "medium" | "high";
   assignee_id?: string;
   assignee_name?: string;
@@ -49,7 +53,8 @@ interface Todo {
   project_name?: string;
   project_company_name?: string;
   project_company_logo_url?: string;
-  due_date?: string;
+  /** null clears the date server-side; undefined leaves it untouched. */
+  due_date?: string | null;
   created_at: string;
   updated_at?: string;
   _source: "todo";
@@ -89,6 +94,12 @@ interface ProjectBoardTask {
   updated_at?: string;
   _source: "task";
 }
+
+type TaskListPayload = {
+  todos: Todo[];
+  boardTasks: ProjectBoardTask[];
+  milestonesByProject: Record<string, Milestone[]>;
+};
 
 function boardTaskToTask(t: ProjectBoardTask): Task {
   return {
@@ -139,39 +150,6 @@ function boardTaskMatchesSearch(task: ProjectBoardTask, query: string): boolean 
   );
 }
 
-type TodoStatus = Todo["status"];
-
-const statusIcon: Record<TodoStatus, ReactNode> = {
-  open: <Circle className="w-4 h-4 text-neutral-500" />,
-  in_progress: <Clock className="w-4 h-4 text-blue-400" />,
-  done: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-};
-
-const statusLabel: Record<TodoStatus, string> = {
-  open: "Open",
-  in_progress: "In progress",
-  done: "Done",
-};
-
-const statusTextClass: Record<TodoStatus, string> = {
-  open: "text-neutral-400",
-  in_progress: "text-blue-400",
-  done: "text-emerald-400",
-};
-
-function nextTodoStatus(status: TodoStatus): TodoStatus | null {
-  if (status === "open") return "in_progress";
-  if (status === "in_progress") return "done";
-  return null;
-}
-
-function statusActionLabel(status: TodoStatus, allowReopen = false): string {
-  if (status === "done" && allowReopen) return "Reopen to-do";
-  if (status === "open") return "Mark in progress";
-  if (status === "in_progress") return "Mark done";
-  return "Done";
-}
-
 function sortCompletedLatest(todos: Todo[]) {
   return [...todos].sort((a, b) => {
     const aTime = new Date(a.updated_at || a.created_at).getTime();
@@ -220,6 +198,8 @@ const statusFilterLabels: Record<string, string> = {
   all: "All",
   done: "Done",
 };
+
+const sortOptions: TodoSortKey[] = ["smart", "priority", "due_date", "title", "created"];
 
 // ---------------------------------------------------------------------------
 // New Task Dialog (full form)
@@ -623,7 +603,7 @@ function QuickAddTodo({ onAdd, currentUser }: {
 }
 
 // ---------------------------------------------------------------------------
-// Clickable status control + shared status update
+// Shared status update
 // ---------------------------------------------------------------------------
 
 function useTodoStatusChange(todo: Todo, onUpdate: (t: Todo) => void) {
@@ -661,46 +641,42 @@ function useTodoStatusChange(todo: Todo, onUpdate: (t: Todo) => void) {
       .finally(() => end());
   }, [todo, onUpdate, begin, end, pushUndo]);
 
-  const cycleStatus = useCallback(() => {
-    const next = nextTodoStatus(todo.status);
-    if (next) changeStatus(next);
-  }, [todo.status, changeStatus]);
-
-  return { changeStatus, cycleStatus };
+  return { changeStatus };
 }
 
-function TodoStatusButton({
-  status,
-  onClick,
-  allowReopen = false,
+/** Shared inline due-date control for both to-do row variants. */
+function TodoDueDate({
+  todo,
+  onUpdate,
   className,
 }: {
-  status: TodoStatus;
-  onClick: () => void;
-  allowReopen?: boolean;
+  todo: Todo;
+  onUpdate: (t: Todo) => void;
   className?: string;
 }) {
-  const canInteract = status !== "done" || allowReopen;
+  const patchTodo = useUndoablePatch<Todo>();
+  const isOverdue = !!todo.due_date && todo.status !== "done" &&
+    new Date(todo.due_date) < new Date();
 
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
+    <DatePicker
+      value={toDateInputValue(todo.due_date)}
+      onChange={(v) => {
+        void patchTodo({
+          item: todo,
+          patch: { due_date: v || null },
+          apply: (id, patch) => putTodo(id, patch),
+          onSuccess: onUpdate,
+        });
       }}
-      disabled={!canInteract}
-      title={statusActionLabel(status, allowReopen)}
-      aria-label={statusActionLabel(status, allowReopen)}
-      className={`flex items-center gap-1.5 shrink-0 transition-colors rounded px-1 py-0.5 ${
-        canInteract
-          ? "hover:bg-neutral-800 cursor-pointer"
-          : "cursor-default"
+      onClick={(e) => e.stopPropagation()}
+      size="sm"
+      placeholder="No date"
+      overdue={isOverdue}
+      className={`shrink-0 border-neutral-700/50 bg-neutral-800/50 ${
+        isOverdue ? "text-red-400" : "text-neutral-400"
       } ${className ?? ""}`}
-    >
-      {statusIcon[status]}
-      <span className={`text-xs ${statusTextClass[status]}`}>{statusLabel[status]}</span>
-    </button>
+    />
   );
 }
 
@@ -708,90 +684,67 @@ function TodoStatusButton({
 // Compact todo row for the checklist
 // ---------------------------------------------------------------------------
 
-function TodoRow({ todo, onUpdate, onDelete, onEdit, allowReopen = false }: {
+function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
   todo: Todo;
   onUpdate: (t: Todo) => void;
   onDelete: (id: string) => void;
   onEdit: (t: Todo) => void;
-  allowReopen?: boolean;
 }) {
-  const { changeStatus, cycleStatus } = useTodoStatusChange(todo, onUpdate);
+  const { changeStatus } = useTodoStatusChange(todo, onUpdate);
   const patchTodo = useUndoablePatch<Todo>();
-
-  function handleStatusClick() {
-    if (allowReopen && todo.status === "done") {
-      changeStatus("open");
-      return;
-    }
-    cycleStatus();
-  }
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
     new Date(todo.due_date) < new Date();
 
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all group ${
+    <div className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all group ${
       todo.status === "done"
-        ? "opacity-50 bg-neutral-900/20 border-neutral-800/50"
+        ? "opacity-60 bg-neutral-900/20 border-neutral-800/50"
         : "bg-neutral-900/40 border-neutral-800 hover:border-neutral-700"
     }`}>
-      <TodoStatusButton
-        status={todo.status}
-        onClick={handleStatusClick}
-        allowReopen={allowReopen}
+      <TodoStatusSelect status={todo.status} onChange={changeStatus} />
+      <button
+        type="button"
+        onClick={() => onEdit(todo)}
+        className={`flex-1 min-w-0 text-left cursor-pointer hover:text-neutral-100 transition-colors ${
+          todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
+        }`}
+      >
+        <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
+          <span className="truncate">
+            <BinaryText text={todo.title} id={todo.id} />
+          </span>
+          {isOverdue && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
+              title="Overdue"
+              aria-label="Overdue"
+            />
+          )}
+        </p>
+      </button>
+      {todo.assignee_name && (
+        <span className="hidden lg:flex items-center gap-1 text-xs text-neutral-500 shrink-0 max-w-32 truncate">
+          <User className="w-3 h-3 shrink-0" /> {todo.assignee_name}
+        </span>
+      )}
+      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[126px]" />
+      <PrioritySelect
+        priority={todo.priority}
+        onChange={(next) => {
+          void patchTodo({
+            item: todo,
+            patch: { priority: next },
+            apply: (id, patch) => putTodo(id, patch),
+            onSuccess: onUpdate,
+          });
+        }}
+        className="w-[100px]"
       />
-      <div className="flex-1 min-w-0 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => onEdit(todo)}
-          className={`flex-1 min-w-0 text-left cursor-pointer hover:text-neutral-100 transition-colors ${
-            todo.status === "done" ? "line-through text-neutral-600" : "text-neutral-200"
-          }`}
-        >
-          <p className="text-sm leading-snug flex items-center gap-1.5 min-w-0">
-            <span className="truncate">
-              <BinaryText text={todo.title} id={todo.id} />
-            </span>
-            {isOverdue && (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
-                title="Overdue"
-                aria-label="Overdue"
-              />
-            )}
-          </p>
-        </button>
-        <div className="flex items-center gap-2 shrink-0">
-          {todo.assignee_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <User className="w-3 h-3" /> {todo.assignee_name}
-            </span>
-          )}
-          {todo.due_date && (
-            <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-500"}`}>
-              <Calendar className={`w-3 h-3 ${isOverdue ? "text-red-400" : ""}`} />
-              {formatDate(todo.due_date)}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center shrink-0">
-        <PriorityFlag
-          priority={todo.priority}
-          onChange={(next) => {
-            void patchTodo({
-              item: todo,
-              patch: { priority: next },
-              apply: (id, patch) => putTodo(id, patch),
-              onSuccess: onUpdate,
-            });
-          }}
-        />
-        <button onClick={() => onDelete(todo.id)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <button onClick={() => onDelete(todo.id)}
+        className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
@@ -806,20 +759,20 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
   onDelete: (id: string) => void;
   onEdit: (t: Todo) => void;
 }) {
-  const { cycleStatus } = useTodoStatusChange(todo, onUpdate);
+  const { changeStatus } = useTodoStatusChange(todo, onUpdate);
   const patchTodo = useUndoablePatch<Todo>();
 
   const isOverdue = todo.due_date && todo.status !== "done" &&
     new Date(todo.due_date) < new Date();
 
   return (
-    <div className={`flex items-start gap-3 px-3.5 py-2.5 transition-all group ${
-      todo.status === "done" ? "opacity-50" : ""
+    <div className={`flex items-start gap-2.5 px-3.5 py-2 transition-all group ${
+      todo.status === "done" ? "opacity-60" : ""
     }`}>
-      <div className="shrink-0 mt-0.5">
-        <TodoStatusButton status={todo.status} onClick={cycleStatus} />
+      <div className="shrink-0">
+        <TodoStatusSelect status={todo.status} onChange={changeStatus} />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pt-0.5">
         <button
           type="button"
           onClick={() => onEdit(todo)}
@@ -845,43 +798,38 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
             <BinaryText text={todo.description} id={`${todo.id}-desc`} />
           </p>
         )}
-        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-          {todo.assignee_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <User className="w-3 h-3" /> {todo.assignee_name}
-            </span>
-          )}
-          {todo.company_name && (
-            <span className="flex items-center gap-1 text-xs text-neutral-500">
-              <Building2 className="w-3 h-3" /> {todo.company_name}
-            </span>
-          )}
-          {todo.due_date && (
-            <span className={`flex items-center gap-1 text-xs font-mono ${isOverdue ? "text-red-400" : "text-neutral-500"}`}>
-              <Calendar className={`w-3 h-3 ${isOverdue ? "text-red-400" : ""}`} />
-              {formatDate(todo.due_date)}
-              {isOverdue && " · overdue"}
-            </span>
-          )}
-        </div>
+        {(todo.assignee_name || todo.company_name) && (
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            {todo.assignee_name && (
+              <span className="flex items-center gap-1 text-xs text-neutral-500">
+                <User className="w-3 h-3" /> {todo.assignee_name}
+              </span>
+            )}
+            {todo.company_name && (
+              <span className="flex items-center gap-1 text-xs text-neutral-500">
+                <Building2 className="w-3 h-3" /> {todo.company_name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      <div className="flex items-center shrink-0">
-        <PriorityFlag
-          priority={todo.priority}
-          onChange={(next) => {
-            void patchTodo({
-              item: todo,
-              patch: { priority: next },
-              apply: (id, patch) => putTodo(id, patch),
-              onSuccess: onUpdate,
-            });
-          }}
-        />
-        <button onClick={() => onDelete(todo.id)}
-          className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[126px]" />
+      <PrioritySelect
+        priority={todo.priority}
+        onChange={(next) => {
+          void patchTodo({
+            item: todo,
+            patch: { priority: next },
+            apply: (id, patch) => putTodo(id, patch),
+            onSuccess: onUpdate,
+          });
+        }}
+        className="w-[100px]"
+      />
+      <button onClick={() => onDelete(todo.id)}
+        className="opacity-0 group-hover:opacity-100 p-1 mt-0.5 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
@@ -892,7 +840,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
 
 function ProjectGroup({
   projectId, projectName, companyName, companyLogoUrl,
-  todos, boardTasks, milestones, filterStatus,
+  todos, boardTasks, milestones, filterStatus, sortKey,
   onTodoUpdate, onTodoDelete, onTodoEdit,
   onBoardTaskUpdate, onBoardTaskDelete, onNewTask,
 }: {
@@ -904,6 +852,7 @@ function ProjectGroup({
   boardTasks: ProjectBoardTask[];
   milestones?: Milestone[];
   filterStatus: "active" | "all" | "done";
+  sortKey: TodoSortKey;
   onTodoUpdate: (t: Todo) => void;
   onTodoDelete: (id: string) => void;
   onTodoEdit: (t: Todo) => void;
@@ -913,11 +862,12 @@ function ProjectGroup({
 }) {
   const [expanded, setExpanded] = useState(true);
 
-  const visibleTodos = filterStatus === "done"
+  const filteredTodos = filterStatus === "done"
     ? todos.filter((t) => t.status === "done")
     : filterStatus === "active"
       ? todos.filter((t) => t.status !== "done")
       : todos;
+  const visibleTodos = sortTodos(filteredTodos, sortKey);
 
   const todoDone = todos.filter((t) => t.status === "done").length;
   const boardDone = boardTasks.filter((t) => isDonePhase(t.milestone_name)).length;
@@ -981,6 +931,7 @@ function ProjectGroup({
             tasks={boardTasks.map(boardTaskToTask)}
             milestonesOverride={milestones}
             filterStatus={filterStatus}
+            sortKeyOverride={todoSortToBoardSortKey(sortKey)}
             hideToolbar
             onTaskUpdate={onBoardTaskUpdate}
             onTaskDelete={onBoardTaskDelete}
@@ -1029,12 +980,14 @@ export default function TodosPage() {
   );
   const [currentUser, setCurrentUser] = useState<TodoUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [formDefaultProject, setFormDefaultProject] = useState<string | undefined>();
   const [filterAssignee, setFilterAssignee] = useState("all");
   const [filterCompany, setFilterCompany] = useState("all");
   const [filterStatus, setFilterStatus] = useState("active");
+  const [sortKey, setSortKey] = useState<TodoSortKey>("smart");
   const [search, setSearch] = useState("");
   const [myTodosView, setMyTodosView] = useState<"active" | "completed">("active");
   const [filtersReady, setFiltersReady] = useState(false);
@@ -1056,9 +1009,27 @@ export default function TodosPage() {
     setFiltersReady(true);
   }, [sessionReady, sessionUser]);
 
+  // Reference lists come from the SSR-seeded cache, so they never gate the
+  // task list behind a spinner.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      getUsers().catch(() => [] as TodoUser[]),
+      getCompanies().catch(() => [] as Company[]),
+      getProjects().catch(() => [] as Project[]),
+    ]).then(([userData, companyData, projectData]) => {
+      if (cancelled) return;
+      setUsers(userData);
+      setCompanies(companyData);
+      setProjects(projectData as Project[]);
+      setCurrentUser((prev) => userData.find((u: TodoUser) => u.id === prev?.id) ?? prev);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   const load = useCallback(async () => {
     if (!filtersReady) return;
-    setLoading(true);
+
     const params = new URLSearchParams();
     if (filterAssignee !== "all") params.set("assignee", filterAssignee);
     if (filterCompany !== "all") params.set("company", filterCompany);
@@ -1068,11 +1039,22 @@ export default function TodosPage() {
     if (filterAssignee !== "all") boardParams.set("assignee", filterAssignee);
     if (filterStatus !== "all") boardParams.set("status", filterStatus);
 
-    const [todoData, userData, companyData, projectData, boardPayload] = await Promise.all([
+    // Paint whatever we showed last time for this filter combination, then
+    // reconcile with the server response.
+    const cacheKey = cacheKeys.taskList(`${params}|${boardParams}`);
+    const cached = getCached<TaskListPayload>(cacheKey);
+    if (cached) {
+      setTodos(cached.todos);
+      setBoardTasks(cached.boardTasks);
+      setMilestonesByProject(cached.milestonesByProject);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    setRefreshing(true);
+
+    const [todoData, boardPayload] = await Promise.all([
       fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      getUsers().catch(() => [] as TodoUser[]),
-      getCompanies(),
-      getProjects(),
       fetch(`/api/tasks/assigned?${boardParams}`)
         .then((r) => (r.ok ? r.json() : { tasks: [], milestonesByProject: {} }))
         .catch(() => ({ tasks: [], milestonesByProject: {} })),
@@ -1085,22 +1067,26 @@ export default function TodosPage() {
       ? {}
       : (boardPayload.milestonesByProject ?? {});
 
-    setUsers(userData);
-    setCompanies(companyData);
-    setProjects(projectData as Project[]);
-    setTodos(todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })));
-    setBoardTasks(boardTasksRaw.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })));
-    setMilestonesByProject(milestonesRaw);
-    setCurrentUser((prev) => {
-      const me = userData.find((u: TodoUser) => u.id === prev?.id) ?? prev;
-      return me;
-    });
+    const payload: TaskListPayload = {
+      todos: todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })),
+      boardTasks: boardTasksRaw.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })),
+      milestonesByProject: milestonesRaw,
+    };
+
+    setCached(cacheKey, payload);
+    setTodos(payload.todos);
+    setBoardTasks(payload.boardTasks);
+    setMilestonesByProject(payload.milestonesByProject);
     setLoading(false);
+    setRefreshing(false);
   }, [filterAssignee, filterCompany, filterStatus, filtersReady]);
 
   useEffect(() => { load(); }, [load]);
 
   function handleTodoUpdate(updated: Todo) {
+    // Cached snapshots are now behind the local state; drop them so a revisit
+    // doesn't flash stale rows.
+    invalidateTaskLists();
     setTodos((prev) => {
       const existing = prev.find((x) => x.id === updated.id);
       if (!existing) return prev;
@@ -1117,6 +1103,7 @@ export default function TodosPage() {
   }
 
   function handleBoardTaskUpdate(updated: Task, milestone?: { name?: string; color?: string }) {
+    invalidateTaskLists();
     setBoardTasks((prev) => {
       const existing = prev.find((x) => x.id === updated.id);
       if (!existing) {
@@ -1183,6 +1170,7 @@ export default function TodosPage() {
       confirmLabel: "Delete task",
       onConfirm: () => {
         fetch(`/api/tasks/${id}`, { method: "DELETE" });
+        invalidateTaskLists();
         setBoardTasks((prev) => prev.filter((t) => t.id !== id));
       },
     });
@@ -1201,6 +1189,7 @@ export default function TodosPage() {
       confirmLabel: "Delete task",
       onConfirm: () => {
         fetch(`/api/todos/${id}`, { method: "DELETE" });
+        invalidateTaskLists();
         setTodos((prev) => prev.filter((t) => t.id !== id));
       },
     });
@@ -1295,7 +1284,9 @@ export default function TodosPage() {
     : personalTodos;
 
   // Further split personal to-dos
-  const personalActive = filterStatus === "done" ? [] : searchedPersonalTodos.filter((t) => t.status !== "done");
+  const personalActive = filterStatus === "done"
+    ? []
+    : sortTodos(searchedPersonalTodos.filter((t) => t.status !== "done"), sortKey);
   const personalDone = sortCompletedLatest(searchedPersonalTodos.filter((t) => t.status === "done"));
   const personalDonePreview = personalDone.slice(0, 3);
   const showCompletedView = myTodosView === "completed" || filterStatus === "done";
@@ -1315,7 +1306,16 @@ export default function TodosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Tasks</h1>
+          <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2">
+            Tasks
+            {refreshing && !loading && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-[#e8ff47] animate-pulse"
+                title="Refreshing"
+                aria-label="Refreshing"
+              />
+            )}
+          </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {totalOpen} open · {totalInProgress} in progress
             {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
@@ -1380,6 +1380,26 @@ export default function TodosPage() {
             <SelectItem value="done" className="text-emerald-400">Done</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={sortKey} onValueChange={(v) => setSortKey((v ?? "smart") as TodoSortKey)}>
+          <SelectTrigger
+            aria-label="Sort tasks"
+            className="w-44 bg-neutral-900 border-neutral-700 text-neutral-100 h-8 text-sm"
+          >
+            <SelectValue>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <ArrowUpDown className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                <span className="truncate">{TODO_SORT_LABELS[sortKey]}</span>
+              </span>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            {sortOptions.map((key) => (
+              <SelectItem key={key} value={key} className="text-neutral-100">
+                {TODO_SORT_LABELS[key]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {loading ? (
@@ -1436,7 +1456,6 @@ export default function TodosPage() {
                       onUpdate={handleTodoUpdate}
                       onDelete={handleDelete}
                       onEdit={openEditTask}
-                      allowReopen
                     />
                   ))}
                   {personalDone.length === 0 && (
@@ -1451,7 +1470,10 @@ export default function TodosPage() {
               ) : (
                 <>
                   <QuickAddTodo
-                    onAdd={(t) => { setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]); }}
+                    onAdd={(t) => {
+                      invalidateTaskLists();
+                      setTodos((prev) => [{ ...t, _source: "todo" as const }, ...prev]);
+                    }}
                     currentUser={currentUser}
                   />
                   {personalActive.map((t) => (
@@ -1473,7 +1495,6 @@ export default function TodosPage() {
                           onUpdate={handleTodoUpdate}
                           onDelete={handleDelete}
                           onEdit={openEditTask}
-                          allowReopen
                         />
                       ))}
                       {personalDone.length > 3 && (
@@ -1528,6 +1549,7 @@ export default function TodosPage() {
                       boardTasks={group.boardTasks}
                       milestones={milestonesByProject[pid]}
                       filterStatus={filterStatus as "active" | "all" | "done"}
+                      sortKey={sortKey}
                       onTodoUpdate={handleTodoUpdate}
                       onTodoDelete={handleDelete}
                       onTodoEdit={openEditTask}

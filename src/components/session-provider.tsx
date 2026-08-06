@@ -43,9 +43,12 @@ export function SessionProvider({ children, initialUser }: SessionProviderProps)
     }
   }, []);
 
+  // The server already resolved the session for the shell; re-fetching it on
+  // every page load only adds a round-trip.
   useEffect(() => {
+    if (hasInitial) return;
     void refresh();
-  }, [refresh]);
+  }, [hasInitial, refresh]);
 
   const value = useMemo(
     () => ({ user, ready, setUser, refresh }),

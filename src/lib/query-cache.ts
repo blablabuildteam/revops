@@ -130,6 +130,13 @@ export function cachedFetch<T>(
   return promise;
 }
 
+const TASK_LIST_PREFIX = "task-list:";
+
+/** Drop every cached tasks-page snapshot after a task/to-do mutation. */
+export function invalidateTaskLists() {
+  invalidateCachePrefix(TASK_LIST_PREFIX);
+}
+
 export const cacheKeys = {
   opportunities: "opportunities",
   companies: "companies",
@@ -137,6 +144,8 @@ export const cacheKeys = {
   project: (id: string) => `project:${id}`,
   users: "users",
   allocations: "allocations",
+  /** Snapshot of the tasks page for one filter combination. */
+  taskList: (params: string) => `${TASK_LIST_PREFIX}${params}`,
   financeDeals: (opportunityId?: string) =>
     opportunityId ? `finance-deals:${opportunityId}` : "finance-deals",
   financeSummary: (month: string) => `finance-summary:${month}`,

@@ -24,6 +24,8 @@ export type AppBootstrap = {
   opportunities: Opportunity[];
 };
 
+export type AppListData = Omit<AppBootstrap, "user">;
+
 async function fetchCompanies(): Promise<Company[]> {
   const { rows } = await sql`SELECT * FROM companies ORDER BY name`;
   return rows as Company[];
@@ -70,6 +72,39 @@ async function fetchOpportunities(): Promise<Opportunity[]> {
     ORDER BY o.updated_at DESC
   `;
   return rows.map((row) => formatOpportunityRow(row) as Opportunity);
+}
+
+/**
+ * Session only — cheap enough to block the shell on, since the sidebar needs it.
+ */
+export async function prefetchSession(): Promise<SessionUser | null> {
+  try {
+    await ensureTables();
+    return await resolveSessionUser();
+  } catch (err) {
+    console.error("prefetchSession failed", err);
+    return null;
+  }
+}
+
+/**
+ * Shared list data for the client query cache. Streamed in after the shell so
+ * the sidebar and page chrome paint without waiting on these queries.
+ */
+export async function prefetchListData(): Promise<AppListData | null> {
+  try {
+    await ensureTables();
+    const [companies, projects, users, opportunities] = await Promise.all([
+      fetchCompanies(),
+      fetchProjects(),
+      fetchUsers(),
+      fetchOpportunities(),
+    ]);
+    return { companies, projects, users, opportunities };
+  } catch (err) {
+    console.error("prefetchListData failed", err);
+    return null;
+  }
 }
 
 /**

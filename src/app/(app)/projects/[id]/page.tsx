@@ -8,7 +8,7 @@ import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
   ChevronDown, ChevronRight, Search,
 } from "lucide-react";
-import { PriorityFlag } from "@/components/priority-flag";
+import { PrioritySelect } from "@/components/priority-select";
 import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
 import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import Link from "next/link";
@@ -635,7 +635,8 @@ function SubtaskRow({
 
       <TaskRowIndicators task={task} />
 
-      <PriorityFlag
+      <PrioritySelect
+        iconOnly
         priority={task.priority ?? "low"}
         onChange={(next) => {
           void patchTask({
@@ -763,7 +764,8 @@ function SortableTaskRow({
 
       <TaskRowIndicators task={task} />
 
-      <PriorityFlag
+      <PrioritySelect
+        iconOnly
         priority={task.priority ?? "low"}
         onChange={(next) => {
           void patchTask({
