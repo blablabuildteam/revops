@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowUpRight, CheckCircle2, CalendarClock } from "lucide
 import { formatCurrency } from "@/lib/format";
 import { updateFinanceDeal, updateOpportunity, updateProject } from "@/lib/api";
 import {
+  DEAL_LOAD_KIND_LABELS,
   DEAL_LOAD_STATUS_LABELS,
   TARGET_HOURLY_RATE,
   buildDealLoadRows,
@@ -167,6 +168,78 @@ function DeadlineInput({
   );
 }
 
+function MonthlyHoursInput({
+  row,
+  onSaved,
+}: {
+  row: DealLoadRow;
+  onSaved: () => void;
+}) {
+  const initial =
+    row.fixedMonthlyHours && row.hoursPerMonthNeeded > 0
+      ? String(row.hoursPerMonthNeeded)
+      : "";
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function commit() {
+    if (!row.dealId) return;
+    const trimmed = value.trim().replace(",", ".");
+    const next =
+      trimmed === "" ? null : Math.round(Number(trimmed) * 10) / 10;
+    if (next !== null && (!Number.isFinite(next) || next <= 0)) {
+      setError("Vul uren > 0 in");
+      setValue(initial);
+      return;
+    }
+    const shown = row.fixedMonthlyHours ? row.hoursPerMonthNeeded : null;
+    if (next === shown) {
+      setError(null);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await updateFinanceDeal(row.dealId, { monthly_hours: next });
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Opslaan mislukt");
+      setValue(initial);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0.5}
+          step={0.5}
+          inputMode="decimal"
+          placeholder="—"
+          value={value}
+          disabled={saving || !row.dealId}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => void commit()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          className="w-16 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-right font-mono text-sm text-neutral-100 tabular-nums focus:border-[#d4e052]/40 focus:outline-none disabled:opacity-50"
+        />
+        <span className="text-[11px] text-neutral-500">u/mnd</span>
+      </div>
+      <span className="text-[10px] text-neutral-600">
+        {row.fixedMonthlyHours ? "vast · partner / commissie" : "optioneel: vaste u/mnd → commissie"}
+      </span>
+      {error && <span className="text-[10px] text-red-400">{error}</span>}
+    </div>
+  );
+}
+
 export function DealLoadPanel({
   deals,
   projects,
@@ -188,14 +261,17 @@ export function DealLoadPanel({
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
   const projectsRows = rows.filter((r) => r.kind === "project" && r.hoursPerWeekNeeded > 0);
   const retainerRows = rows.filter((r) => r.kind === "retainer" && r.hoursPerWeekNeeded > 0);
+  const commissionRows = rows.filter((r) => r.kind === "commission" && r.hoursPerWeekNeeded > 0);
   const overloaded = rows.filter((r) => r.status === "overloaded").length;
   const needsDeadline = rows.filter((r) => r.status === "missing_deadline").length;
   const projectWeekly = projectsRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
   const retainerWeekly = retainerRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
-  const totalWeekly = projectWeekly + retainerWeekly;
+  const commissionWeekly = commissionRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
+  const totalWeekly = projectWeekly + retainerWeekly + commissionWeekly;
   const totalBudgetHours = rows
     .filter((r) => r.kind === "project")
     .reduce((sum, r) => sum + r.budgetHours, 0);
+  const commissionMonthly = commissionRows.reduce((sum, r) => sum + r.hoursPerMonthNeeded, 0);
   const utilization = firmWeekly > 0 ? totalWeekly / firmWeekly : 0;
   const room = firmWeekly - totalWeekly;
 
@@ -237,7 +313,7 @@ export function DealLoadPanel({
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <SummaryCard
-          label="Tarief"
+          label="Tarief (projecten)"
           value={`€${TARGET_HOURLY_RATE}/u`}
           sub="Fee excl. btw ÷ uren"
           tone="accent"
@@ -245,7 +321,7 @@ export function DealLoadPanel({
         <SummaryCard
           label="Urenbudget projecten"
           value={formatHours(totalBudgetHours)}
-          sub={`${projectsRows.length} actief · fee ÷ €${TARGET_HOURLY_RATE}`}
+          sub={`${projectsRows.length} projecten · fee ÷ €${TARGET_HOURLY_RATE}`}
         />
         <SummaryCard
           label="Last / week"
@@ -259,7 +335,7 @@ export function DealLoadPanel({
           sub={
             overloaded + needsDeadline > 0
               ? `${overloaded} te zwaar · ${needsDeadline} zonder deadline`
-              : `${formatHours(projectWeekly)} project + ${formatHours(retainerWeekly)} retainer`
+              : `${formatHours(commissionMonthly)}/mnd commissie · ${formatHours(projectWeekly)}/wk project`
           }
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
@@ -267,12 +343,10 @@ export function DealLoadPanel({
 
       <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/40">
         <div className="px-5 py-3.5 border-b border-neutral-800">
-          <h2 className="text-sm font-medium text-neutral-300">
-            Klussen @ €{TARGET_HOURLY_RATE}/u
-          </h2>
+          <h2 className="text-sm font-medium text-neutral-300">Klussen</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Project: fee ÷ €{TARGET_HOURLY_RATE} = urenbudget, verdeeld tot de deadline.
-            Retainer: maandfee ÷ €{TARGET_HOURLY_RATE} = uren per maand.
+            Project: fee ÷ €{TARGET_HOURLY_RATE} tot de deadline. Retainer: maandfee ÷ €
+            {TARGET_HOURLY_RATE}. Commissie / partner: vaste uren per maand (geen fee÷175).
           </p>
         </div>
 
@@ -281,7 +355,8 @@ export function DealLoadPanel({
             <thead>
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
                 <th className="px-5 py-2.5 font-medium">Klus</th>
-                <th className="px-4 py-2.5 font-medium">Fee</th>
+                <th className="px-4 py-2.5 font-medium">Type</th>
+                <th className="px-4 py-2.5 font-medium">Fee / uren</th>
                 <th className="px-4 py-2.5 font-medium">Deadline</th>
                 <th className="px-4 py-2.5 font-medium text-right">Budget</th>
                 <th className="px-4 py-2.5 font-medium text-right">Tempo</th>
@@ -292,8 +367,8 @@ export function DealLoadPanel({
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-neutral-500">
-                    Zet een fee op deals (of pipeline) om capacity te zien.
+                  <td colSpan={8} className="px-5 py-10 text-center text-neutral-500">
+                    Zet een fee of vaste maanduren op deals om capacity te zien.
                   </td>
                 </tr>
               ) : (
@@ -307,24 +382,67 @@ export function DealLoadPanel({
                         <RowLink row={row} />
                         <p className="text-[11px] text-neutral-500 truncate mt-0.5">
                           {row.companyName}
-                          {row.kind === "retainer" ? " · retainer" : ""}
                           {row.source === "opportunity" ? " · pipeline" : ""}
                         </p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-mono text-neutral-200 whitespace-nowrap">
-                      {formatCurrency(row.valueExVat)}
-                      <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                        {row.kind === "retainer" ? "excl. btw / mnd" : "excl. btw"}
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          "inline-flex text-[11px] px-2 py-0.5 rounded border",
+                          row.kind === "commission"
+                            ? "text-sky-300 bg-sky-500/10 border-sky-500/20"
+                            : row.kind === "retainer"
+                              ? "text-stone-300 bg-stone-500/10 border-stone-500/20"
+                              : "text-neutral-400 bg-neutral-800 border-neutral-700",
+                        )}
+                      >
+                        {DEAL_LOAD_KIND_LABELS[row.kind]}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.kind === "retainer" ? (
+                      {row.kind === "commission" ? (
+                        <MonthlyHoursInput
+                          key={`${row.key}-${row.hoursPerMonthNeeded}`}
+                          row={row}
+                          onSaved={() => onRefresh?.()}
+                        />
+                      ) : (
+                        <div className="space-y-1.5">
+                          <div className="font-mono text-neutral-200 whitespace-nowrap">
+                            {formatCurrency(row.valueExVat)}
+                            <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+                              {row.kind === "retainer" ? "excl. btw / mnd" : "excl. btw"}
+                            </span>
+                          </div>
+                          {row.dealId && (
+                            <MonthlyHoursInput
+                              key={`${row.key}-set`}
+                              row={{
+                                ...row,
+                                fixedMonthlyHours: false,
+                                hoursPerMonthNeeded: 0,
+                              }}
+                              onSaved={() => onRefresh?.()}
+                            />
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.kind === "commission" || row.kind === "retainer" ? (
                         <div>
                           <span className="text-xs text-neutral-400">Doorlopend</span>
-                          <span className="block text-[10px] text-neutral-600 mt-0.5">
-                            {formatHours(row.budgetHours)}/mnd @ €{TARGET_HOURLY_RATE}
-                          </span>
+                          {row.kind === "retainer" && (
+                            <span className="block text-[10px] text-neutral-600 mt-0.5">
+                              {formatHours(row.budgetHours)}/mnd @ €{TARGET_HOURLY_RATE}
+                            </span>
+                          )}
+                          {row.kind === "commission" && (
+                            <span className="block text-[10px] text-neutral-600 mt-0.5">
+                              vaste inzet, geen deadline
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <DeadlineInput
@@ -337,7 +455,7 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
                       <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                        {row.kind === "retainer" ? "per maand" : "totaal"}
+                        {row.kind === "project" ? "totaal" : "per maand"}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[#d4e052]">
@@ -388,9 +506,9 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Voorbeeld project: €17.500 excl. btw ÷ €{TARGET_HOURLY_RATE} = 100u. Deadline over 10
-        weken → 10u/week. Retainer: €1.750/mnd ÷ €{TARGET_HOURLY_RATE} = 10u/maand. Sneller klaar
-        = effectief tarief boven €{TARGET_HOURLY_RATE}.
+        Project: €17.500 excl. btw ÷ €{TARGET_HOURLY_RATE} = 100u tot de deadline. Retainer:
+        maandfee ÷ €{TARGET_HOURLY_RATE}. Commissie (Escort, Comfortzone, Heatnest, …): zet vaste
+        uren/maand — die tellen mee in de bezetting, los van fee.
       </p>
     </div>
   );

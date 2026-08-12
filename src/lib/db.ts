@@ -128,6 +128,7 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+  await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS monthly_hours NUMERIC(8,1)`;
   await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
   await ensureTaskCreatedByConstraint();
@@ -175,6 +176,7 @@ async function runSchemaMigrations() {
       start_date DATE,
       end_date DATE,
       delivery_weeks NUMERIC(6,1),
+      monthly_hours NUMERIC(8,1),
       payment_schedule JSONB DEFAULT '[]',
       monthly_fee NUMERIC(12,2) DEFAULT 0,
       monthly_revshare NUMERIC(12,2) DEFAULT 0,
@@ -354,7 +356,22 @@ async function _init() {
     if (Number(rows[0].c) > 0) {
       // Cheap, idempotent column adds needed by capacity planning.
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS monthly_hours NUMERIC(8,1)`;
       await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      // Partner / commission defaults: Escort, Comfortzone, Heatnest → 10u/mnd.
+      await sql`
+        UPDATE finance_deals
+        SET monthly_hours = 10, updated_at = now()
+        WHERE monthly_hours IS NULL
+          AND (
+            company_name ILIKE '%escort%'
+            OR project_name ILIKE '%escort%'
+            OR company_name ILIKE '%comfortzone%'
+            OR project_name ILIKE '%comfortzone%'
+            OR company_name ILIKE '%heatnest%'
+            OR project_name ILIKE '%heatnest%'
+          )
+      `;
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -593,6 +610,7 @@ async function _init() {
       start_date DATE,
       end_date DATE,
       delivery_weeks NUMERIC(6,1),
+      monthly_hours NUMERIC(8,1),
       payment_schedule JSONB DEFAULT '[]',
       monthly_fee NUMERIC(12,2) DEFAULT 0,
       monthly_revshare NUMERIC(12,2) DEFAULT 0,

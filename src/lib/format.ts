@@ -126,6 +126,10 @@ export function formatFinanceDealRow(row: Record<string, unknown>) {
       row.delivery_weeks == null || String(row.delivery_weeks) === ""
         ? null
         : Number(row.delivery_weeks),
+    monthly_hours:
+      row.monthly_hours == null || String(row.monthly_hours) === ""
+        ? null
+        : Number(row.monthly_hours),
     start_date: row.start_date ? toDateInputValue(row.start_date as string | Date) : undefined,
     end_date: row.end_date ? toDateInputValue(row.end_date as string | Date) : undefined,
     payment_schedule: normalizePaymentSchedule(row.payment_schedule),

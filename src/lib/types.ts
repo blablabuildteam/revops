@@ -359,6 +359,11 @@ export interface FinanceDeal {
   end_date?: string;
   /** Manual delivery stretch in weeks (capacity planning at €175/h). */
   delivery_weeks?: number | null;
+  /**
+   * Fixed monthly hours for capacity (commission / partner work).
+   * When set, capacity uses this instead of fee ÷ €175.
+   */
+  monthly_hours?: number | null;
   payment_schedule: PaymentScheduleEntry[];
   payments: DealPaymentEntry[];
   monthly_fee: number;
@@ -371,11 +376,12 @@ export interface FinanceDeal {
 export type NewFinanceDeal = Omit<FinanceDeal, "id" | "created_at" | "updated_at">;
 
 export type UpdateFinanceDeal = Partial<
-  Omit<NewFinanceDeal, "start_date" | "end_date" | "delivery_weeks">
+  Omit<NewFinanceDeal, "start_date" | "end_date" | "delivery_weeks" | "monthly_hours">
 > & {
   start_date?: string | null;
   end_date?: string | null;
   delivery_weeks?: number | null;
+  monthly_hours?: number | null;
   payments?: DealPaymentEntry[];
 };
 
