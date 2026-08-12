@@ -8,6 +8,7 @@ import { updateFinanceDeal, updateOpportunity, updateProject } from "@/lib/api";
 import {
   DEAL_LOAD_KIND_LABELS,
   DEAL_LOAD_STATUS_LABELS,
+  OVERIG_MONTHLY_HOURS,
   TARGET_HOURLY_RATE,
   buildDealLoadRows,
   type DealLoadRow,
@@ -262,12 +263,14 @@ export function DealLoadPanel({
   const projectsRows = rows.filter((r) => r.kind === "project" && r.hoursPerWeekNeeded > 0);
   const retainerRows = rows.filter((r) => r.kind === "retainer" && r.hoursPerWeekNeeded > 0);
   const commissionRows = rows.filter((r) => r.kind === "commission" && r.hoursPerWeekNeeded > 0);
+  const overigRows = rows.filter((r) => r.kind === "overig" && r.hoursPerWeekNeeded > 0);
   const overloaded = rows.filter((r) => r.status === "overloaded").length;
   const needsDeadline = rows.filter((r) => r.status === "missing_deadline").length;
   const projectWeekly = projectsRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
   const retainerWeekly = retainerRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
   const commissionWeekly = commissionRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
-  const totalWeekly = projectWeekly + retainerWeekly + commissionWeekly;
+  const overigWeekly = overigRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
+  const totalWeekly = projectWeekly + retainerWeekly + commissionWeekly + overigWeekly;
   const totalBudgetHours = rows
     .filter((r) => r.kind === "project")
     .reduce((sum, r) => sum + r.budgetHours, 0);
@@ -335,7 +338,7 @@ export function DealLoadPanel({
           sub={
             overloaded + needsDeadline > 0
               ? `${overloaded} te zwaar · ${needsDeadline} zonder deadline`
-              : `${formatHours(commissionMonthly)}/mnd commissie · ${formatHours(projectWeekly)}/wk project`
+              : `${formatHours(commissionMonthly)}/mnd commissie · ${formatHours(OVERIG_MONTHLY_HOURS)}/mnd overig`
           }
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
@@ -346,7 +349,8 @@ export function DealLoadPanel({
           <h2 className="text-sm font-medium text-neutral-300">Klussen</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
             Project: fee ÷ €{TARGET_HOURLY_RATE} tot de deadline. Retainer: maandfee ÷ €
-            {TARGET_HOURLY_RATE}. Commissie / partner: vaste uren per maand (geen fee÷175).
+            {TARGET_HOURLY_RATE}. Commissie: vaste partner-uren. Overig: {OVERIG_MONTHLY_HOURS}
+            u/mnd admin & randzaken.
           </p>
         </div>
 
@@ -392,16 +396,25 @@ export function DealLoadPanel({
                           "inline-flex text-[11px] px-2 py-0.5 rounded border",
                           row.kind === "commission"
                             ? "text-sky-300 bg-sky-500/10 border-sky-500/20"
-                            : row.kind === "retainer"
-                              ? "text-stone-300 bg-stone-500/10 border-stone-500/20"
-                              : "text-neutral-400 bg-neutral-800 border-neutral-700",
+                            : row.kind === "overig"
+                              ? "text-neutral-300 bg-neutral-800 border-neutral-700"
+                              : row.kind === "retainer"
+                                ? "text-stone-300 bg-stone-500/10 border-stone-500/20"
+                                : "text-neutral-400 bg-neutral-800 border-neutral-700",
                         )}
                       >
                         {DEAL_LOAD_KIND_LABELS[row.kind]}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {row.kind === "commission" ? (
+                      {row.kind === "overig" ? (
+                        <div>
+                          <p className="font-mono text-neutral-200">{formatHours(row.hoursPerMonthNeeded)}/mnd</p>
+                          <p className="text-[10px] text-neutral-600 mt-0.5">
+                            vast buffer · niet bewerkbaar
+                          </p>
+                        </div>
+                      ) : row.kind === "commission" ? (
                         <MonthlyHoursInput
                           key={`${row.key}-${row.hoursPerMonthNeeded}`}
                           row={row}
@@ -430,7 +443,9 @@ export function DealLoadPanel({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {row.kind === "commission" || row.kind === "retainer" ? (
+                      {row.kind === "commission" ||
+                      row.kind === "retainer" ||
+                      row.kind === "overig" ? (
                         <div>
                           <span className="text-xs text-neutral-400">Doorlopend</span>
                           {row.kind === "retainer" && (
@@ -441,6 +456,11 @@ export function DealLoadPanel({
                           {row.kind === "commission" && (
                             <span className="block text-[10px] text-neutral-600 mt-0.5">
                               vaste inzet, geen deadline
+                            </span>
+                          )}
+                          {row.kind === "overig" && (
+                            <span className="block text-[10px] text-neutral-600 mt-0.5">
+                              admin, mail, overleg, etc.
                             </span>
                           )}
                         </div>
@@ -506,9 +526,9 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Project: €17.500 excl. btw ÷ €{TARGET_HOURLY_RATE} = 100u tot de deadline. Retainer:
-        maandfee ÷ €{TARGET_HOURLY_RATE}. Commissie (Escort, Comfortzone, Heatnest, …): zet vaste
-        uren/maand — die tellen mee in de bezetting, los van fee.
+        Project: fee ÷ €{TARGET_HOURLY_RATE} tot de deadline. Retainer: maandfee ÷ €
+        {TARGET_HOURLY_RATE}. Commissie (Escort, Comfortzone, Heatnest, …): vaste uren/maand.
+        Overig: vaste {OVERIG_MONTHLY_HOURS}u/mnd voor admin & randzaken.
       </p>
     </div>
   );

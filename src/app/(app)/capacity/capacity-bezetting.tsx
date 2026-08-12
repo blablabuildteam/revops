@@ -81,9 +81,9 @@ function Metric({
 
   return (
     <div className="space-y-1">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500">{label}</p>
-      <p className={cn("text-3xl font-mono font-medium tracking-tight", valueClass)}>{value}</p>
-      {hint && <p className="text-xs text-neutral-600 leading-relaxed">{hint}</p>}
+      <p className="text-xs text-neutral-500 uppercase tracking-widest">{label}</p>
+      <p className={cn("text-2xl font-mono font-semibold", valueClass)}>{value}</p>
+      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -108,11 +108,11 @@ function PeriodColumn({
   const fill = Math.min(100, Math.round(loadPct * 100));
 
   return (
-    <div className="rounded-xl border border-neutral-800/90 bg-neutral-950/50 px-4 py-4 min-h-[260px] flex flex-col">
+    <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4 min-h-[240px] flex flex-col">
       <p className="text-xs text-neutral-500 mb-3 leading-snug">{title}</p>
       {subtitle && <p className="text-[10px] text-neutral-600 -mt-2 mb-3">{subtitle}</p>}
 
-      <p className={cn("font-mono text-2xl font-medium", toneText(tone))}>{formatHours(hours)}</p>
+      <p className={cn("font-mono text-2xl font-semibold", toneText(tone))}>{formatHours(hours)}</p>
       <p className="text-xs text-neutral-500 mt-1">
         Bezetting <span className={cn("font-mono", toneText(tone))}>{formatPct(loadPct)}</span>
       </p>
@@ -125,7 +125,7 @@ function PeriodColumn({
         Ruimte {formatHours(room)}
       </p>
 
-      <div className="h-1 rounded-full bg-neutral-800/80 overflow-hidden mb-4">
+      <div className="h-1.5 rounded-full bg-neutral-800 overflow-hidden mb-3">
         <div
           className={cn("h-full rounded-full", toneBar(tone))}
           style={{ width: `${fill}%` }}
@@ -240,9 +240,9 @@ export function CapacityBezetting({
         );
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40">
           {(
             [
               { id: "actual" as const, label: "Actual" },
@@ -254,7 +254,7 @@ export function CapacityBezetting({
               type="button"
               onClick={() => setScope(entry.id)}
               className={cn(
-                "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+                "px-3 py-1.5 text-sm rounded-md transition-colors",
                 scope === entry.id
                   ? "bg-neutral-800 text-neutral-100"
                   : "text-neutral-500 hover:text-neutral-300",
@@ -264,7 +264,7 @@ export function CapacityBezetting({
             </button>
           ))}
         </div>
-        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40">
           {(
             [
               { id: "week" as const, label: "Week" },
@@ -276,7 +276,7 @@ export function CapacityBezetting({
               type="button"
               onClick={() => setPeriod(entry.id)}
               className={cn(
-                "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+                "px-3 py-1.5 text-sm rounded-md transition-colors",
                 period === entry.id
                   ? "bg-neutral-800 text-neutral-100"
                   : "text-neutral-500 hover:text-neutral-300",
@@ -288,33 +288,41 @@ export function CapacityBezetting({
         </div>
       </div>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-8 py-2">
-        <Metric
-          label={period === "week" ? "Deze week gepland" : "Deze maand gepland"}
-          value={formatHours(planned)}
-          hint={
-            scope === "actual"
-              ? `${rows.length} lopende klussen`
-              : `incl. pipeline (+${formatHours(pipelineDelta)}/wk t.o.v. actual)`
-          }
-        />
-        <Metric
-          label="Teamcapaciteit"
-          value={formatHours(capacity)}
-          hint={`${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}u/wk`}
-        />
-        <Metric
-          label="Ruimte"
-          value={formatHours(room)}
-          hint={room >= 0 ? "Nog vrij op €175-tempo" : "Tekort t.o.v. team"}
-          tone={room < 0 ? "bad" : room < capacity * 0.15 ? "warn" : "ok"}
-        />
-        <Metric
-          label="Bezettingsgraad"
-          value={formatPct(loadPct)}
-          hint={`Drukste in beeld: ${formatPct(peak.loadPct)}`}
-          tone={tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}
-        />
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+          <Metric
+            label={period === "week" ? "Deze week gepland" : "Deze maand gepland"}
+            value={formatHours(planned)}
+            hint={
+              scope === "actual"
+                ? `${rows.length} regels · incl. overig`
+                : `incl. pipeline (+${formatHours(pipelineDelta)}/wk t.o.v. actual)`
+            }
+          />
+        </div>
+        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+          <Metric
+            label="Teamcapaciteit"
+            value={formatHours(capacity)}
+            hint={`${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}u/wk`}
+          />
+        </div>
+        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+          <Metric
+            label="Ruimte"
+            value={formatHours(room)}
+            hint={room >= 0 ? "Nog vrij op €175-tempo" : "Tekort t.o.v. team"}
+            tone={room < 0 ? "bad" : room < capacity * 0.15 ? "warn" : "ok"}
+          />
+        </div>
+        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+          <Metric
+            label="Bezettingsgraad"
+            value={formatPct(loadPct)}
+            hint={`Drukste in beeld: ${formatPct(peak.loadPct)}`}
+            tone={tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}
+          />
+        </div>
       </section>
 
       <section className="space-y-4">

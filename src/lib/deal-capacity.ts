@@ -14,7 +14,11 @@ export const TARGET_HOURLY_RATE = 175;
 /** Average weeks in a month — used to turn monthly retainer hours into a weekly pace. */
 const WEEKS_PER_MONTH = 52 / 12;
 
-export type DealLoadKind = "project" | "retainer" | "commission";
+/** Admin / randzaken buffer counted every month in capacity. */
+export const OVERIG_MONTHLY_HOURS = 10;
+export const OVERIG_ROW_KEY = "system:overig";
+
+export type DealLoadKind = "project" | "retainer" | "commission" | "overig";
 
 export type DealLoadStatus =
   | "ok"
@@ -113,7 +117,7 @@ function statusFor(row: {
   hoursPerWeekNeeded: number;
   firmWeeklyHours: number;
 }): DealLoadStatus {
-  if (row.kind === "commission") {
+  if (row.kind === "commission" || row.kind === "overig") {
     if (!row.fixedMonthlyHours || row.hoursPerWeekNeeded <= 0) return "missing_value";
   } else if (row.valueExVat <= 0) {
     return "missing_value";
@@ -138,6 +142,7 @@ export const DEAL_LOAD_KIND_LABELS: Record<DealLoadKind, string> = {
   project: "Project",
   retainer: "Retainer",
   commission: "Commissie",
+  overig: "Overig",
 };
 
 type BuildArgs = {
@@ -159,6 +164,32 @@ function buildPace(budgetHours: number, weeks: number) {
       ? Math.round(hoursPerWeekNeeded * WEEKS_PER_MONTH * 10) / 10
       : 0;
   return { hoursPerWeekNeeded, hoursPerMonthNeeded };
+}
+
+function buildOverigRow(firmWeeklyHours: number): DealLoadRow {
+  const budgetHours = OVERIG_MONTHLY_HOURS;
+  const hoursPerWeekNeeded =
+    Math.round((budgetHours / WEEKS_PER_MONTH) * 10) / 10;
+  return {
+    key: OVERIG_ROW_KEY,
+    source: "deal",
+    kind: "overig",
+    name: "Overig",
+    companyName: "Admin & randzaken",
+    valueExVat: 0,
+    endDate: null,
+    weeksRemaining: Math.round(WEEKS_PER_MONTH * 10) / 10,
+    budgetHours,
+    hoursPerWeekNeeded,
+    hoursPerMonthNeeded: budgetHours,
+    fixedMonthlyHours: true,
+    firmWeeklyHours,
+    teamLoadPct:
+      firmWeeklyHours > 0
+        ? Math.round((hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
+        : 0,
+    status: "ok",
+  };
 }
 
 /**
@@ -183,6 +214,9 @@ export function buildDealLoadRows({
   );
 
   const rows: DealLoadRow[] = [];
+
+  // Always count a fixed buffer for admin / miscellaneous work.
+  rows.push(buildOverigRow(firmWeeklyHours));
 
   for (const deal of deals) {
     const project = deal.project_id ? projectById.get(deal.project_id) : undefined;
@@ -416,7 +450,7 @@ export function buildWeeklyCapacity({
     if (row.hoursPerWeekNeeded <= 0) continue;
 
     let weekKeys: string[] = [];
-    if (row.kind === "retainer" || row.kind === "commission") {
+    if (row.kind === "retainer" || row.kind === "commission" || row.kind === "overig") {
       weekKeys = columns.map((c) => c.weekKey);
     } else if (row.endDate) {
       const end = parseDate(row.endDate);
