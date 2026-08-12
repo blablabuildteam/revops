@@ -181,13 +181,13 @@ export function BvCheckPanel({
 
   const body = favoursBv
     ? retainProfit
-      ? `At ${formatCurrency(profit)} profit you take two statutory salaries and leave the rest in the BV after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — you just have not paid box 2 on it yet. This is how a holding structure usually works.`
+      ? `At ${formatCurrency(profit)} profit you take two statutory salaries and leave the rest in the work BV / personal holdings after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — you just have not paid box 2 on it yet.`
       : `At ${formatCurrency(profit)} profit, even after paying box 2 on a full dividend, the BV still beats the VOF.`
     : range.from === null
       ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current settings."
       : toBreakEven !== null && toBreakEven > 0
-        ? `You would need roughly ${formatCurrency(toBreakEven)} more yearly profit before it flips. Below that, two salaries of ${formatCurrency(settings.bv_dga_salary)} plus ${formatCurrency(settings.bv_extra_annual_cost)} of extra costs eat the rate advantage.`
-        : `Your profit sits above the band where a BV wins under these assumptions.`;
+        ? `You would need roughly ${formatCurrency(toBreakEven)} more yearly profit before it flips. Below that, two salaries of ${formatCurrency(settings.bv_dga_salary)} plus ${formatCurrency(settings.bv_extra_annual_cost)} of holding admin eat the rate advantage.`
+        : `Your profit sits above the band where a holding wins under these assumptions.`;
 
   return (
     <div className="space-y-6">
@@ -229,6 +229,144 @@ export function BvCheckPanel({
       </div>
 
       <Verdict favoursBv={favoursBv} headline={headline} body={body} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className={`${CARD} space-y-3`}>
+          <div>
+            <h2 className="text-sm font-medium text-neutral-300">Extra costs of a holding setup</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Target: work BV + personal holding per partner ({partners} holdings)
+            </p>
+          </div>
+          <ul className="space-y-2.5 text-sm">
+            {[
+              {
+                title: "One-time setup",
+                body: "Notary + formation for the work BV and each personal holding, accountant conversion, KvK registrations.",
+                amount: "≈ €6–12k once",
+              },
+              {
+                title: "Extra yearly admin",
+                body: "Three sets of annual accounts, payroll for DGAs, filings. Captured in the “extra yearly cost” assumption below.",
+                amount: formatCurrency(settings.bv_extra_annual_cost) + "/yr",
+              },
+              {
+                title: "Statutory salaries",
+                body: `${partners} × ${formatCurrency(settings.bv_dga_salary)} gebruikelijk loon — taxed in box 1, plus employer Zvw (${formatPercent(0.061, 1)}).`,
+                amount: formatCurrency(bv.dgaSalaryTotal) + "/yr",
+              },
+              {
+                title: "Deductions you lose",
+                body: "No zelfstandigenaftrek and no 12.7% mkb-winstvrijstelling once you leave the VOF.",
+                amount: "rate hit",
+              },
+              {
+                title: "Box 2 later",
+                body: "Money left in the holding after VPB still carries deferred box 2 when you take a private dividend.",
+                amount: retainProfit
+                  ? `≈ ${formatCurrency(bv.deferredBox2)} parked`
+                  : "paid this year",
+              },
+            ].map((item) => (
+              <li
+                key={item.title}
+                className="flex items-start justify-between gap-4 border-b border-neutral-800/80 last:border-0 pb-2.5 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <p className="text-neutral-200 font-medium">{item.title}</p>
+                  <p className="text-xs text-neutral-500 leading-relaxed mt-0.5">{item.body}</p>
+                </div>
+                <span className="shrink-0 font-mono text-xs text-orange-300/90 pt-0.5">
+                  {item.amount}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className={`${CARD} space-y-3`}>
+          <div>
+            <h2 className="text-sm font-medium text-neutral-300">Extra benefits of the holding</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Why most agencies move to personal holdings + a work BV
+            </p>
+          </div>
+          <ul className="space-y-2.5 text-sm">
+            {[
+              {
+                title: "Retain after 19% VPB",
+                body: "Profit above salaries stays in the work BV / holdings at the low VPB rate instead of progressive box 1.",
+                tag: "tax timing",
+              },
+              {
+                title: "Liability ring-fence",
+                body: "Client and project risk sits in the work BV. Personal holdings (and private assets) stay cleaner.",
+                tag: "risk",
+              },
+              {
+                title: "Personal holding per partner",
+                body: "Each of you owns the work BV via your own holding — clear equity split, easier exits, management fees if needed.",
+                tag: "structure",
+              },
+              {
+                title: "Participation exemption",
+                body: "Selling work-BV shares from a holding is often tax-free under the deelnemingsvrijstelling (accountant to confirm).",
+                tag: "exit",
+              },
+              {
+                title: "Reinvest inside the group",
+                body: "Cash can stay available for hiring, tools or acquisitions without first paying private income tax.",
+                tag: "growth",
+              },
+            ].map((item) => (
+              <li
+                key={item.title}
+                className="flex items-start justify-between gap-4 border-b border-neutral-800/80 last:border-0 pb-2.5 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <p className="text-neutral-200 font-medium">{item.title}</p>
+                  <p className="text-xs text-neutral-500 leading-relaxed mt-0.5">{item.body}</p>
+                </div>
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-emerald-400/80 pt-1">
+                  {item.tag}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className={`${CARD} space-y-4`}>
+        <h2 className="text-sm font-medium text-neutral-300">Holding structure we model</h2>
+        <div className="flex flex-col items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl">
+            {TASK_ASSIGNEES.slice(0, partners).map((name) => (
+              <div
+                key={name}
+                className="rounded-lg border border-neutral-800 bg-neutral-950/50 px-3 py-3 text-center"
+              >
+                <p className="text-[10px] uppercase tracking-wider text-neutral-600 mb-1">
+                  Personal holding
+                </p>
+                <p className="text-sm text-neutral-200 font-medium">{name} Holding B.V.</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-neutral-600 text-xs tracking-widest">↓ owns ↓</div>
+          <div className="rounded-lg border border-[#d4e052]/30 bg-[#d4e052]/5 px-5 py-3 text-center w-full max-w-sm">
+            <p className="text-[10px] uppercase tracking-wider text-[#d4e052]/70 mb-1">
+              Work BV
+            </p>
+            <p className="text-sm text-neutral-100 font-medium">blablabuild B.V.</p>
+            <p className="text-[11px] text-neutral-500 mt-1">Clients · payroll · projects</p>
+          </div>
+        </div>
+        <p className="text-xs text-neutral-500 leading-relaxed">
+          Tax math still treats the group as one economic unit (salaries out, surplus retained after
+          VPB) — which matches how a holding usually runs day to day. Intercompany management fees
+          and fiscal unity are fine-tuning for your accountant; they rarely change the go / no-go.
+        </p>
+      </div>
 
       <div className={`${CARD} space-y-4`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -394,12 +532,12 @@ export function BvCheckPanel({
             hint={`Statutory minimum is ${formatCurrency(GEBRUIKELIJK_LOON)}`}
           />
           <NumberField
-            label="Extra yearly cost of a BV"
+            label="Extra yearly cost of the holding"
             prefix="€"
             step={250}
             value={settings.bv_extra_annual_cost}
             onChange={(value) => onSettingsChange({ bv_extra_annual_cost: value })}
-            hint="Accountant, annual accounts, payroll"
+            hint="Work BV + 2 personal holdings: accounts, payroll, filings"
           />
           <NumberField
             label="Profit to test"
@@ -430,21 +568,20 @@ export function BvCheckPanel({
         <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
         <div className="space-y-1.5 leading-relaxed">
           <p>
-            Default view matches how most BV setups actually run: each director takes
-            the statutory salary, the company pays {formatPercent(VPB_LOW_RATE, 0)} VPB
-            on the rest, and that equity stays in the BV (or a holding) until you take a
-            private dividend — which is when box 2 is due. Turn off “Keep profit in the
-            BV” to force a full payout comparison instead.
+            Default view matches a holding: each director takes the statutory salary from the
+            work BV, the company pays {formatPercent(VPB_LOW_RATE, 0)} VPB on the rest, and that
+            equity stays in the group (work BV and/or personal holdings) until you take a private
+            dividend — which is when box 2 is due. Turn off “Keep profit in the BV” to force a
+            full payout comparison instead.
           </p>
           <p>
-            Still not modelled: separate holding + work BV entities, management fees
-            between them, fiscal unity, or employee insurance beyond Zvw. Tax is also
-            only part of the decision — liability, selling the business, and the
-            conversion itself matter too.
+            The costs / benefits cards list what changes operationally. The chart only prices the
+            recurring tax + admin difference — not one-time notary fees, and not soft factors like
+            liability or sellability.
           </p>
           <Disclaimer>
-            An indication based on {new Date().getFullYear()} rates, not tax advice. Run
-            the outcome past your accountant before acting on it.
+            An indication based on {new Date().getFullYear()} rates for a work BV with personal
+            holdings, not tax advice. Run the outcome past your accountant before acting on it.
           </Disclaimer>
         </div>
       </div>

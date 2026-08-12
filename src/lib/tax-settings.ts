@@ -23,7 +23,7 @@ export const DEFAULT_TAX_SETTINGS: TaxSettings = {
   tax_profit_split: 50,
   tax_urencriterium: true,
   tax_startersaftrek: false,
-  bv_extra_annual_cost: 2_500,
+  bv_extra_annual_cost: 4_500,
   bv_dga_salary: GEBRUIKELIJK_LOON,
 };
 

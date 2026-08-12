@@ -97,7 +97,7 @@ const TABS = [
   { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
   { id: "bunq", label: "Bunq", sub: "Bank revenue → link to clients & orders" },
   { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax (VOF)" },
-  { id: "bv", label: "BV check", sub: "Whether converting to a BV is worth it yet" },
+  { id: "bv", label: "BV check", sub: "Holding + personal holdings vs staying a VOF" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
