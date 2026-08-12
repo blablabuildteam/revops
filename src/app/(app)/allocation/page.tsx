@@ -2,12 +2,12 @@
 
 export const dynamic = "force-dynamic";
 
-import { useMemo, useCallback } from "react";
-import { Users } from "lucide-react";
+import { useCallback } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { useProjects, useOpportunities, useFinanceDeals } from "@/hooks/use-api-data";
 import { DealLoadPanel } from "./deal-load-panel";
-import { UtilizationPanel } from "./weekly-load-panel";
-import { buildDealLoadRows, TARGET_HOURLY_RATE } from "@/lib/deal-capacity";
+import { TARGET_HOURLY_RATE } from "@/lib/deal-capacity";
 
 export default function AllocationPage() {
   const { data: projects = [], isLoading: projectsLoading, mutate: mutateProjects } =
@@ -22,43 +22,41 @@ export default function AllocationPage() {
     void mutateProjects();
   }, [mutateDeals, mutateOpps, mutateProjects]);
 
-  const rows = useMemo(
-    () => buildDealLoadRows({ deals, projects, opportunities }),
-    [deals, projects, opportunities],
-  );
-
   const loading =
     (projectsLoading && projects.length === 0) ||
     (oppsLoading && opportunities.length === 0);
 
   if (loading) {
     return (
-      <div className="p-6 max-w-full space-y-4">
-        <div className="h-8 w-48 bg-neutral-900 border border-neutral-800 rounded animate-pulse" />
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-24 bg-neutral-900/40 border border-neutral-800 rounded-lg animate-pulse"
-            />
-          ))}
-        </div>
-        <div className="h-64 bg-neutral-900/40 border border-neutral-800 rounded-lg animate-pulse" />
+      <div className="px-8 py-10 max-w-6xl mx-auto space-y-6">
+        <div className="h-8 w-56 bg-neutral-900/60 rounded animate-pulse" />
+        <div className="h-64 bg-neutral-900/30 rounded-xl animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-full space-y-8">
-      <div className="flex items-center gap-3">
-        <Users className="w-6 h-6 text-[#d4e052]" />
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Capacity</h1>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            Fee ÷ €{TARGET_HOURLY_RATE}/h tot de deadline — geschatte bezetting per week of maand
+    <div className="px-8 py-10 max-w-6xl mx-auto space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-600">
+            Capacity · €{TARGET_HOURLY_RATE}/h
+          </p>
+          <h1 className="text-3xl font-semibold text-neutral-100 tracking-tight">
+            Klussen
+          </h1>
+          <p className="text-sm text-neutral-500 max-w-lg leading-relaxed">
+            Fee, deadline en tempo per lopende deal. Bezetting over weken/maanden staat apart.
           </p>
         </div>
-      </div>
+        <Link
+          href="/capacity"
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-[#d4e052] transition-colors"
+        >
+          Naar bezetting
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </Link>
+      </header>
 
       <DealLoadPanel
         deals={deals}
@@ -66,8 +64,6 @@ export default function AllocationPage() {
         opportunities={opportunities}
         onRefresh={refreshCapacity}
       />
-
-      <UtilizationPanel rows={rows} />
     </div>
   );
 }

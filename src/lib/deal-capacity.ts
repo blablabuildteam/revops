@@ -134,6 +134,8 @@ type BuildArgs = {
   people?: readonly string[];
   rate?: number;
   today?: Date;
+  /** When false (default), only confirmed finance deals — no open opportunities. */
+  includePipeline?: boolean;
 };
 
 function buildPace(budgetHours: number, weeks: number) {
@@ -158,6 +160,7 @@ export function buildDealLoadRows({
   people = TASK_ASSIGNEES,
   rate = TARGET_HOURLY_RATE,
   today = new Date(),
+  includePipeline = false,
 }: BuildArgs): DealLoadRow[] {
   const firmWeeklyHours = people.length * ALLOCATION_WEEKLY_HOURS;
   const projectById = new Map(projects.map((p) => [p.id, p]));
@@ -231,63 +234,64 @@ export function buildDealLoadRows({
     });
   }
 
-  for (const opp of opportunities) {
-    if (opp.stage === "won" || opp.stage === "lost") continue;
-    if (dealOpportunityIds.has(opp.id)) continue;
+  if (includePipeline) {
+    for (const opp of opportunities) {
+      if (opp.stage === "won" || opp.stage === "lost") continue;
+      if (dealOpportunityIds.has(opp.id)) continue;
 
-    const kind: DealLoadKind = opp.type === "retainer" ? "retainer" : "project";
-    const end = parseDate(opp.end_date);
-    const valueExVat = Number(opp.expected_value) || 0;
-    let budgetHours = 0;
-    let weeksRemaining = 0;
-    let hoursPerWeekNeeded = 0;
-    let hoursPerMonthNeeded = 0;
+      const kind: DealLoadKind = opp.type === "retainer" ? "retainer" : "project";
+      const end = parseDate(opp.end_date);
+      const valueExVat = Number(opp.expected_value) || 0;
+      let budgetHours = 0;
+      let weeksRemaining = 0;
+      let hoursPerWeekNeeded = 0;
+      let hoursPerMonthNeeded = 0;
 
-    if (kind === "retainer") {
-      // Pipeline retainer: expected_value treated as monthly fee excl. VAT.
-      budgetHours = budgetHoursForValue(valueExVat, rate);
-      weeksRemaining = Math.round(WEEKS_PER_MONTH * 10) / 10;
-      hoursPerMonthNeeded = budgetHours;
-      hoursPerWeekNeeded =
-        Math.round((budgetHours / WEEKS_PER_MONTH) * 10) / 10;
-    } else {
-      budgetHours = budgetHoursForValue(valueExVat, rate);
-      weeksRemaining = end ? weeksUntilDeadline(end, today) : 0;
-      const pace = buildPace(budgetHours, weeksRemaining);
-      hoursPerWeekNeeded = pace.hoursPerWeekNeeded;
-      hoursPerMonthNeeded = pace.hoursPerMonthNeeded;
-    }
+      if (kind === "retainer") {
+        budgetHours = budgetHoursForValue(valueExVat, rate);
+        weeksRemaining = Math.round(WEEKS_PER_MONTH * 10) / 10;
+        hoursPerMonthNeeded = budgetHours;
+        hoursPerWeekNeeded =
+          Math.round((budgetHours / WEEKS_PER_MONTH) * 10) / 10;
+      } else {
+        budgetHours = budgetHoursForValue(valueExVat, rate);
+        weeksRemaining = end ? weeksUntilDeadline(end, today) : 0;
+        const pace = buildPace(budgetHours, weeksRemaining);
+        hoursPerWeekNeeded = pace.hoursPerWeekNeeded;
+        hoursPerMonthNeeded = pace.hoursPerMonthNeeded;
+      }
 
-    const teamLoadPct =
-      firmWeeklyHours > 0
-        ? Math.round((hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
-        : 0;
+      const teamLoadPct =
+        firmWeeklyHours > 0
+          ? Math.round((hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
+          : 0;
 
-    rows.push({
-      key: `opp:${opp.id}`,
-      source: "opportunity",
-      kind,
-      opportunityId: opp.id,
-      projectId: null,
-      name: opp.name,
-      companyName: opp.company?.name ?? "—",
-      valueExVat,
-      endDate: end ? end.toISOString().slice(0, 10) : null,
-      weeksRemaining,
-      budgetHours,
-      hoursPerWeekNeeded,
-      hoursPerMonthNeeded,
-      firmWeeklyHours,
-      teamLoadPct,
-      status: statusFor({
+      rows.push({
+        key: `opp:${opp.id}`,
+        source: "opportunity",
         kind,
+        opportunityId: opp.id,
+        projectId: null,
+        name: opp.name,
+        companyName: opp.company?.name ?? "—",
         valueExVat,
         endDate: end ? end.toISOString().slice(0, 10) : null,
         weeksRemaining,
+        budgetHours,
         hoursPerWeekNeeded,
+        hoursPerMonthNeeded,
         firmWeeklyHours,
-      }),
-    });
+        teamLoadPct,
+        status: statusFor({
+          kind,
+          valueExVat,
+          endDate: end ? end.toISOString().slice(0, 10) : null,
+          weeksRemaining,
+          hoursPerWeekNeeded,
+          firmWeeklyHours,
+        }),
+      });
+    }
   }
 
   return rows.sort((a, b) => {

@@ -23,7 +23,7 @@ const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/opportunities", label: "Opportunities", icon: ListFilter },
   { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/allocation", label: "Capacity", icon: Users },
+  { href: "/capacity", label: "Capacity", icon: Users },
   { href: "/todos", label: "Tasks", icon: CheckSquare },
   { href: "/finance", label: "Finance", icon: Euro },
   { href: "/companies", label: "Companies", icon: Building2 },

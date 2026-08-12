@@ -178,9 +178,11 @@ export function DealLoadPanel({
   opportunities: Opportunity[];
   onRefresh?: () => void;
 }) {
+  const [includePipeline, setIncludePipeline] = useState(false);
+
   const rows = useMemo(
-    () => buildDealLoadRows({ deals, projects, opportunities }),
-    [deals, projects, opportunities],
+    () => buildDealLoadRows({ deals, projects, opportunities, includePipeline }),
+    [deals, projects, opportunities, includePipeline],
   );
 
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
@@ -195,9 +197,44 @@ export function DealLoadPanel({
     .filter((r) => r.kind === "project")
     .reduce((sum, r) => sum + r.budgetHours, 0);
   const utilization = firmWeekly > 0 ? totalWeekly / firmWeekly : 0;
+  const room = firmWeekly - totalWeekly;
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+          <button
+            type="button"
+            onClick={() => setIncludePipeline(false)}
+            className={cn(
+              "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+              !includePipeline
+                ? "bg-neutral-800 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300",
+            )}
+          >
+            Actual
+          </button>
+          <button
+            type="button"
+            onClick={() => setIncludePipeline(true)}
+            className={cn(
+              "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+              includePipeline
+                ? "bg-neutral-800 text-neutral-100"
+                : "text-neutral-500 hover:text-neutral-300",
+            )}
+          >
+            Actual + pipeline
+          </button>
+        </div>
+        <p className="text-xs text-neutral-600">
+          {includePipeline
+            ? "Inclusief open opportunities"
+            : "Alleen bevestigde finance deals"}
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <SummaryCard
           label="Planning rate"
@@ -213,7 +250,7 @@ export function DealLoadPanel({
         <SummaryCard
           label="Concurrent load / week"
           value={formatHours(totalWeekly)}
-          sub={`${formatHours(projectWeekly)} projects + ${formatHours(retainerWeekly)} retainers · team ${formatHours(firmWeekly)}`}
+          sub={`Ruimte ${formatHours(room)} van ${formatHours(firmWeekly)} team`}
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
         <SummaryCard
@@ -222,7 +259,7 @@ export function DealLoadPanel({
           sub={
             overloaded + needsDeadline > 0
               ? `${overloaded} overloaded · ${needsDeadline} no deadline`
-              : `If all current jobs run at €${TARGET_HOURLY_RATE}/h pace`
+              : `${formatHours(projectWeekly)} proj + ${formatHours(retainerWeekly)} ret`
           }
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
