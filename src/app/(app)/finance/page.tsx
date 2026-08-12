@@ -95,7 +95,7 @@ const BunqPanel = dynamicImport(
 
 const TABS = [
   { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
-  { id: "bunq", label: "Bunq", sub: "Bank revenue → link to clients & orders" },
+  { id: "bunq", label: "Bunq", sub: "Bank revenue from Jan 2026 → link to deals" },
   { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax (VOF)" },
   { id: "bv", label: "BV check", sub: "Holding + personal holdings vs staying a VOF" },
 ] as const;

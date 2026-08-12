@@ -237,7 +237,7 @@ export function BunqPanel() {
         <div>
           <h2 className="text-sm font-medium text-neutral-300">Client revenue from bunq</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Last sync: {formatSyncTime(totals?.lastSync ?? null)}
+            From 1 Jan 2026 · Last sync: {formatSyncTime(totals?.lastSync ?? null)}
             {configured && status?.connection?.ok && (
               <span className="inline-flex items-center gap-1 ml-2 text-emerald-400">
                 <CheckCircle2 className="w-3 h-3" />

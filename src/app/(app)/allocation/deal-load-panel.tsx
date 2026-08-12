@@ -17,6 +17,8 @@ import {
 import { ALLOCATION_WEEKLY_HOURS, TASK_ASSIGNEES } from "@/lib/types";
 import type { FinanceDeal, Opportunity, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
+import { InfoHint } from "@/components/info-hint";
 
 function statusTone(status: DealLoadStatus) {
   switch (status) {
@@ -61,11 +63,13 @@ function SummaryCard({
   value,
   sub,
   tone = "default",
+  info,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "default" | "accent" | "warn" | "bad";
+  info?: React.ReactNode;
 }) {
   const valueClass = {
     default: "text-neutral-100",
@@ -76,9 +80,12 @@ function SummaryCard({
 
   return (
     <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-        {label}
-      </p>
+      <div className="flex items-center gap-1.5 mb-1">
+        <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest">
+          {label}
+        </p>
+        {info && <InfoHint label={label}>{info}</InfoHint>}
+      </div>
       <p className={cn("text-xl sm:text-2xl font-mono font-semibold tabular-nums", valueClass)}>
         {value}
       </p>
@@ -149,16 +156,20 @@ function RowLink({ row }: { row: DealLoadRow }) {
 function DeadlineInput({
   row,
   onSaved,
+  compact = false,
 }: {
   row: DealLoadRow;
   onSaved: () => void;
+  /** Icon-only trigger — used on mobile cards. */
+  compact?: boolean;
 }) {
   const [value, setValue] = useState(row.endDate ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function commit() {
-    const next = value.trim() || null;
+  async function commit(nextRaw: string) {
+    const next = nextRaw.trim() || null;
+    setValue(next ?? "");
     if (next === (row.endDate ?? null)) {
       setError(null);
       return;
@@ -187,15 +198,31 @@ function DeadlineInput({
   }
 
   return (
-    <div className="flex flex-col items-start gap-0.5 min-w-[9.5rem]">
-      <input
-        type="date"
-        value={value}
-        disabled={saving}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => void commit()}
-        className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-100 focus:border-[#d4e052]/40 focus:outline-none disabled:opacity-50"
-      />
+    <div className="flex flex-col items-start gap-0.5">
+      {/* Mobile: calendar icon only */}
+      <div className={cn(compact ? "block" : "md:hidden")}>
+        <DatePicker
+          value={value}
+          disabled={saving}
+          iconOnly
+          placeholder="Deadline"
+          onChange={(v) => void commit(v)}
+          className="border-neutral-700 bg-neutral-950"
+        />
+      </div>
+      {/* Desktop table: icon + date text */}
+      {!compact && (
+        <div className="hidden md:block min-w-[9.5rem]">
+          <DatePicker
+            value={value}
+            disabled={saving}
+            size="sm"
+            placeholder="Deadline"
+            onChange={(v) => void commit(v)}
+            className="border-neutral-700 bg-neutral-950 font-mono text-neutral-100"
+          />
+        </div>
+      )}
       {row.endDate && row.weeksRemaining > 0 && (
         <span className="text-[10px] text-neutral-600">
           nog {row.weeksRemaining} wk
@@ -328,15 +355,18 @@ function FeeOrHoursCell({
 function TimingCell({
   row,
   onRefresh,
+  compact = false,
 }: {
   row: DealLoadRow;
   onRefresh?: () => void;
+  compact?: boolean;
 }) {
   if (row.kind === "project") {
     return (
       <DeadlineInput
         key={`${row.key}-${row.endDate}`}
         row={row}
+        compact={compact}
         onSaved={() => onRefresh?.()}
       />
     );
@@ -434,7 +464,7 @@ function DealLoadCard({
           <p className="text-[10px] text-neutral-600 uppercase tracking-wider">
             {row.kind === "project" ? "Deadline" : "Looptijd"}
           </p>
-          <TimingCell row={row} onRefresh={onRefresh} />
+          <TimingCell row={row} onRefresh={onRefresh} compact />
         </div>
       </div>
 
@@ -534,6 +564,18 @@ export function DealLoadPanel({
           label="Urenbudget projecten"
           value={formatHours(totalBudgetHours)}
           sub={`${projectsRows.length} projecten · fee ÷ €${TARGET_HOURLY_RATE}`}
+          info={
+            <>
+              <p>
+                Som van alle projecturen: fee excl. btw ÷ €{TARGET_HOURLY_RATE}.
+                Dat is het urenplafond om op target-tarief te landen.
+              </p>
+              <p>
+                Retainers, commissie (vaste partner-uren) en overig tellen hier
+                niet mee — die hebben een maandtempo, geen totaalbudget.
+              </p>
+            </>
+          }
         />
         <SummaryCard
           label="Last / week"
@@ -550,6 +592,22 @@ export function DealLoadPanel({
               : `${formatHours(commissionMonthly)}/mnd commissie · ${formatHours(OVERIG_MONTHLY_HOURS)}/mnd overig`
           }
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
+          info={
+            <>
+              <p>
+                Geplande last deze week ÷ teamcapaciteit ({TASK_ASSIGNEES.length}×
+                {ALLOCATION_WEEKLY_HOURS}u = {firmWeekly}u/wk).
+              </p>
+              <p>
+                Onder 85% is comfortabel, 85–100% is krap, boven 100% betekent
+                dat we meer uren nodig hebben dan het team in één week heeft.
+              </p>
+              <p>
+                Inclusief projecttempo tot de deadline, retainers, commissie en
+                overig ({OVERIG_MONTHLY_HOURS}u/mnd).
+              </p>
+            </>
+          }
         />
       </div>
 

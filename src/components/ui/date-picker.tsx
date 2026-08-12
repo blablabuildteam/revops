@@ -146,6 +146,8 @@ type DatePickerProps = {
   className?: string
   size?: "default" | "sm"
   showIcon?: boolean
+  /** Compact trigger — calendar icon only (useful on mobile). */
+  iconOnly?: boolean
   overdue?: boolean
   disabled?: boolean
   onClick?: React.MouseEventHandler<HTMLButtonElement>
@@ -159,6 +161,7 @@ function DatePicker({
   className,
   size = "default",
   showIcon = true,
+  iconOnly = false,
   overdue = false,
   disabled,
   onClick,
@@ -174,26 +177,39 @@ function DatePicker({
         disabled={disabled}
         onClick={onClick}
         onPointerDown={onPointerDown}
+        aria-label={value ? `Deadline ${displayValue}` : placeholder}
+        title={iconOnly ? (value ? displayValue : placeholder) : undefined}
         className={cn(
-          "flex w-full items-center gap-2 rounded-lg border border-input bg-transparent text-left transition-colors outline-none",
+          "flex items-center gap-2 rounded-lg border border-input bg-transparent text-left transition-colors outline-none",
           "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
           "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
           "dark:bg-input/30",
-          size === "default" && "h-8 px-2.5 text-sm",
-          size === "sm" && "h-7 px-2 text-xs",
-          !value && "text-muted-foreground",
+          iconOnly
+            ? "h-9 w-9 justify-center px-0"
+            : "w-full",
+          !iconOnly && size === "default" && "h-8 px-2.5 text-sm",
+          !iconOnly && size === "sm" && "h-7 px-2 text-xs",
+          !value && !iconOnly && "text-muted-foreground",
+          value && iconOnly && "border-[#d4e052]/40 text-[#d4e052]",
           className
         )}
       >
-        {showIcon && (
+        {(showIcon || iconOnly) && (
           <CalendarIcon
             className={cn(
-              "shrink-0 text-neutral-500",
-              size === "default" ? "size-3.5" : "size-3"
+              "shrink-0",
+              iconOnly
+                ? value
+                  ? "size-4 text-[#d4e052]"
+                  : "size-4 text-neutral-500"
+                : "text-neutral-500",
+              !iconOnly && (size === "default" ? "size-3.5" : "size-3")
             )}
           />
         )}
-        <span className="min-w-0 flex-1 truncate">{displayValue}</span>
+        {!iconOnly && (
+          <span className="min-w-0 flex-1 truncate">{displayValue}</span>
+        )}
         {overdue && (
           <span
             className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"

@@ -4,6 +4,9 @@ import {
   type BunqIncomingPayment,
 } from "@/lib/bunq/client";
 
+/** Only sync / show Bunq client payments from this date (workspace start). */
+export const BUNQ_FROM_DATE = "2026-01-01";
+
 export type BunqPaymentRow = {
   id: number;
   created_at: string;
@@ -239,7 +242,7 @@ export async function syncBunqPayments(): Promise<BunqSyncResult> {
   await ensureBunqPaymentsTable();
 
   const [payments, companyMap, deals] = await Promise.all([
-    fetchIncomingPayments({ maxPages: 5 }),
+    fetchIncomingPayments({ maxPages: 8, since: BUNQ_FROM_DATE }),
     loadCompanyMap(),
     loadDeals(),
   ]);
@@ -335,6 +338,7 @@ export async function listBunqPayments(opts?: {
     SELECT *
     FROM bunq_payments
     WHERE COALESCE(matched_confidence, '') <> 'internal'
+      AND created_at >= ${BUNQ_FROM_DATE}::timestamptz
     ORDER BY created_at DESC
     LIMIT ${limit}
   `;
@@ -368,6 +372,7 @@ export async function getBunqPaymentTotals() {
       COUNT(*) FILTER (WHERE company_id IS NOT NULL)::int AS matched_companies
     FROM bunq_payments
     WHERE COALESCE(matched_confidence, '') <> 'internal'
+      AND created_at >= ${BUNQ_FROM_DATE}::timestamptz
   `;
   const { rows: syncRows } = await sql`
     SELECT value FROM finance_settings WHERE key = 'bunq_last_sync'
@@ -426,6 +431,7 @@ export async function applyBunqPaymentsToDeals(): Promise<{ updatedDeals: number
     SELECT id, amount, created_at, finance_deal_id, description
     FROM bunq_payments
     WHERE finance_deal_id IS NOT NULL
+      AND created_at >= ${BUNQ_FROM_DATE}::timestamptz
     ORDER BY created_at ASC
   `;
 

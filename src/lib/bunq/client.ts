@@ -537,11 +537,16 @@ export type BunqIncomingPayment = {
 /**
  * Collect incoming money from each active monetary account.
  * In the payment list, positive amounts are credits (money in).
+ * Stops paging once payments fall before `since` (ISO date, default 2026-01-01).
  */
 export async function fetchIncomingPayments(opts?: {
   maxPages?: number;
+  /** Inclusive lower bound, YYYY-MM-DD. Older payments are skipped. */
+  since?: string;
 }): Promise<BunqIncomingPayment[]> {
-  const maxPages = opts?.maxPages ?? 5;
+  const maxPages = opts?.maxPages ?? 8;
+  const since = opts?.since ?? "2026-01-01";
+  const sinceMs = new Date(`${since}T00:00:00.000Z`).getTime();
   const { sessionToken, userId } = await ensureSession();
   const accounts = await listMonetaryAccounts();
 
@@ -553,8 +558,14 @@ export async function fetchIncomingPayments(opts?: {
       const payments = await listPaymentsPage(userId, account.id, sessionToken, olderId);
       if (payments.length === 0) break;
 
+      let hitOlderThanSince = false;
       for (const payment of payments) {
         if (!payment?.id || !payment.amount) continue;
+        const createdMs = new Date(payment.created).getTime();
+        if (Number.isFinite(createdMs) && createdMs < sinceMs) {
+          hitOlderThanSince = true;
+          continue;
+        }
         const amount = Number(payment.amount.value);
         if (!Number.isFinite(amount) || amount <= 0) continue;
 
@@ -575,7 +586,7 @@ export async function fetchIncomingPayments(opts?: {
       }
 
       olderId = payments[payments.length - 1]?.id;
-      if (payments.length < 200) break;
+      if (hitOlderThanSince || payments.length < 200) break;
     }
   }
 

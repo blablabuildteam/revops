@@ -11,9 +11,10 @@ import {
   type MonthlyCapacityColumn,
   type WeeklyCapacityColumn,
 } from "@/lib/deal-capacity";
+import { cn } from "@/lib/utils";
+import { InfoHint } from "@/components/info-hint";
 import { ALLOCATION_WEEKLY_HOURS, TASK_ASSIGNEES } from "@/lib/types";
 import type { FinanceDeal, Opportunity, Project } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const VISIBLE_WEEKS = 8;
 const VISIBLE_MONTHS = 6;
@@ -65,11 +66,13 @@ function Metric({
   value,
   hint,
   tone = "default",
+  info,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: "default" | "accent" | "ok" | "warn" | "bad";
+  info?: React.ReactNode;
 }) {
   const valueClass = {
     default: "text-neutral-100",
@@ -81,9 +84,12 @@ function Metric({
 
   return (
     <div className="space-y-1">
-      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest">
-        {label}
-      </p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest">
+          {label}
+        </p>
+        {info && <InfoHint label={label}>{info}</InfoHint>}
+      </div>
       <p className={cn("text-xl sm:text-2xl font-mono font-semibold tabular-nums", valueClass)}>
         {value}
       </p>
@@ -325,6 +331,22 @@ export function CapacityBezetting({
             value={formatPct(loadPct)}
             hint={`Drukste in beeld: ${formatPct(peak.loadPct)}`}
             tone={tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}
+            info={
+              <>
+                <p>
+                  Geplande uren in deze {period === "week" ? "week" : "maand"} ÷
+                  teamcapaciteit ({formatHours(capacity)}).
+                </p>
+                <p>
+                  Onder 85% is comfortabel, 85–100% is krap, boven 100% betekent
+                  dat we meer uren nodig hebben dan het team beschikbaar heeft.
+                </p>
+                <p>
+                  Uren komen uit fee ÷ €{TARGET_HOURLY_RATE} tot de deadline,
+                  plus retainers, commissie en overig.
+                </p>
+              </>
+            }
           />
         </div>
       </section>
