@@ -12,7 +12,7 @@ import { createSign, generateKeyPairSync, randomUUID } from "crypto";
 import { sql } from "@/lib/db";
 
 const SANDBOX_URL = "https://public-api.sandbox.bunq.com/v1";
-const PRODUCTION_URL = "https://public-api.bunq.com/v1";
+const PRODUCTION_URL = "https://api.bunq.com/v1";
 
 export type BunqEnvironment = "sandbox" | "production";
 
