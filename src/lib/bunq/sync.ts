@@ -68,6 +68,8 @@ export function isClientRevenuePayment(payment: {
   description?: string | null;
   accountName?: string | null;
   account_name?: string | null;
+  payment_type?: string | null;
+  type?: string | null;
 }): boolean {
   const counterparty = (
     payment.counterpartyName ||
@@ -76,14 +78,20 @@ export function isClientRevenuePayment(payment: {
   ).toLowerCase();
   const description = (payment.description || "").toLowerCase();
   const account = (payment.accountName || payment.account_name || "").toLowerCase();
+  const type = (payment.payment_type || payment.type || "").toLowerCase();
 
   if (!counterparty && !description) return false;
   if (counterparty === "bunq" || counterparty.startsWith("bunq ")) return false;
   if (description.includes("autovat") || description.includes("payday")) return false;
   if (description.includes("interest") || description.includes("rente")) return false;
+  if (description.includes("refund:") || description.includes("temporary hold")) return false;
   // Own-account sweeps (Salaris / IB / BTW) are not client revenue.
-  if (["salaris", "ib", "btw"].includes(account)) return false;
+  if (["salaris", "ib", "btw", "secundair"].includes(account)) return false;
   if (counterparty.includes("blablabuild")) return false;
+  // Partner draws / internal xkgrowth moves between pots.
+  if (counterparty.includes("xkgrowth")) return false;
+  if (counterparty.includes("belastingdienst")) return false;
+  if (type === "reassign_transaction") return false;
   return true;
 }
 
@@ -247,6 +255,7 @@ export async function syncBunqPayments(): Promise<BunqSyncResult> {
       counterpartyName: payment.counterpartyName,
       description: payment.description,
       accountName: payment.accountName,
+      type: payment.type,
     });
     const match = revenue
       ? matchPayment(payment, companyMap, deals)

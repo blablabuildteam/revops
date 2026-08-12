@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
           counterparty_name: p.counterparty_name,
           description: p.description,
           account_name: p.account_name,
+          payment_type: p.payment_type,
         }),
     );
   }

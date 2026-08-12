@@ -519,35 +519,6 @@ async function listPaymentsPage(
   return payments;
 }
 
-async function listEventsPage(
-  userId: number,
-  sessionToken: string,
-  olderId?: number,
-): Promise<Array<{ id: number; monetary_account_id?: number; Payment?: BunqPayment }>> {
-  const params = new URLSearchParams({ count: "200" });
-  if (olderId) params.set("older_id", String(olderId));
-  const json = await bunqRaw("GET", `/user/${userId}/event?${params}`, {
-    authToken: sessionToken,
-  });
-  const events: Array<{ id: number; monetary_account_id?: number; Payment?: BunqPayment }> = [];
-  for (const item of unwrapResponse(json)) {
-    const event = item.Event as
-      | {
-          id?: number;
-          monetary_account_id?: number;
-          object?: { Payment?: BunqPayment };
-        }
-      | undefined;
-    if (!event?.id) continue;
-    events.push({
-      id: event.id,
-      monetary_account_id: event.monetary_account_id,
-      Payment: event.object?.Payment,
-    });
-  }
-  return events;
-}
-
 export type BunqIncomingPayment = {
   id: number;
   created: string;
@@ -597,7 +568,7 @@ export async function fetchIncomingPayments(opts?: {
           counterpartyIban: extractIban(payment.counterparty_alias) || extractIban(payment.alias),
           monetaryAccountId: account.id,
           accountIban: account.iban ?? null,
-          accountName: account.displayName || account.description || null,
+          accountName: account.description || account.displayName || null,
           type: payment.type || payment.sub_type || null,
           raw: payment,
         });
