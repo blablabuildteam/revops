@@ -204,7 +204,10 @@ export function CapacityBezetting({
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
   const near = period === "week" ? weeks[0] : months[0];
   const planned = near?.totalHours ?? 0;
-  const capacity = near?.firmHours ?? near?.firmWeeklyHours ?? firmWeekly;
+  const capacity =
+    period === "week"
+      ? (weeks[0]?.firmWeeklyHours ?? firmWeekly)
+      : (months[0]?.firmHours ?? firmWeekly);
   const room = capacity - planned;
   const loadPct = capacity > 0 ? planned / capacity : 0;
   const tone = loadTone(loadPct);
