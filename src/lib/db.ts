@@ -186,6 +186,41 @@ async function runSchemaMigrations() {
   await migrateOpportunityTypes();
   await migrateFinanceDealsToInclVat();
   await migrateStandardPhasesOnce();
+  await ensureSnelstartInvoicesTable();
+}
+
+async function ensureSnelstartInvoicesTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS snelstart_invoices (
+      id UUID PRIMARY KEY,
+      factuurnummer TEXT,
+      factuur_datum DATE,
+      verval_datum DATE,
+      factuur_bedrag NUMERIC(12,2) NOT NULL DEFAULT 0,
+      openstaand_saldo NUMERIC(12,2) NOT NULL DEFAULT 0,
+      betaald_bedrag NUMERIC(12,2) NOT NULL DEFAULT 0,
+      relatie_id TEXT,
+      relatie_naam TEXT,
+      verkoopboeking_id TEXT,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      finance_deal_id UUID REFERENCES finance_deals(id) ON DELETE SET NULL,
+      modified_on TIMESTAMPTZ,
+      synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      raw JSONB DEFAULT '{}'::jsonb
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS snelstart_invoices_factuur_datum
+    ON snelstart_invoices (factuur_datum DESC)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS snelstart_invoices_relatie_naam
+    ON snelstart_invoices (relatie_naam)
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS snelstart_invoices_openstaand
+    ON snelstart_invoices (openstaand_saldo)
+  `;
 }
 
 /** Indexes backing the task/todo list queries that run on every page load. */
