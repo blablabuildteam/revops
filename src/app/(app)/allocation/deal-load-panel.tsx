@@ -184,13 +184,17 @@ export function DealLoadPanel({
   );
 
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
-  const projectsRows = rows.filter((r) => r.kind === "project");
-  const retainerRows = rows.filter((r) => r.kind === "retainer");
+  const projectsRows = rows.filter((r) => r.kind === "project" && r.hoursPerWeekNeeded > 0);
+  const retainerRows = rows.filter((r) => r.kind === "retainer" && r.hoursPerWeekNeeded > 0);
   const overloaded = rows.filter((r) => r.status === "overloaded").length;
   const needsDeadline = rows.filter((r) => r.status === "missing_deadline").length;
-  const totalWeekly = rows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
-  const totalBudgetHours = projectsRows.reduce((sum, r) => sum + r.budgetHours, 0);
-  const retainerMonthlyHours = retainerRows.reduce((sum, r) => sum + r.budgetHours, 0);
+  const projectWeekly = projectsRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
+  const retainerWeekly = retainerRows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
+  const totalWeekly = projectWeekly + retainerWeekly;
+  const totalBudgetHours = rows
+    .filter((r) => r.kind === "project")
+    .reduce((sum, r) => sum + r.budgetHours, 0);
+  const utilization = firmWeekly > 0 ? totalWeekly / firmWeekly : 0;
 
   return (
     <div className="space-y-6">
@@ -202,29 +206,25 @@ export function DealLoadPanel({
           tone="accent"
         />
         <SummaryCard
-          label="Project budgets"
+          label="Project hour budgets"
           value={formatHours(totalBudgetHours)}
-          sub={`${projectsRows.length} jobs · fee ÷ €${TARGET_HOURLY_RATE}`}
+          sub={`${projectsRows.length} active · total fee ÷ €${TARGET_HOURLY_RATE}`}
         />
         <SummaryCard
-          label="Weekly pace"
+          label="Concurrent load / week"
           value={formatHours(totalWeekly)}
-          sub={
-            retainerMonthlyHours > 0
-              ? `incl. ${formatHours(retainerMonthlyHours)}/mo retainers`
-              : `Against ${firmWeekly}h team week`
-          }
-          tone={totalWeekly > firmWeekly ? "bad" : totalWeekly > firmWeekly * 0.7 ? "warn" : "default"}
+          sub={`${formatHours(projectWeekly)} projects + ${formatHours(retainerWeekly)} retainers · team ${formatHours(firmWeekly)}`}
+          tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
         <SummaryCard
-          label="Needs attention"
-          value={String(overloaded + needsDeadline)}
+          label="Bezettingsgraad"
+          value={formatPct(utilization)}
           sub={
             overloaded + needsDeadline > 0
               ? `${overloaded} overloaded · ${needsDeadline} no deadline`
-              : "Pace fits at €175/h"
+              : `If all current jobs run at €${TARGET_HOURLY_RATE}/h pace`
           }
-          tone={overloaded + needsDeadline > 0 ? "warn" : "default"}
+          tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
       </div>
 

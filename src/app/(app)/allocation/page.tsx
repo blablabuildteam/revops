@@ -6,7 +6,7 @@ import { useMemo, useCallback } from "react";
 import { Users } from "lucide-react";
 import { useProjects, useOpportunities, useFinanceDeals } from "@/hooks/use-api-data";
 import { DealLoadPanel } from "./deal-load-panel";
-import { WeeklyLoadPanel } from "./weekly-load-panel";
+import { UtilizationPanel } from "./weekly-load-panel";
 import { buildDealLoadRows, TARGET_HOURLY_RATE } from "@/lib/deal-capacity";
 
 export default function AllocationPage() {
@@ -55,8 +55,7 @@ export default function AllocationPage() {
         <div>
           <h1 className="text-xl font-semibold text-neutral-100">Capacity</h1>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Fee ÷ €{TARGET_HOURLY_RATE}/h, spread evenly until each deadline — weekly view of how
-            full the team is
+            Fee ÷ €{TARGET_HOURLY_RATE}/h tot de deadline — geschatte bezetting per week of maand
           </p>
         </div>
       </div>
@@ -68,12 +67,7 @@ export default function AllocationPage() {
         onRefresh={refreshCapacity}
       />
 
-      <WeeklyLoadPanel
-        deals={deals}
-        projects={projects}
-        opportunities={opportunities}
-        rows={rows}
-      />
+      <UtilizationPanel rows={rows} />
     </div>
   );
 }

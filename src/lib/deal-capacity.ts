@@ -318,7 +318,21 @@ export type WeeklyCapacityColumn = {
   weekStart: Date;
   totalHours: number;
   firmWeeklyHours: number;
+  /** totalHours / firmWeeklyHours */
   loadPct: number;
+  jobs: WeeklyJobSlice[];
+};
+
+export type MonthlyCapacityColumn = {
+  monthKey: string;
+  label: string;
+  year: number;
+  monthIndex: number;
+  totalHours: number;
+  firmHours: number;
+  /** totalHours / firmHours for the month */
+  loadPct: number;
+  weekCount: number;
   jobs: WeeklyJobSlice[];
 };
 
@@ -358,8 +372,7 @@ export function buildWeeklyCapacity({
   }
 
   const byKey = new Map(columns.map((c) => [c.weekKey, c]));
-  const horizonEnd = columns[columns.length - 1]?.weekStart;
-  if (!horizonEnd) return columns;
+  if (columns.length === 0) return columns;
 
   for (const row of rows) {
     if (row.hoursPerWeekNeeded <= 0) continue;
@@ -399,4 +412,98 @@ export function buildWeeklyCapacity({
   }
 
   return columns;
+}
+
+/** Roll weekly €175 load up into calendar months. */
+export function buildMonthlyCapacity({
+  rows,
+  monthCount = 6,
+  monthOffset = 0,
+  today = new Date(),
+}: {
+  rows: DealLoadRow[];
+  monthCount?: number;
+  monthOffset?: number;
+  today?: Date;
+}): MonthlyCapacityColumn[] {
+  const firmWeeklyHours =
+    rows[0]?.firmWeeklyHours ?? TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
+
+  const base = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const firstMonday = getMonday(base);
+  const todayMonday = getMonday(today);
+  const lastDay = new Date(base.getFullYear(), base.getMonth() + monthCount, 0);
+  const weekCount = Math.max(4, weeksBetween(firstMonday, lastDay).length + 1);
+  const weekOffset = Math.round(
+    (firstMonday.getTime() - todayMonday.getTime()) / (7 * 24 * 60 * 60 * 1000),
+  );
+  const weeks = buildWeeklyCapacity({
+    rows,
+    weekCount,
+    weekOffset,
+    today,
+  });
+
+  const months: MonthlyCapacityColumn[] = [];
+  for (let i = 0; i < monthCount; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+    months.push({
+      monthKey,
+      label,
+      year: d.getFullYear(),
+      monthIndex: d.getMonth(),
+      totalHours: 0,
+      firmHours: 0,
+      loadPct: 0,
+      weekCount: 0,
+      jobs: [],
+    });
+  }
+
+  const byMonth = new Map(months.map((m) => [m.monthKey, m]));
+  const jobHours = new Map<string, Map<string, WeeklyJobSlice>>();
+
+  for (const week of weeks) {
+    const y = week.weekStart.getFullYear();
+    const m = week.weekStart.getMonth();
+    const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+    const col = byMonth.get(monthKey);
+    if (!col) continue;
+    col.totalHours += week.totalHours;
+    col.weekCount += 1;
+    col.firmHours += firmWeeklyHours;
+
+    let map = jobHours.get(monthKey);
+    if (!map) {
+      map = new Map();
+      jobHours.set(monthKey, map);
+    }
+    for (const job of week.jobs) {
+      const existing = map.get(job.key);
+      if (existing) {
+        existing.hours += job.hours;
+      } else {
+        map.set(job.key, { ...job });
+      }
+    }
+  }
+
+  for (const col of months) {
+    col.totalHours = Math.round(col.totalHours * 10) / 10;
+    col.firmHours = Math.round(col.firmHours * 10) / 10;
+    col.loadPct =
+      col.firmHours > 0
+        ? Math.round((col.totalHours / col.firmHours) * 1000) / 1000
+        : 0;
+    const map = jobHours.get(col.monthKey);
+    col.jobs = map
+      ? [...map.values()]
+          .map((j) => ({ ...j, hours: Math.round(j.hours * 10) / 10 }))
+          .sort((a, b) => b.hours - a.hours)
+      : [];
+  }
+
+  return months;
 }
