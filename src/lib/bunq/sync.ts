@@ -334,6 +334,7 @@ export async function listBunqPayments(opts?: {
   const { rows } = await sql`
     SELECT *
     FROM bunq_payments
+    WHERE COALESCE(matched_confidence, '') <> 'internal'
     ORDER BY created_at DESC
     LIMIT ${limit}
   `;
