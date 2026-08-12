@@ -912,24 +912,38 @@ export default function FinancePage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              {editForm.deal_type === "project" ? (
                 <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Start date</Label>
-                  <DatePicker
-                    value={editForm.start_date ?? ""}
-                    onChange={(v) => setEditForm((f) => ({ ...f, start_date: v }))}
-                    className={fc}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">End date</Label>
+                  <Label className="text-neutral-400 text-xs">Deadline</Label>
                   <DatePicker
                     value={editForm.end_date ?? ""}
                     onChange={(v) => setEditForm((f) => ({ ...f, end_date: v }))}
                     className={fc}
                   />
+                  <p className="text-[11px] text-neutral-600">
+                    Capacity spreads the fee ÷ €175 over the weeks left until this date.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-neutral-400 text-xs">Start date</Label>
+                    <DatePicker
+                      value={editForm.start_date ?? ""}
+                      onChange={(v) => setEditForm((f) => ({ ...f, start_date: v }))}
+                      className={fc}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-neutral-400 text-xs">End date</Label>
+                    <DatePicker
+                      value={editForm.end_date ?? ""}
+                      onChange={(v) => setEditForm((f) => ({ ...f, end_date: v }))}
+                      className={fc}
+                    />
+                  </div>
+                </div>
+              )}
 
               {editForm.deal_type === "project" && (
                 <div className="space-y-3">

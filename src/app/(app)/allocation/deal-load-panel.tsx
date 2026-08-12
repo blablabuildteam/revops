@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, CalendarClock } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
-import { updateFinanceDeal, updateOpportunity } from "@/lib/api";
+import { updateFinanceDeal, updateOpportunity, updateProject } from "@/lib/api";
 import {
   DEAL_LOAD_STATUS_LABELS,
   TARGET_HOURLY_RATE,
@@ -21,6 +21,7 @@ function statusTone(status: DealLoadStatus) {
     case "ok":
       return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
     case "overloaded":
+    case "overdue":
       return "text-red-400 bg-red-500/10 border-red-500/20";
     default:
       return "text-neutral-400 bg-neutral-800 border-neutral-700";
@@ -29,7 +30,7 @@ function statusTone(status: DealLoadStatus) {
 
 function StatusIcon({ status }: { status: DealLoadStatus }) {
   if (status === "ok") return <CheckCircle2 className="w-3.5 h-3.5" />;
-  if (status === "missing_weeks" || status === "missing_value") {
+  if (status === "missing_deadline" || status === "missing_value") {
     return <CalendarClock className="w-3.5 h-3.5" />;
   }
   return <AlertTriangle className="w-3.5 h-3.5" />;
@@ -42,6 +43,15 @@ function formatHours(h: number) {
 
 function formatPct(pct: number) {
   return `${Math.round(pct * 100)}%`;
+}
+
+function formatDeadline(iso: string | null) {
+  if (!iso) return null;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(iso + "T12:00:00"));
 }
 
 function SummaryCard({
@@ -97,38 +107,20 @@ function RowLink({ row }: { row: DealLoadRow }) {
   return <span className="text-neutral-200">{row.name}</span>;
 }
 
-function WeeksInput({
+function DeadlineInput({
   row,
   onSaved,
 }: {
   row: DealLoadRow;
   onSaved: () => void;
 }) {
-  const initial =
-    row.weeks > 0 ? String(row.weeks) : "";
-  const [value, setValue] = useState(initial);
+  const [value, setValue] = useState(row.endDate ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function commit() {
-    const trimmed = value.trim().replace(",", ".");
-    const next =
-      trimmed === "" ? null : Math.round(Number(trimmed) * 10) / 10;
-    if (next !== null && (!Number.isFinite(next) || next <= 0)) {
-      setError("Enter weeks > 0");
-      setValue(initial);
-      return;
-    }
-
-    const shown = row.weeks > 0 ? row.weeks : null;
-    // Unchanged from what's on screen — don't write (avoids locking date hints on blur).
-    if (next === shown) {
-      setError(null);
-      return;
-    }
-    // Clearing a date hint: restore display, don't wipe.
-    if (next === null && row.weeksFromDates) {
-      setValue(initial);
+    const next = value.trim() || null;
+    if (next === (row.endDate ?? null)) {
       setError(null);
       return;
     }
@@ -137,43 +129,38 @@ function WeeksInput({
     setError(null);
     try {
       if (row.source === "deal" && row.dealId) {
-        await updateFinanceDeal(row.dealId, { delivery_weeks: next });
+        await updateFinanceDeal(row.dealId, { end_date: next });
+        if (row.projectId) {
+          await updateProject(row.projectId, {
+            end_date: next === null ? (null as unknown as string) : next,
+          });
+        }
       } else if (row.source === "opportunity" && row.opportunityId) {
-        await updateOpportunity(row.opportunityId, { delivery_weeks: next });
+        await updateOpportunity(row.opportunityId, { end_date: next ?? undefined });
       }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
-      setValue(initial);
+      setValue(row.endDate ?? "");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="flex flex-col items-start gap-0.5">
-      <div className="flex items-center gap-1.5">
-        <input
-          type="number"
-          min={0.5}
-          step={0.5}
-          inputMode="decimal"
-          placeholder="—"
-          value={value}
-          disabled={saving}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={() => void commit()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.currentTarget.blur();
-            }
-          }}
-          className="w-16 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-right font-mono text-sm text-neutral-100 tabular-nums focus:border-[#d4e052]/40 focus:outline-none disabled:opacity-50"
-        />
-        <span className="text-[11px] text-neutral-500">wk</span>
-      </div>
-      {row.weeksFromDates && (
-        <span className="text-[10px] text-neutral-600">from dates · edit to lock</span>
+    <div className="flex flex-col items-start gap-0.5 min-w-[9.5rem]">
+      <input
+        type="date"
+        value={value}
+        disabled={saving}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => void commit()}
+        className="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-100 focus:border-[#d4e052]/40 focus:outline-none disabled:opacity-50"
+      />
+      {row.endDate && row.weeksRemaining > 0 && (
+        <span className="text-[10px] text-neutral-600">
+          {row.weeksRemaining} wk left
+        </span>
       )}
       {error && <span className="text-[10px] text-red-400">{error}</span>}
     </div>
@@ -197,10 +184,13 @@ export function DealLoadPanel({
   );
 
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
+  const projectsRows = rows.filter((r) => r.kind === "project");
+  const retainerRows = rows.filter((r) => r.kind === "retainer");
   const overloaded = rows.filter((r) => r.status === "overloaded").length;
-  const needsWeeks = rows.filter((r) => r.status === "missing_weeks").length;
-  const totalBudgetHours = rows.reduce((sum, r) => sum + r.budgetHours, 0);
-  const peakLoad = rows.reduce((max, r) => Math.max(max, r.teamLoadPct), 0);
+  const needsDeadline = rows.filter((r) => r.status === "missing_deadline").length;
+  const totalWeekly = rows.reduce((sum, r) => sum + r.hoursPerWeekNeeded, 0);
+  const totalBudgetHours = projectsRows.reduce((sum, r) => sum + r.budgetHours, 0);
+  const retainerMonthlyHours = retainerRows.reduce((sum, r) => sum + r.budgetHours, 0);
 
   return (
     <div className="space-y-6">
@@ -212,25 +202,29 @@ export function DealLoadPanel({
           tone="accent"
         />
         <SummaryCard
-          label="Hour budget"
+          label="Project budgets"
           value={formatHours(totalBudgetHours)}
-          sub={`${rows.length} jobs · fee ÷ €${TARGET_HOURLY_RATE}`}
+          sub={`${projectsRows.length} jobs · fee ÷ €${TARGET_HOURLY_RATE}`}
         />
         <SummaryCard
-          label="Heaviest job"
-          value={peakLoad > 0 ? formatPct(peakLoad) : "—"}
-          sub={`Of ${firmWeekly}h team week`}
-          tone={peakLoad > 1 ? "bad" : peakLoad > 0.7 ? "warn" : "default"}
+          label="Weekly pace"
+          value={formatHours(totalWeekly)}
+          sub={
+            retainerMonthlyHours > 0
+              ? `incl. ${formatHours(retainerMonthlyHours)}/mo retainers`
+              : `Against ${firmWeekly}h team week`
+          }
+          tone={totalWeekly > firmWeekly ? "bad" : totalWeekly > firmWeekly * 0.7 ? "warn" : "default"}
         />
         <SummaryCard
           label="Needs attention"
-          value={String(overloaded + needsWeeks)}
+          value={String(overloaded + needsDeadline)}
           sub={
-            overloaded + needsWeeks > 0
-              ? `${overloaded} overloaded · ${needsWeeks} no stretch`
-              : "All jobs fit at €175/h"
+            overloaded + needsDeadline > 0
+              ? `${overloaded} overloaded · ${needsDeadline} no deadline`
+              : "Pace fits at €175/h"
           }
-          tone={overloaded + needsWeeks > 0 ? "warn" : "default"}
+          tone={overloaded + needsDeadline > 0 ? "warn" : "default"}
         />
       </div>
 
@@ -240,8 +234,8 @@ export function DealLoadPanel({
             Capacity at €{TARGET_HOURLY_RATE}/h
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Budget hours = project fee excl. VAT ÷ €{TARGET_HOURLY_RATE}. Fill in weekstretch
-            yourself — that spreads the budget into h/week. No timesheets.
+            Projects: fee ÷ €{TARGET_HOURLY_RATE} = hour budget, spread until the deadline.
+            Retainers: monthly fee ÷ €{TARGET_HOURLY_RATE} = hours included each month.
           </p>
         </div>
 
@@ -250,10 +244,10 @@ export function DealLoadPanel({
             <thead>
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
                 <th className="px-5 py-2.5 font-medium">Job</th>
-                <th className="px-4 py-2.5 font-medium">Fee excl. VAT</th>
-                <th className="px-4 py-2.5 font-medium">Weekstretch</th>
-                <th className="px-4 py-2.5 font-medium text-right">Budget hours</th>
-                <th className="px-4 py-2.5 font-medium text-right">h / week</th>
+                <th className="px-4 py-2.5 font-medium">Fee</th>
+                <th className="px-4 py-2.5 font-medium">Deadline</th>
+                <th className="px-4 py-2.5 font-medium text-right">Budget</th>
+                <th className="px-4 py-2.5 font-medium text-right">Pace</th>
                 <th className="px-4 py-2.5 font-medium text-right">Team load</th>
                 <th className="px-5 py-2.5 font-medium">Status</th>
               </tr>
@@ -276,30 +270,44 @@ export function DealLoadPanel({
                         <RowLink row={row} />
                         <p className="text-[11px] text-neutral-500 truncate mt-0.5">
                           {row.companyName}
+                          {row.kind === "retainer" ? " · retainer" : ""}
                           {row.source === "opportunity" ? " · pipeline" : ""}
                         </p>
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-neutral-200 whitespace-nowrap">
                       {formatCurrency(row.valueExVat)}
+                      <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+                        {row.kind === "retainer" ? "excl. VAT / mo" : "excl. VAT"}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
-                      <WeeksInput
-                        key={`${row.key}-${row.weeks}-${row.weeksFromDates}`}
-                        row={row}
-                        onSaved={() => onRefresh?.()}
-                      />
+                      {row.kind === "retainer" ? (
+                        <div>
+                          <span className="text-xs text-neutral-400">Ongoing</span>
+                          <span className="block text-[10px] text-neutral-600 mt-0.5">
+                            {formatHours(row.budgetHours)}/mo @ €{TARGET_HOURLY_RATE}
+                          </span>
+                        </div>
+                      ) : (
+                        <DeadlineInput
+                          key={`${row.key}-${row.endDate}`}
+                          row={row}
+                          onSaved={() => onRefresh?.()}
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
-                      {row.budgetHours > 0 && (
-                        <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                          @ €{TARGET_HOURLY_RATE}/h
-                        </span>
-                      )}
+                      <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+                        {row.kind === "retainer" ? "per month" : "total"}
+                      </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[#d4e052]">
                       {formatHours(row.hoursPerWeekNeeded)}
+                      <span className="block text-[10px] text-neutral-500 font-sans mt-0.5">
+                        /wk · {formatHours(row.hoursPerMonthNeeded)}/mo
+                      </span>
                     </td>
                     <td
                       className={cn(
@@ -311,8 +319,8 @@ export function DealLoadPanel({
                             : "text-neutral-300",
                       )}
                     >
-                      {row.weeks > 0 ? formatPct(row.teamLoadPct) : "—"}
-                      {row.weeks > 0 && (
+                      {row.hoursPerWeekNeeded > 0 ? formatPct(row.teamLoadPct) : "—"}
+                      {row.hoursPerWeekNeeded > 0 && (
                         <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
                           of {firmWeekly}h/wk
                         </span>
@@ -328,6 +336,11 @@ export function DealLoadPanel({
                         <StatusIcon status={row.status} />
                         {DEAL_LOAD_STATUS_LABELS[row.status]}
                       </span>
+                      {row.kind === "project" && row.endDate && row.status === "ok" && (
+                        <span className="block text-[10px] text-neutral-600 mt-1">
+                          Due {formatDeadline(row.endDate)}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -338,10 +351,9 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Example: €17.500 excl. VAT ÷ €{TARGET_HOURLY_RATE} = 100h budget. Over 10 weeks → 10h/week.
-        Shorter stretch = higher weekly claim against the {TASK_ASSIGNEES.length}-person ×{" "}
-        {ALLOCATION_WEEKLY_HOURS}h team. Finishing under budget hours = effective rate above €
-        {TARGET_HOURLY_RATE}.
+        Project example: €17.500 excl. VAT ÷ €{TARGET_HOURLY_RATE} = 100h. Deadline in 10 weeks →
+        10h/week (≈ 43h/month). Retainer example: €1.750/mo ÷ €{TARGET_HOURLY_RATE} = 10h/month
+        included. Finishing under budget = effective rate above €{TARGET_HOURLY_RATE}.
       </p>
     </div>
   );

@@ -11,35 +11,39 @@ import {
 /** Planning floor: fee excl. VAT ÷ this rate = hours you can “afford”. */
 export const TARGET_HOURLY_RATE = 175;
 
+/** Average weeks in a month — used to turn monthly retainer hours into a weekly pace. */
+const WEEKS_PER_MONTH = 52 / 12;
+
+export type DealLoadKind = "project" | "retainer";
+
 export type DealLoadStatus =
   | "ok"
   | "overloaded"
-  | "missing_weeks"
-  | "missing_value";
+  | "missing_deadline"
+  | "missing_value"
+  | "overdue";
 
 export type DealLoadRow = {
   key: string;
   source: "deal" | "opportunity";
+  kind: DealLoadKind;
   dealId?: string;
   opportunityId?: string;
   projectId?: string | null;
   name: string;
   companyName: string;
-  /** Contract value excluding VAT. */
+  /** Fee used for the €175 calc (project total or retainer monthly), excl. VAT. */
   valueExVat: number;
-  /** Manual weekstretch (preferred). */
-  weeks: number;
-  /** True when weeks came from start/end dates, not delivery_weeks. */
-  weeksFromDates: boolean;
-  startDate: string | null;
   endDate: string | null;
-  /** Hours the fee buys at €175/h. */
+  /** Weeks left until deadline (projects). Retainers use ~WEEKS_PER_MONTH. */
+  weeksRemaining: number;
+  /** Hours the fee buys at €175/h (project total, or retainer per month). */
   budgetHours: number;
-  /** Hours/week across the firm to spend the full budget over the stretch. */
+  /** Hours/week to spend to land at €175 by the deadline / month. */
   hoursPerWeekNeeded: number;
-  /** Firm weekly capacity (people × hours/week). */
+  /** Same pace expressed per month. */
+  hoursPerMonthNeeded: number;
   firmWeeklyHours: number;
-  /** Share of firm week this job claims (0–1+). */
   teamLoadPct: number;
   status: DealLoadStatus;
 };
@@ -88,30 +92,29 @@ export function budgetHoursForValue(
   return Math.round((valueExVat / rate) * 10) / 10;
 }
 
-function resolveWeeks(
-  deliveryWeeks: number | null | undefined,
-  start: Date | null,
-  end: Date | null,
-): { weeks: number; fromDates: boolean } {
-  const manual = Number(deliveryWeeks);
-  if (Number.isFinite(manual) && manual > 0) {
-    return { weeks: Math.round(manual * 10) / 10, fromDates: false };
-  }
-  if (start && end) {
-    const count = weeksBetween(start, end).length;
-    if (count > 0) return { weeks: count, fromDates: true };
-  }
-  return { weeks: 0, fromDates: false };
+/** Whole weeks from today through the deadline (inclusive of current week). */
+export function weeksUntilDeadline(end: Date, today = new Date()): number {
+  const start = new Date(today);
+  start.setHours(12, 0, 0, 0);
+  const deadline = new Date(end);
+  deadline.setHours(12, 0, 0, 0);
+  if (deadline < start) return 0;
+  return Math.max(1, weeksBetween(start, deadline).length);
 }
 
 function statusFor(row: {
-  weeks: number;
+  kind: DealLoadKind;
   valueExVat: number;
+  endDate: string | null;
+  weeksRemaining: number;
   hoursPerWeekNeeded: number;
   firmWeeklyHours: number;
 }): DealLoadStatus {
   if (row.valueExVat <= 0) return "missing_value";
-  if (row.weeks <= 0) return "missing_weeks";
+  if (row.kind === "project") {
+    if (!row.endDate) return "missing_deadline";
+    if (row.weeksRemaining <= 0) return "overdue";
+  }
   if (row.hoursPerWeekNeeded > row.firmWeeklyHours + 0.5) return "overloaded";
   return "ok";
 }
@@ -119,8 +122,9 @@ function statusFor(row: {
 export const DEAL_LOAD_STATUS_LABELS: Record<DealLoadStatus, string> = {
   ok: "Fits at €175/h",
   overloaded: "Needs more than the team",
-  missing_weeks: "Set weekstretch",
+  missing_deadline: "Set deadline",
   missing_value: "Set fee",
+  overdue: "Past deadline",
 };
 
 type BuildArgs = {
@@ -129,11 +133,23 @@ type BuildArgs = {
   opportunities: Opportunity[];
   people?: readonly string[];
   rate?: number;
+  today?: Date;
 };
 
+function buildPace(budgetHours: number, weeks: number) {
+  const hoursPerWeekNeeded =
+    weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
+  const hoursPerMonthNeeded =
+    weeks > 0
+      ? Math.round(hoursPerWeekNeeded * WEEKS_PER_MONTH * 10) / 10
+      : 0;
+  return { hoursPerWeekNeeded, hoursPerMonthNeeded };
+}
+
 /**
- * Planning model (no time tracking):
- * fee excl. VAT ÷ €175 = hour budget → ÷ manual weekstretch = h/week claim.
+ * Capacity model:
+ * - Project: fee ÷ €175 = hour budget; deadline → weeks left → h/week (and h/month).
+ * - Retainer: monthly fee ÷ €175 = hours/month included; ongoing weekly pace.
  */
 export function buildDealLoadRows({
   deals,
@@ -141,6 +157,7 @@ export function buildDealLoadRows({
   opportunities,
   people = TASK_ASSIGNEES,
   rate = TARGET_HOURLY_RATE,
+  today = new Date(),
 }: BuildArgs): DealLoadRow[] {
   const firmWeeklyHours = people.length * ALLOCATION_WEEKLY_HOURS;
   const projectById = new Map(projects.map((p) => [p.id, p]));
@@ -152,14 +169,35 @@ export function buildDealLoadRows({
 
   for (const deal of deals) {
     const project = deal.project_id ? projectById.get(deal.project_id) : undefined;
-    const start =
-      parseDate(deal.start_date) ?? parseDate(project?.start_date) ?? null;
-    const end = parseDate(deal.end_date) ?? parseDate(project?.end_date) ?? null;
-    const { weeks, fromDates } = resolveWeeks(deal.delivery_weeks, start, end);
-    const valueExVat = removeVat(dealContractValue(deal));
-    const budgetHours = budgetHoursForValue(valueExVat, rate);
-    const hoursPerWeekNeeded =
-      weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
+    const kind: DealLoadKind = deal.deal_type === "retainer" ? "retainer" : "project";
+    const end =
+      parseDate(deal.end_date) ?? parseDate(project?.end_date) ?? null;
+
+    let valueExVat = 0;
+    let budgetHours = 0;
+    let weeksRemaining = 0;
+    let hoursPerWeekNeeded = 0;
+    let hoursPerMonthNeeded = 0;
+
+    if (kind === "retainer") {
+      valueExVat = removeVat(
+        (Number(deal.monthly_fee) || 0) + (Number(deal.monthly_revshare) || 0),
+      );
+      // Monthly fee at €175 → hours included each month.
+      budgetHours = budgetHoursForValue(valueExVat, rate);
+      weeksRemaining = Math.round(WEEKS_PER_MONTH * 10) / 10;
+      hoursPerMonthNeeded = budgetHours;
+      hoursPerWeekNeeded =
+        Math.round((budgetHours / WEEKS_PER_MONTH) * 10) / 10;
+    } else {
+      valueExVat = removeVat(dealContractValue(deal));
+      budgetHours = budgetHoursForValue(valueExVat, rate);
+      weeksRemaining = end ? weeksUntilDeadline(end, today) : 0;
+      const pace = buildPace(budgetHours, weeksRemaining);
+      hoursPerWeekNeeded = pace.hoursPerWeekNeeded;
+      hoursPerMonthNeeded = pace.hoursPerMonthNeeded;
+    }
+
     const teamLoadPct =
       firmWeeklyHours > 0
         ? Math.round((hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
@@ -168,23 +206,25 @@ export function buildDealLoadRows({
     rows.push({
       key: `deal:${deal.id}`,
       source: "deal",
+      kind,
       dealId: deal.id,
       opportunityId: deal.opportunity_id ?? undefined,
       projectId: deal.project_id ?? null,
       name: deal.project_name,
       companyName: deal.company_name,
       valueExVat,
-      weeks,
-      weeksFromDates: fromDates,
-      startDate: start ? start.toISOString().slice(0, 10) : null,
       endDate: end ? end.toISOString().slice(0, 10) : null,
+      weeksRemaining,
       budgetHours,
       hoursPerWeekNeeded,
+      hoursPerMonthNeeded,
       firmWeeklyHours,
       teamLoadPct,
       status: statusFor({
-        weeks,
+        kind,
         valueExVat,
+        endDate: end ? end.toISOString().slice(0, 10) : null,
+        weeksRemaining,
         hoursPerWeekNeeded,
         firmWeeklyHours,
       }),
@@ -195,13 +235,29 @@ export function buildDealLoadRows({
     if (opp.stage === "won" || opp.stage === "lost") continue;
     if (dealOpportunityIds.has(opp.id)) continue;
 
-    const start = parseDate(opp.start_date);
+    const kind: DealLoadKind = opp.type === "retainer" ? "retainer" : "project";
     const end = parseDate(opp.end_date);
-    const { weeks, fromDates } = resolveWeeks(opp.delivery_weeks, start, end);
     const valueExVat = Number(opp.expected_value) || 0;
-    const budgetHours = budgetHoursForValue(valueExVat, rate);
-    const hoursPerWeekNeeded =
-      weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
+    let budgetHours = 0;
+    let weeksRemaining = 0;
+    let hoursPerWeekNeeded = 0;
+    let hoursPerMonthNeeded = 0;
+
+    if (kind === "retainer") {
+      // Pipeline retainer: expected_value treated as monthly fee excl. VAT.
+      budgetHours = budgetHoursForValue(valueExVat, rate);
+      weeksRemaining = Math.round(WEEKS_PER_MONTH * 10) / 10;
+      hoursPerMonthNeeded = budgetHours;
+      hoursPerWeekNeeded =
+        Math.round((budgetHours / WEEKS_PER_MONTH) * 10) / 10;
+    } else {
+      budgetHours = budgetHoursForValue(valueExVat, rate);
+      weeksRemaining = end ? weeksUntilDeadline(end, today) : 0;
+      const pace = buildPace(budgetHours, weeksRemaining);
+      hoursPerWeekNeeded = pace.hoursPerWeekNeeded;
+      hoursPerMonthNeeded = pace.hoursPerMonthNeeded;
+    }
+
     const teamLoadPct =
       firmWeeklyHours > 0
         ? Math.round((hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
@@ -210,22 +266,24 @@ export function buildDealLoadRows({
     rows.push({
       key: `opp:${opp.id}`,
       source: "opportunity",
+      kind,
       opportunityId: opp.id,
       projectId: null,
       name: opp.name,
       companyName: opp.company?.name ?? "—",
       valueExVat,
-      weeks,
-      weeksFromDates: fromDates,
-      startDate: start ? start.toISOString().slice(0, 10) : null,
       endDate: end ? end.toISOString().slice(0, 10) : null,
+      weeksRemaining,
       budgetHours,
       hoursPerWeekNeeded,
+      hoursPerMonthNeeded,
       firmWeeklyHours,
       teamLoadPct,
       status: statusFor({
-        weeks,
+        kind,
         valueExVat,
+        endDate: end ? end.toISOString().slice(0, 10) : null,
+        weeksRemaining,
         hoursPerWeekNeeded,
         firmWeeklyHours,
       }),
@@ -235,12 +293,13 @@ export function buildDealLoadRows({
   return rows.sort((a, b) => {
     const statusRank: Record<DealLoadStatus, number> = {
       overloaded: 0,
-      missing_weeks: 1,
-      missing_value: 2,
-      ok: 3,
+      overdue: 1,
+      missing_deadline: 2,
+      missing_value: 3,
+      ok: 4,
     };
     const sr = statusRank[a.status] - statusRank[b.status];
     if (sr !== 0) return sr;
-    return b.budgetHours - a.budgetHours;
+    return b.hoursPerWeekNeeded - a.hoursPerWeekNeeded;
   });
 }

@@ -430,22 +430,22 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {form.type === "retainer" ? (
+                <p className="text-[11px] text-neutral-600 leading-relaxed">
+                  Retainer capacity uses deal value as monthly fee ÷ €175 → hours/month.
+                </p>
+              ) : (
                 <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Expected start</Label>
-                  <MonthField
-                    value={form.start_date ?? ""}
-                    onChange={(value) => set("start_date", value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-neutral-400 text-xs">Expected delivery</Label>
+                  <Label className="text-neutral-400 text-xs">Deadline</Label>
                   <MonthField
                     value={form.end_date ?? ""}
                     onChange={(value) => set("end_date", value)}
                   />
+                  <p className="text-[11px] text-neutral-600">
+                    Fee ÷ €175 spread over weeks left until this month.
+                  </p>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* RIGHT COLUMN */}
