@@ -251,7 +251,7 @@ export function DealActivationWizard({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-3xl w-[92vw] p-0 overflow-hidden">
+      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-3xl w-[92vw] p-0 overflow-x-hidden">
         <div className="px-6 pt-6 pb-2">
           <DialogHeader>
             <DialogTitle className="text-neutral-100 text-lg">
@@ -299,7 +299,7 @@ export function DealActivationWizard({
                   className={fc}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Start date</Label>
                   <DatePicker
@@ -320,7 +320,7 @@ export function DealActivationWizard({
             </>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Company</Label>
                   {isManual ? (
@@ -499,7 +499,7 @@ export function DealActivationWizard({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Start date</Label>
                   <DatePicker

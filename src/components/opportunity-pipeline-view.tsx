@@ -145,13 +145,13 @@ export function OpportunityPipelineView({
       .reduce((s, o) => s + (Number(o.expected_value) || 0), 0);
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <div className="snap-rail flex gap-3 sm:gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
       {PIPELINE_STAGES.map((stage) => {
         const stageOpps = opps.filter((o) => o.stage === stage);
         return (
           <div
             key={stage}
-            className={`shrink-0 w-72 border-t-2 ${stageAccent[stage]} bg-neutral-900/30 rounded-lg`}
+            className={`shrink-0 w-[80vw] max-w-[18rem] sm:w-72 sm:max-w-none border-t-2 ${stageAccent[stage]} bg-neutral-900/30 rounded-lg`}
           >
             <div className="px-3.5 py-3 border-b border-neutral-800 flex items-center justify-between">
               <div>

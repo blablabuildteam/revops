@@ -19,7 +19,7 @@ import { useTheme } from "@/components/theme-provider";
 import { UserAvatar } from "@/components/user-avatar";
 import { useSession } from "@/components/session-provider";
 
-const nav = [
+export const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/opportunities", label: "Opportunities", icon: ListFilter },
   { href: "/projects", label: "Projects", icon: FolderKanban },
@@ -29,7 +29,17 @@ const nav = [
   { href: "/companies", label: "Companies", icon: Building2 },
 ];
 
-export function Sidebar() {
+export function isNavItemActive(href: string, pathname: string) {
+  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+}
+
+export function Sidebar({
+  className,
+  onNavigate,
+}: {
+  className?: string;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, toggle } = useTheme();
@@ -42,7 +52,12 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-56 shrink-0 border-r border-neutral-800 flex flex-col bg-neutral-950">
+    <aside
+      className={cn(
+        "w-56 shrink-0 border-r border-neutral-800 flex flex-col bg-neutral-950",
+        className
+      )}
+    >
       {/* Logo */}
       <div className="px-5 py-5 border-b border-neutral-800">
         <div className="flex items-center gap-3">
@@ -67,16 +82,16 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {nav.map(({ href, label, icon: Icon }) => {
-          const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          const active = isNavItemActive(href, pathname);
           return (
             <Link
               key={href}
               href={href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 px-2.5 py-2 rounded text-sm transition-colors",
+                "flex items-center gap-3 px-2.5 py-2.5 lg:py-2 rounded text-sm transition-colors",
                 active
                   ? "bg-[#d4e052]/10 text-[#d4e052] font-medium"
                   : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900"
@@ -90,7 +105,7 @@ export function Sidebar() {
       </nav>
 
       {/* User + logout */}
-      <div className="px-4 py-4 border-t border-neutral-800 space-y-3">
+      <div className="px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-neutral-800 space-y-3">
         {user && (
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">

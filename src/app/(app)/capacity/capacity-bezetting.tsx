@@ -81,9 +81,13 @@ function Metric({
 
   return (
     <div className="space-y-1">
-      <p className="text-xs text-neutral-500 uppercase tracking-widest">{label}</p>
-      <p className={cn("text-2xl font-mono font-semibold", valueClass)}>{value}</p>
-      {hint && <p className="text-xs text-neutral-500 mt-1">{hint}</p>}
+      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest">
+        {label}
+      </p>
+      <p className={cn("text-xl sm:text-2xl font-mono font-semibold tabular-nums", valueClass)}>
+        {value}
+      </p>
+      {hint && <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -108,7 +112,7 @@ function PeriodColumn({
   const fill = Math.min(100, Math.round(loadPct * 100));
 
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4 min-h-[240px] flex flex-col">
+    <div className="w-[76vw] max-w-[17rem] shrink-0 sm:w-auto sm:max-w-none sm:flex-1 sm:min-w-[9.5rem] rounded-lg border border-neutral-800 bg-neutral-900/40 px-4 py-4 min-h-[240px] flex flex-col">
       <p className="text-xs text-neutral-500 mb-3 leading-snug">{title}</p>
       {subtitle && <p className="text-[10px] text-neutral-600 -mt-2 mb-3">{subtitle}</p>}
 
@@ -241,8 +245,8 @@ export function CapacityBezetting({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40 sm:inline-flex sm:gap-0">
           {(
             [
               { id: "actual" as const, label: "Actual" },
@@ -254,7 +258,7 @@ export function CapacityBezetting({
               type="button"
               onClick={() => setScope(entry.id)}
               className={cn(
-                "px-3 py-1.5 text-sm rounded-md transition-colors",
+                "px-3 py-2 sm:py-1.5 text-[13px] sm:text-sm rounded-md transition-colors",
                 scope === entry.id
                   ? "bg-neutral-800 text-neutral-100"
                   : "text-neutral-500 hover:text-neutral-300",
@@ -264,7 +268,7 @@ export function CapacityBezetting({
             </button>
           ))}
         </div>
-        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40">
+        <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-neutral-800 p-0.5 bg-neutral-900/40 sm:inline-flex sm:gap-0">
           {(
             [
               { id: "week" as const, label: "Week" },
@@ -276,7 +280,7 @@ export function CapacityBezetting({
               type="button"
               onClick={() => setPeriod(entry.id)}
               className={cn(
-                "px-3 py-1.5 text-sm rounded-md transition-colors",
+                "px-3 py-2 sm:py-1.5 text-[13px] sm:text-sm rounded-md transition-colors",
                 period === entry.id
                   ? "bg-neutral-800 text-neutral-100"
                   : "text-neutral-500 hover:text-neutral-300",
@@ -288,8 +292,8 @@ export function CapacityBezetting({
         </div>
       </div>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
           <Metric
             label={period === "week" ? "Deze week gepland" : "Deze maand gepland"}
             value={formatHours(planned)}
@@ -300,14 +304,14 @@ export function CapacityBezetting({
             }
           />
         </div>
-        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+        <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
           <Metric
             label="Teamcapaciteit"
             value={formatHours(capacity)}
             hint={`${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}u/wk`}
           />
         </div>
-        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+        <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
           <Metric
             label="Ruimte"
             value={formatHours(room)}
@@ -315,7 +319,7 @@ export function CapacityBezetting({
             tone={room < 0 ? "bad" : room < capacity * 0.15 ? "warn" : "ok"}
           />
         </div>
-        <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+        <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
           <Metric
             label="Bezettingsgraad"
             value={formatPct(loadPct)}
@@ -325,22 +329,22 @@ export function CapacityBezetting({
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-neutral-400">
-            {period === "week" ? "Per week" : "Per maand"} · geschatte last @ €
-            {TARGET_HOURLY_RATE}/u
+          <p className="text-[13px] sm:text-sm text-neutral-400">
+            {period === "week" ? "Per week" : "Per maand"} · last @ €{TARGET_HOURLY_RATE}/u
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant="ghost"
               size="sm"
+              aria-label={period === "week" ? "Vorige weken" : "Vorige maanden"}
               onClick={() =>
                 period === "week"
                   ? setWeekOffset((p) => p - VISIBLE_WEEKS)
                   : setMonthOffset((p) => p - VISIBLE_MONTHS)
               }
-              className="text-neutral-500 hover:text-neutral-200"
+              className="h-9 w-9 p-0 text-neutral-500 hover:text-neutral-200"
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
@@ -351,34 +355,29 @@ export function CapacityBezetting({
                 setWeekOffset(0);
                 setMonthOffset(0);
               }}
-              className="text-xs text-neutral-500 hover:text-neutral-200 px-3"
+              className="h-9 px-3 text-xs text-neutral-500 hover:text-neutral-200"
             >
               Nu
             </Button>
             <Button
               variant="ghost"
               size="sm"
+              aria-label={period === "week" ? "Volgende weken" : "Volgende maanden"}
               onClick={() =>
                 period === "week"
                   ? setWeekOffset((p) => p + VISIBLE_WEEKS)
                   : setMonthOffset((p) => p + VISIBLE_MONTHS)
               }
-              className="text-neutral-500 hover:text-neutral-200"
+              className="h-9 w-9 p-0 text-neutral-500 hover:text-neutral-200"
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        <div className="overflow-x-auto -mx-1 px-1">
-          {period === "week" ? (
-            <div
-              className="grid gap-3 min-w-[640px]"
-              style={{
-                gridTemplateColumns: `repeat(${VISIBLE_WEEKS}, minmax(9rem, 1fr))`,
-              }}
-            >
-              {weeks.map((col) => (
+        <div className="snap-rail flex gap-3 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0">
+          {period === "week"
+            ? weeks.map((col) => (
                 <PeriodColumn
                   key={col.weekKey}
                   title={formatWeekLabel(col.weekStart)}
@@ -387,16 +386,8 @@ export function CapacityBezetting({
                   loadPct={col.loadPct}
                   jobs={col.jobs}
                 />
-              ))}
-            </div>
-          ) : (
-            <div
-              className="grid gap-3 min-w-[640px]"
-              style={{
-                gridTemplateColumns: `repeat(${VISIBLE_MONTHS}, minmax(10rem, 1fr))`,
-              }}
-            >
-              {months.map((col) => (
+              ))
+            : months.map((col) => (
                 <PeriodColumn
                   key={col.monthKey}
                   title={col.label}
@@ -407,11 +398,10 @@ export function CapacityBezetting({
                   jobs={col.jobs}
                 />
               ))}
-            </div>
-          )}
         </div>
 
-        <p className="text-[11px] text-neutral-600 leading-relaxed pt-2">
+        <p className="text-[11px] text-neutral-600 leading-relaxed pt-1 sm:pt-2">
+          <span className="sm:hidden">Swipe voor meer {period === "week" ? "weken" : "maanden"} · </span>
           Groen &lt; 85% · oranje krap · rood boven teamcapaciteit. Ruimte = capaciteit − geplande
           uren.
         </p>

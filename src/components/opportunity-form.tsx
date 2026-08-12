@@ -324,7 +324,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
   return (
     <>
     <Dialog open={open} onOpenChange={(o) => !o && void handleClose()}>
-      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-5xl w-[92vw] p-0 overflow-hidden">
+      <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-5xl w-[92vw] p-0 overflow-x-hidden">
         <div className="px-6 pt-6 pb-2">
           <DialogHeader>
             <DialogTitle className="text-neutral-100 text-lg">
@@ -334,10 +334,10 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-[3fr_2fr] gap-8 px-6 py-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6 lg:gap-8 px-4 sm:px-6 py-4">
             {/* LEFT COLUMN */}
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5 min-w-0">
                   <Label className="text-neutral-400 text-xs">Name *</Label>
                   <Input

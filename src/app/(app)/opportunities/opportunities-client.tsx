@@ -461,16 +461,16 @@ export default function OpportunitiesPageClient() {
   );
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="page-shell space-y-6">
       {saveError && (
         <div className="rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
           {saveError}
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Opportunities</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Opportunities</h1>
+          <p className="text-[13px] sm:text-sm text-neutral-500 mt-0.5">
             {filtered.length} opportunities ·{" "}
             <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order excl. VAT ·{" "}
             <span className="font-mono text-[#d4e052]">
@@ -485,11 +485,11 @@ export default function OpportunitiesPageClient() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             onClick={() => setView(view === "pipeline" ? "list" : "pipeline")}
-            className="border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 gap-2"
+            className="flex-1 sm:flex-none border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 gap-2"
           >
             {view === "pipeline" ? (
               <>
@@ -508,17 +508,18 @@ export default function OpportunitiesPageClient() {
               setEditingOpp(null);
               setFormOpen(true);
             }}
-            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
+            className="flex-1 sm:flex-none bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
           >
             <Plus className="w-4 h-4" />
-            New opportunity
+            <span className="sm:hidden">New</span>
+            <span className="hidden sm:inline">New opportunity</span>
           </Button>
         </div>
       </div>
 
       {view === "list" && (
-      <div className="flex gap-3">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-wrap gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-[10rem] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
           <Input
             value={search}
@@ -549,7 +550,7 @@ export default function OpportunitiesPageClient() {
       {view === "list" ? (
       <div className="border border-neutral-800 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
+          <table className="w-full min-w-[52rem] table-fixed text-sm">
             <colgroup>
               <col className="w-[10%]" />
               <col className="w-[18%]" />

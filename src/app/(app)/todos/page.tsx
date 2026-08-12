@@ -728,7 +728,7 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
           <User className="w-3 h-3 shrink-0" /> {todo.assignee_name}
         </span>
       )}
-      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[126px]" />
+      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[104px] sm:w-[126px]" />
       <PrioritySelect
         priority={todo.priority}
         onChange={(next) => {
@@ -739,10 +739,10 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
             onSuccess: onUpdate,
           });
         }}
-        className="w-[100px]"
+        className="hidden sm:flex w-[100px]"
       />
       <button onClick={() => onDelete(todo.id)}
-        className="opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
+        className="hidden sm:block opacity-0 group-hover:opacity-100 p-1 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
@@ -813,7 +813,7 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
           </div>
         )}
       </div>
-      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[126px]" />
+      <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[104px] sm:w-[126px]" />
       <PrioritySelect
         priority={todo.priority}
         onChange={(next) => {
@@ -824,10 +824,10 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
             onSuccess: onUpdate,
           });
         }}
-        className="w-[100px]"
+        className="hidden sm:flex w-[100px]"
       />
       <button onClick={() => onDelete(todo.id)}
-        className="opacity-0 group-hover:opacity-100 p-1 mt-0.5 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
+        className="hidden sm:block opacity-0 group-hover:opacity-100 p-1 mt-0.5 text-neutral-700 hover:text-red-400 transition-all rounded shrink-0">
         <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
@@ -1302,11 +1302,11 @@ export default function TodosPage() {
   const totalProjectItems = Array.from(projectGroups.values()).reduce((sum, g) => sum + g.todos.length + g.boardTasks.length, 0);
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="page-shell space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100 flex items-center gap-2">
             Tasks
             {refreshing && !loading && (
               <span
@@ -1322,14 +1322,14 @@ export default function TodosPage() {
           </p>
         </div>
         <Button onClick={openNewTask}
-          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
+          className="w-full sm:w-auto bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New task
         </Button>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
+      <div className="flex gap-2 sm:gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[10rem] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
           <Input
             value={search}

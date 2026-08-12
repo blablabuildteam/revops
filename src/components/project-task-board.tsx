@@ -47,7 +47,7 @@ import { useMutationFeedbackOptional } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 export const TASK_ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid min-w-[46rem] grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const UNASSIGNED_ID = "unassigned";
 
@@ -968,7 +968,7 @@ export function ProjectTaskBoardPanel({
 
   return (
     <AssigneeNamesProvider names={boardAssigneeNames}>
-      <div className="px-3 py-3 space-y-3">
+      <div className="px-3 py-3 space-y-3 overflow-x-auto">
         {!hideToolbar && (
         <div className="flex items-center justify-end gap-2 px-1">
           <Popover>

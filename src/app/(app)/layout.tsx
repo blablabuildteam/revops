@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Sidebar } from "@/components/sidebar";
+import { AppShell } from "@/components/app-shell";
 import { MutationProvider } from "@/components/mutation-provider";
 import { SessionProvider } from "@/components/session-provider";
 import { QueryCacheSeed } from "@/components/query-cache-provider";
@@ -28,12 +28,7 @@ export default async function AppLayout({
         <ListDataSeed />
       </Suspense>
       <MutationProvider>
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 min-h-0 overflow-y-auto contain-layout">
-            {children}
-          </main>
-        </div>
+        <AppShell>{children}</AppShell>
       </MutationProvider>
     </SessionProvider>
   );

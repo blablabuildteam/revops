@@ -54,6 +54,61 @@ body {
   color: var(--color-neutral-100, #fafafa);
   font-family: var(--font-sans);
   transition: background-color 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Shared page gutter so every route lines up on phone, tablet and desktop.  */
+.page-shell {
+  padding: 1.25rem 1rem calc(2rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .page-shell {
+    padding: 1.5rem 1.5rem calc(2rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 1024px) {
+  .page-shell {
+    padding: 2rem 2rem calc(2.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Touch / mobile ─────────────────────────────────────────────────────── */
+
+/* iOS Safari zooms the page when a focused field is under 16px. Bump the
+   effective size on small screens instead of locking pinch-zoom. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: max(1rem, 1em);
+  }
+}
+
+/* Coarse pointers get no hover affordances but do need bigger hit areas. */
+@media (hover: none) {
+  button,
+  [role="button"],
+  a[href] {
+    touch-action: manipulation;
+  }
+}
+
+/* Horizontal card rails: swipe one period at a time on touch devices. */
+.snap-rail {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.snap-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-rail > * {
+  scroll-snap-align: start;
 }
 
 ::-webkit-scrollbar {

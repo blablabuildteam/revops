@@ -33,7 +33,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex items-center justify-center px-6">
+    <div className="min-h-dvh bg-neutral-950 flex items-center justify-center px-6 py-[max(1.5rem,env(safe-area-inset-top))]">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">

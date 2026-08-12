@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export const CARD = "border border-neutral-800 rounded-lg p-5 bg-neutral-900/40";
+export const CARD = "border border-neutral-800 rounded-lg p-4 sm:p-5 bg-neutral-900/40";
 export const FIELD = "h-10 bg-neutral-800 border-neutral-700 text-neutral-100 text-sm";
 
 export function formatPercent(value: number, digits = 1) {
@@ -31,10 +31,14 @@ export function StatCard({
   }[tone];
 
   return (
-    <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-      <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className={cn("text-2xl font-mono font-semibold", valueTone)}>{value}</p>
-      {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
+    <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+        {label}
+      </p>
+      <p className={cn("text-xl sm:text-2xl font-mono font-semibold tabular-nums", valueTone)}>
+        {value}
+      </p>
+      {sub && <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">{sub}</p>}
     </div>
   );
 }

@@ -23,14 +23,16 @@ function KpiCard({
   accent?: boolean;
 }) {
   return (
-    <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-      <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">{label}</p>
+    <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+        {label}
+      </p>
       <p
-        className={`text-2xl font-mono font-semibold ${accent ? "text-[#d4e052]" : "text-neutral-100"}`}
+        className={`text-xl sm:text-2xl font-mono font-semibold tabular-nums ${accent ? "text-[#d4e052]" : "text-neutral-100"}`}
       >
         {value}
       </p>
-      {sub && <p className="text-xs text-neutral-600 mt-1">{sub}</p>}
+      {sub && <p className="text-[11px] sm:text-xs text-neutral-600 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -61,17 +63,17 @@ export default function DashboardPage() {
     .slice(0, 8);
 
   return (
-    <div className="p-8 space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="page-shell space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Dashboard</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Dashboard</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             Pipeline &amp; revenue overview
           </p>
         </div>
         <Button
           onClick={() => setFormOpen(true)}
-          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" />
           New opportunity
@@ -79,7 +81,7 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {[...Array(4)].map((_, i) => (
             <div
               key={i}
@@ -88,7 +90,7 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <KpiCard
             label="Total pipeline"
             value={formatCurrency(pipeline)}
@@ -113,9 +115,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Recent opportunities */}
-        <div className="col-span-2 border border-neutral-800 rounded-lg overflow-hidden">
+        <div className="lg:col-span-2 border border-neutral-800 rounded-lg overflow-hidden">
           <div className="px-5 py-3.5 border-b border-neutral-800 flex items-center justify-between">
             <h2 className="text-sm font-medium text-neutral-300">Recent opportunities</h2>
             <a
@@ -129,7 +131,7 @@ export default function DashboardPage() {
             {recentOpps.map((opp) => (
               <div
                 key={opp.id}
-                className="px-5 py-3 flex items-center gap-4 hover:bg-neutral-900/50 transition-colors"
+                className="px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4 hover:bg-neutral-900/50 transition-colors"
               >
                 <SentimentIndicator sentiment={opp.sentiment} />
                 <div className="flex-1 min-w-0">
@@ -138,7 +140,7 @@ export default function DashboardPage() {
                     {opp.company?.name || "—"}
                   </p>
                 </div>
-                <StageBadge stage={opp.stage} />
+                <StageBadge stage={opp.stage} className="hidden sm:inline-flex" />
                 <div className="text-right shrink-0">
                   <p className="text-sm font-mono text-neutral-300">
                     {formatCurrency(opp.expected_value)}

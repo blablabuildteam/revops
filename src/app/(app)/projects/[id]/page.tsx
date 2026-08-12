@@ -65,7 +65,7 @@ import { useMutationFeedback } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 const TASK_ROW_GRID =
-  "grid grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid min-w-[48rem] grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
 
 const baseTaskDetailApi = {
   updateTask,
@@ -975,7 +975,7 @@ function BulkActionsBar({
   }
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
+    <div className="fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-4 py-3 sm:px-5 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
       <span className="text-sm font-medium text-[#d4e052] tabular-nums whitespace-nowrap">
         {count} task{count !== 1 ? "s" : ""} selected
       </span>
@@ -1980,14 +1980,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   if (loading) {
     return (
-      <div className="p-8 space-y-4">
+      <div className="page-shell space-y-4">
         <div className="h-8 w-48 bg-neutral-800 rounded animate-pulse" />
         <div className="h-40 bg-neutral-800 rounded animate-pulse" />
       </div>
     );
   }
 
-  if (!project) return <div className="p-8 text-neutral-600">Project not found</div>;
+  if (!project) return <div className="page-shell text-neutral-600">Project not found</div>;
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -2144,9 +2144,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <AssigneeNamesProvider names={boardAssigneeNames}>
-    <div className="w-full p-6 lg:p-8 space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors">
+    <div className="w-full page-shell space-y-6">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
+        <div className="flex items-center gap-3 min-w-0 sm:gap-4">
+        <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </Link>
         {(project.company as { logo_url?: string; name?: string })?.name && (
@@ -2157,7 +2158,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           />
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
             {editingName ? (
               <Input
                 ref={nameInputRef}
@@ -2198,8 +2199,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             {project.client_name && ` · ${project.client_name}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-52">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
+          <div className="relative w-full sm:w-52">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
             <Input
               value={search}
@@ -2291,7 +2293,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="space-y-3">
+        <div className="space-y-3 overflow-x-auto">
           {hasApprovedTasks && (
             <div className="px-3">
               <TaskColumnHeader

@@ -75,11 +75,48 @@ function SummaryCard({
   }[tone];
 
   return (
-    <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-      <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className={cn("text-2xl font-mono font-semibold", valueClass)}>{value}</p>
-      {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
+    <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+      <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+        {label}
+      </p>
+      <p className={cn("text-xl sm:text-2xl font-mono font-semibold tabular-nums", valueClass)}>
+        {value}
+      </p>
+      {sub && <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">{sub}</p>}
     </div>
+  );
+}
+
+function KindBadge({ kind }: { kind: DealLoadRow["kind"] }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 text-[11px] px-2 py-0.5 rounded border",
+        kind === "commission"
+          ? "text-sky-300 bg-sky-500/10 border-sky-500/20"
+          : kind === "overig"
+            ? "text-neutral-300 bg-neutral-800 border-neutral-700"
+            : kind === "retainer"
+              ? "text-stone-300 bg-stone-500/10 border-stone-500/20"
+              : "text-neutral-400 bg-neutral-800 border-neutral-700",
+      )}
+    >
+      {DEAL_LOAD_KIND_LABELS[kind]}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: DealLoadStatus }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border",
+        statusTone(status),
+      )}
+    >
+      <StatusIcon status={status} />
+      {DEAL_LOAD_STATUS_LABELS[status]}
+    </span>
   );
 }
 
@@ -241,6 +278,178 @@ function MonthlyHoursInput({
   );
 }
 
+function FeeOrHoursCell({
+  row,
+  onRefresh,
+}: {
+  row: DealLoadRow;
+  onRefresh?: () => void;
+}) {
+  if (row.kind === "overig") {
+    return (
+      <div>
+        <p className="font-mono text-neutral-200">
+          {formatHours(row.hoursPerMonthNeeded)}/mnd
+        </p>
+        <p className="text-[10px] text-neutral-600 mt-0.5">vast buffer · niet bewerkbaar</p>
+      </div>
+    );
+  }
+
+  if (row.kind === "commission") {
+    return (
+      <MonthlyHoursInput
+        key={`${row.key}-${row.hoursPerMonthNeeded}`}
+        row={row}
+        onSaved={() => onRefresh?.()}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="font-mono text-neutral-200 whitespace-nowrap">
+        {formatCurrency(row.valueExVat)}
+        <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+          {row.kind === "retainer" ? "excl. btw / mnd" : "excl. btw"}
+        </span>
+      </div>
+      {row.dealId && (
+        <MonthlyHoursInput
+          key={`${row.key}-set`}
+          row={{ ...row, fixedMonthlyHours: false, hoursPerMonthNeeded: 0 }}
+          onSaved={() => onRefresh?.()}
+        />
+      )}
+    </div>
+  );
+}
+
+function TimingCell({
+  row,
+  onRefresh,
+}: {
+  row: DealLoadRow;
+  onRefresh?: () => void;
+}) {
+  if (row.kind === "project") {
+    return (
+      <DeadlineInput
+        key={`${row.key}-${row.endDate}`}
+        row={row}
+        onSaved={() => onRefresh?.()}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <span className="text-xs text-neutral-400">Doorlopend</span>
+      {row.kind === "retainer" && (
+        <span className="block text-[10px] text-neutral-600 mt-0.5">
+          {formatHours(row.budgetHours)}/mnd @ €{TARGET_HOURLY_RATE}
+        </span>
+      )}
+      {row.kind === "commission" && (
+        <span className="block text-[10px] text-neutral-600 mt-0.5">
+          vaste inzet, geen deadline
+        </span>
+      )}
+      {row.kind === "overig" && (
+        <span className="block text-[10px] text-neutral-600 mt-0.5">
+          admin, mail, overleg, etc.
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DealLoadCard({
+  row,
+  firmWeekly,
+  onRefresh,
+}: {
+  row: DealLoadRow;
+  firmWeekly: number;
+  onRefresh?: () => void;
+}) {
+  return (
+    <li className="px-4 py-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm truncate">
+            <RowLink row={row} />
+          </div>
+          <p className="text-[11px] text-neutral-500 truncate mt-0.5">
+            {row.companyName}
+            {row.source === "opportunity" ? " · pipeline" : ""}
+          </p>
+        </div>
+        <KindBadge kind={row.kind} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 rounded-md border border-neutral-800/80 bg-neutral-950/40 px-3 py-2.5">
+        <div>
+          <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Budget</p>
+          <p className="font-mono text-sm text-neutral-200 tabular-nums">
+            {formatHours(row.budgetHours)}
+          </p>
+          <p className="text-[10px] text-neutral-600">
+            {row.kind === "project" ? "totaal" : "per maand"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Tempo</p>
+          <p className="font-mono text-sm text-[#d4e052] tabular-nums">
+            {formatHours(row.hoursPerWeekNeeded)}
+          </p>
+          <p className="text-[10px] text-neutral-600">
+            /wk · {formatHours(row.hoursPerMonthNeeded)}/mnd
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Teamlast</p>
+          <p
+            className={cn(
+              "font-mono text-sm tabular-nums",
+              row.teamLoadPct > 1
+                ? "text-red-400"
+                : row.teamLoadPct > 0.7
+                  ? "text-orange-300"
+                  : "text-neutral-300",
+            )}
+          >
+            {row.hoursPerWeekNeeded > 0 ? formatPct(row.teamLoadPct) : "—"}
+          </p>
+          <p className="text-[10px] text-neutral-600">van {firmWeekly}u/wk</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="space-y-1">
+          <p className="text-[10px] text-neutral-600 uppercase tracking-wider">Fee / uren</p>
+          <FeeOrHoursCell row={row} onRefresh={onRefresh} />
+        </div>
+        <div className="space-y-1">
+          <p className="text-[10px] text-neutral-600 uppercase tracking-wider">
+            {row.kind === "project" ? "Deadline" : "Looptijd"}
+          </p>
+          <TimingCell row={row} onRefresh={onRefresh} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={row.status} />
+        {row.kind === "project" && row.endDate && row.status === "ok" && (
+          <span className="text-[10px] text-neutral-600">
+            Deadline {formatDeadline(row.endDate)}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function DealLoadPanel({
   deals,
   projects,
@@ -280,13 +489,13 @@ export function DealLoadPanel({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+        <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60 sm:inline-flex sm:gap-0">
           <button
             type="button"
             onClick={() => setIncludePipeline(false)}
             className={cn(
-              "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+              "px-3.5 py-2 sm:py-1.5 text-[13px] sm:text-sm rounded-md transition-colors",
               !includePipeline
                 ? "bg-neutral-800 text-neutral-100"
                 : "text-neutral-500 hover:text-neutral-300",
@@ -298,7 +507,7 @@ export function DealLoadPanel({
             type="button"
             onClick={() => setIncludePipeline(true)}
             className={cn(
-              "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+              "px-3.5 py-2 sm:py-1.5 text-[13px] sm:text-sm rounded-md transition-colors",
               includePipeline
                 ? "bg-neutral-800 text-neutral-100"
                 : "text-neutral-500 hover:text-neutral-300",
@@ -314,7 +523,7 @@ export function DealLoadPanel({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <SummaryCard
           label="Tarief (projecten)"
           value={`€${TARGET_HOURLY_RATE}/u`}
@@ -345,16 +554,33 @@ export function DealLoadPanel({
       </div>
 
       <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/40">
-        <div className="px-5 py-3.5 border-b border-neutral-800">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-neutral-800">
           <h2 className="text-sm font-medium text-neutral-300">Klussen</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">
+          <p className="text-[11px] sm:text-xs text-neutral-500 mt-0.5">
             Project: fee ÷ €{TARGET_HOURLY_RATE} tot de deadline. Retainer: maandfee ÷ €
             {TARGET_HOURLY_RATE}. Commissie: vaste partner-uren. Overig: {OVERIG_MONTHLY_HOURS}
             u/mnd admin & randzaken.
           </p>
         </div>
 
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-neutral-800/80 md:hidden">
+          {rows.length === 0 ? (
+            <li className="px-4 py-10 text-center text-sm text-neutral-500">
+              Zet een fee of vaste maanduren op deals om capacity te zien.
+            </li>
+          ) : (
+            rows.map((row) => (
+              <DealLoadCard
+                key={row.key}
+                row={row}
+                firmWeekly={firmWeekly}
+                onRefresh={onRefresh}
+              />
+            ))
+          )}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
@@ -391,86 +617,13 @@ export function DealLoadPanel({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex text-[11px] px-2 py-0.5 rounded border",
-                          row.kind === "commission"
-                            ? "text-sky-300 bg-sky-500/10 border-sky-500/20"
-                            : row.kind === "overig"
-                              ? "text-neutral-300 bg-neutral-800 border-neutral-700"
-                              : row.kind === "retainer"
-                                ? "text-stone-300 bg-stone-500/10 border-stone-500/20"
-                                : "text-neutral-400 bg-neutral-800 border-neutral-700",
-                        )}
-                      >
-                        {DEAL_LOAD_KIND_LABELS[row.kind]}
-                      </span>
+                      <KindBadge kind={row.kind} />
                     </td>
                     <td className="px-4 py-3">
-                      {row.kind === "overig" ? (
-                        <div>
-                          <p className="font-mono text-neutral-200">{formatHours(row.hoursPerMonthNeeded)}/mnd</p>
-                          <p className="text-[10px] text-neutral-600 mt-0.5">
-                            vast buffer · niet bewerkbaar
-                          </p>
-                        </div>
-                      ) : row.kind === "commission" ? (
-                        <MonthlyHoursInput
-                          key={`${row.key}-${row.hoursPerMonthNeeded}`}
-                          row={row}
-                          onSaved={() => onRefresh?.()}
-                        />
-                      ) : (
-                        <div className="space-y-1.5">
-                          <div className="font-mono text-neutral-200 whitespace-nowrap">
-                            {formatCurrency(row.valueExVat)}
-                            <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                              {row.kind === "retainer" ? "excl. btw / mnd" : "excl. btw"}
-                            </span>
-                          </div>
-                          {row.dealId && (
-                            <MonthlyHoursInput
-                              key={`${row.key}-set`}
-                              row={{
-                                ...row,
-                                fixedMonthlyHours: false,
-                                hoursPerMonthNeeded: 0,
-                              }}
-                              onSaved={() => onRefresh?.()}
-                            />
-                          )}
-                        </div>
-                      )}
+                      <FeeOrHoursCell row={row} onRefresh={onRefresh} />
                     </td>
                     <td className="px-4 py-3">
-                      {row.kind === "commission" ||
-                      row.kind === "retainer" ||
-                      row.kind === "overig" ? (
-                        <div>
-                          <span className="text-xs text-neutral-400">Doorlopend</span>
-                          {row.kind === "retainer" && (
-                            <span className="block text-[10px] text-neutral-600 mt-0.5">
-                              {formatHours(row.budgetHours)}/mnd @ €{TARGET_HOURLY_RATE}
-                            </span>
-                          )}
-                          {row.kind === "commission" && (
-                            <span className="block text-[10px] text-neutral-600 mt-0.5">
-                              vaste inzet, geen deadline
-                            </span>
-                          )}
-                          {row.kind === "overig" && (
-                            <span className="block text-[10px] text-neutral-600 mt-0.5">
-                              admin, mail, overleg, etc.
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <DeadlineInput
-                          key={`${row.key}-${row.endDate}`}
-                          row={row}
-                          onSaved={() => onRefresh?.()}
-                        />
-                      )}
+                      <TimingCell row={row} onRefresh={onRefresh} />
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
@@ -502,15 +655,7 @@ export function DealLoadPanel({
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border",
-                          statusTone(row.status),
-                        )}
-                      >
-                        <StatusIcon status={row.status} />
-                        {DEAL_LOAD_STATUS_LABELS[row.status]}
-                      </span>
+                      <StatusBadge status={row.status} />
                       {row.kind === "project" && row.endDate && row.status === "ok" && (
                         <span className="block text-[10px] text-neutral-600 mt-1">
                           Deadline {formatDeadline(row.endDate)}

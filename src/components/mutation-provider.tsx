@@ -292,7 +292,7 @@ function UndoToast({
   return (
     <div
       className={cn(
-        "fixed bottom-5 left-5 z-[200] transition-all duration-200",
+        "fixed left-4 right-4 sm:right-auto sm:left-5 bottom-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] z-[200] transition-all duration-200",
         toast
           ? "opacity-100 translate-y-0 pointer-events-auto"
           : "opacity-0 translate-y-2 pointer-events-none",

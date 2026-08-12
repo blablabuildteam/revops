@@ -464,16 +464,16 @@ export default function FinancePage() {
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <div className="page-shell space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Finance</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">{activeTab.sub}</p>
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Finance</h1>
+          <p className="text-[13px] sm:text-sm text-neutral-500 mt-0.5">{activeTab.sub}</p>
         </div>
         {tab === "overview" && (
           <Button
             onClick={() => setManualDealOpen(true)}
-            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             Add deal
@@ -481,7 +481,7 @@ export default function FinancePage() {
         )}
       </div>
 
-      <div className="flex items-center gap-1 border-b border-neutral-800">
+      <div className="snap-rail flex items-center gap-1 border-b border-neutral-800 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -489,7 +489,7 @@ export default function FinancePage() {
             onClick={() => setTab(entry.id)}
             aria-current={tab === entry.id ? "page" : undefined}
             className={cn(
-              "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
+              "relative shrink-0 whitespace-nowrap px-3 py-2.5 sm:py-2 text-sm transition-colors -mb-px border-b-2",
               tab === entry.id
                 ? "text-[#d4e052] border-[#d4e052]"
                 : "text-neutral-500 border-transparent hover:text-neutral-200",
@@ -524,39 +524,39 @@ export default function FinancePage() {
         <div className="h-64 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
       ) : summary && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Received YTD</p>
-              <p className="text-2xl font-mono font-semibold text-emerald-400">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Received YTD</p>
+              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
                 {formatCurrency(cashPosition.receivedYtd)}
               </p>
-              <p className="text-xs text-neutral-500 mt-1">On deals this year (incl. VAT)</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">On deals this year (incl. VAT)</p>
             </div>
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Still outstanding</p>
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still outstanding</p>
               <p
                 className={cn(
-                  "text-2xl font-mono font-semibold",
+                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
                   cashPosition.outstanding > 0 ? "text-orange-300" : "text-emerald-400",
                 )}
               >
                 {formatCurrency(cashPosition.outstanding)}
               </p>
-              <p className="text-xs text-neutral-500 mt-1">Contracted minus paid</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Contracted minus paid</p>
             </div>
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax set aside now</p>
-              <p className="text-2xl font-mono font-semibold text-[#d4e052]">
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax set aside now</p>
+              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
                 {formatCurrency(cashPosition.taxSetAside)}
               </p>
-              <p className="text-xs text-neutral-500 mt-1">IB + Zvw on profit so far</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">IB + Zvw on profit so far</p>
             </div>
-            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
-              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax full-year est.</p>
-              <p className="text-2xl font-mono font-semibold text-neutral-100">
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax full-year est.</p>
+              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-neutral-100">
                 {formatCurrency(cashPosition.taxFullYear)}
               </p>
-              <p className="text-xs text-neutral-500 mt-1">
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
                 Detail in{" "}
                 <button
                   type="button"
@@ -708,13 +708,112 @@ export default function FinancePage() {
 
           <div className="space-y-4">
               <div className="border border-neutral-800 rounded-lg overflow-hidden">
-                <div className="px-5 py-3.5 border-b border-neutral-800">
+                <div className="px-4 sm:px-5 py-3.5 border-b border-neutral-800">
                   <h2 className="text-sm font-medium text-neutral-300">Finance deals</h2>
-                  <p className="text-xs text-neutral-600 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-neutral-600 mt-0.5">
                     {deals.length} deal{deals.length !== 1 ? "s" : ""} from won opportunities
                   </p>
                 </div>
-                <div className="overflow-x-auto">
+
+                <ul className="divide-y divide-neutral-800/60 md:hidden">
+                  {deals.length === 0 ? (
+                    <li className="px-4 py-10 text-center text-sm text-neutral-600">
+                      No finance deals yet. Activate a won opportunity to create one.
+                    </li>
+                  ) : (
+                    deals.map((deal) => {
+                      const contractValue = dealContractValue(deal);
+                      const outstanding = dealOutstanding(deal);
+                      const paidPct =
+                        contractValue > 0
+                          ? Math.min(
+                              100,
+                              Math.round(((deal.amount_paid ?? 0) / contractValue) * 100),
+                            )
+                          : 0;
+
+                      return (
+                        <li key={deal.id}>
+                          <button
+                            type="button"
+                            onClick={() => openDeal(deal)}
+                            className="w-full px-4 py-3.5 text-left active:bg-neutral-900/60"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm text-neutral-200 truncate">
+                                  {deal.company_name}
+                                </p>
+                                <p className="text-xs text-neutral-500 truncate">
+                                  {deal.project_name}
+                                </p>
+                              </div>
+                              <span
+                                className={cn(
+                                  "shrink-0 text-[11px] font-mono px-2 py-0.5 rounded",
+                                  deal.deal_type === "project"
+                                    ? "bg-violet-950 text-violet-300"
+                                    : "bg-blue-950 text-blue-300",
+                                )}
+                              >
+                                {DEAL_TYPE_LABELS[deal.deal_type]}
+                              </span>
+                            </div>
+
+                            <div className="mt-2.5 flex items-baseline justify-between gap-2 font-mono text-sm tabular-nums">
+                              <span className="text-neutral-300">
+                                {formatCurrency(contractValue)}
+                              </span>
+                              <span
+                                className={
+                                  outstanding > 0 ? "text-orange-300" : "text-emerald-400"
+                                }
+                              >
+                                {formatCurrency(outstanding)} left
+                              </span>
+                            </div>
+
+                            {contractValue > 0 && (
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full transition-all",
+                                      paidPct >= 100
+                                        ? "bg-emerald-500"
+                                        : paidPct > 0
+                                          ? "bg-emerald-500/70"
+                                          : "",
+                                    )}
+                                    style={{ width: `${paidPct}%` }}
+                                  />
+                                </div>
+                                <span
+                                  className={cn(
+                                    "text-[10px] font-mono tabular-nums w-8 text-right",
+                                    paidPct >= 100
+                                      ? "text-emerald-400"
+                                      : paidPct > 0
+                                        ? "text-neutral-500"
+                                        : "text-neutral-700",
+                                  )}
+                                >
+                                  {paidPct}%
+                                </span>
+                              </div>
+                            )}
+
+                            <p className="mt-2 text-[11px] text-neutral-600">
+                              {formatDate(deal.start_date)} — {formatDate(deal.end_date)} · incl. VAT
+                            </p>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-neutral-800 bg-neutral-900/60">
@@ -830,7 +929,7 @@ export default function FinancePage() {
       ))}
 
       <Dialog open={!!selectedDeal} onOpenChange={(o) => !o && setSelectedDeal(null)}>
-        <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-2xl w-[92vw] p-0 overflow-hidden">
+        <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 !max-w-2xl w-[92vw] p-0 overflow-x-hidden">
           <div className="px-6 pt-6 pb-2">
             <DialogHeader>
               <DialogTitle className="text-neutral-100 text-lg">Finance deal</DialogTitle>
@@ -839,7 +938,7 @@ export default function FinancePage() {
 
           {selectedDeal && (
             <div className="px-6 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Company</Label>
                   <Input
@@ -925,7 +1024,7 @@ export default function FinancePage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-neutral-400 text-xs">Start date</Label>
                     <DatePicker
@@ -1056,7 +1155,7 @@ export default function FinancePage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                       <div>
                         <p className="text-xs text-neutral-500">Contract value (incl. VAT)</p>
                         <p className="font-mono text-neutral-200 mt-0.5">{formatCurrency(contractValue)}</p>

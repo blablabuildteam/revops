@@ -31,7 +31,7 @@ export default function CapacityPage() {
 
   if (loading) {
     return (
-      <div className="p-8 space-y-6">
+      <div className="page-shell space-y-6">
         <div className="h-8 w-40 bg-neutral-900/60 rounded animate-pulse" />
         <div className="h-64 bg-neutral-900/30 border border-neutral-800 rounded-lg animate-pulse" />
       </div>
@@ -39,11 +39,11 @@ export default function CapacityPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="page-shell space-y-5 sm:space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Capacity</h1>
-          <p className="text-sm text-neutral-500 mt-0.5">
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Capacity</h1>
+          <p className="text-[13px] sm:text-sm text-neutral-500 mt-0.5">
             Fee ÷ €{TARGET_HOURLY_RATE}/u tot de deadline · actual deals, optioneel pipeline
           </p>
         </div>

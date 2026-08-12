@@ -236,20 +236,20 @@ export default function CompaniesPage() {
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="page-shell space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-neutral-100">Companies</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Companies</h1>
           <p className="text-sm text-neutral-500 mt-0.5">{companies.length} companies</p>
         </div>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }}
-          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
+          className="w-full sm:w-auto bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New company
         </Button>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="border border-neutral-800 rounded-lg h-32 animate-pulse" />
           ))}
@@ -296,7 +296,7 @@ export default function CompaniesPage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Revenue (excl. VAT)</p>
                     <p className="text-sm font-mono text-stone-300 font-medium">
@@ -335,7 +335,7 @@ export default function CompaniesPage() {
           })}
 
           {companies.length === 0 && (
-            <div className="col-span-2 py-20 text-center border border-neutral-800 rounded-lg">
+            <div className="md:col-span-2 py-20 text-center border border-neutral-800 rounded-lg">
               <Building2 className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
               <p className="text-neutral-600 text-sm">No companies yet</p>
             </div>
