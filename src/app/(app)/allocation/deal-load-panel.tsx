@@ -38,7 +38,7 @@ function StatusIcon({ status }: { status: DealLoadStatus }) {
 
 function formatHours(h: number) {
   if (h <= 0) return "—";
-  return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
+  return Number.isInteger(h) ? `${h}u` : `${h.toFixed(1)}u`;
 }
 
 function formatPct(pct: number) {
@@ -47,7 +47,7 @@ function formatPct(pct: number) {
 
 function formatDeadline(iso: string | null) {
   if (!iso) return null;
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("nl-NL", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -140,7 +140,7 @@ function DeadlineInput({
       }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setError(err instanceof Error ? err.message : "Opslaan mislukt");
       setValue(row.endDate ?? "");
     } finally {
       setSaving(false);
@@ -159,7 +159,7 @@ function DeadlineInput({
       />
       {row.endDate && row.weeksRemaining > 0 && (
         <span className="text-[10px] text-neutral-600">
-          {row.weeksRemaining} wk left
+          nog {row.weeksRemaining} wk
         </span>
       )}
       {error && <span className="text-[10px] text-red-400">{error}</span>}
@@ -231,24 +231,24 @@ export function DealLoadPanel({
         <p className="text-xs text-neutral-600">
           {includePipeline
             ? "Inclusief open opportunities"
-            : "Alleen bevestigde finance deals"}
+            : "Alleen lopende deals"}
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <SummaryCard
-          label="Planning rate"
-          value={`€${TARGET_HOURLY_RATE}/h`}
-          sub="Fee excl. VAT ÷ hours"
+          label="Tarief"
+          value={`€${TARGET_HOURLY_RATE}/u`}
+          sub="Fee excl. btw ÷ uren"
           tone="accent"
         />
         <SummaryCard
-          label="Project hour budgets"
+          label="Urenbudget projecten"
           value={formatHours(totalBudgetHours)}
-          sub={`${projectsRows.length} active · total fee ÷ €${TARGET_HOURLY_RATE}`}
+          sub={`${projectsRows.length} actief · fee ÷ €${TARGET_HOURLY_RATE}`}
         />
         <SummaryCard
-          label="Concurrent load / week"
+          label="Last / week"
           value={formatHours(totalWeekly)}
           sub={`Ruimte ${formatHours(room)} van ${formatHours(firmWeekly)} team`}
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
@@ -258,8 +258,8 @@ export function DealLoadPanel({
           value={formatPct(utilization)}
           sub={
             overloaded + needsDeadline > 0
-              ? `${overloaded} overloaded · ${needsDeadline} no deadline`
-              : `${formatHours(projectWeekly)} proj + ${formatHours(retainerWeekly)} ret`
+              ? `${overloaded} te zwaar · ${needsDeadline} zonder deadline`
+              : `${formatHours(projectWeekly)} project + ${formatHours(retainerWeekly)} retainer`
           }
           tone={utilization > 1 ? "bad" : utilization > 0.85 ? "warn" : "default"}
         />
@@ -268,11 +268,11 @@ export function DealLoadPanel({
       <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/40">
         <div className="px-5 py-3.5 border-b border-neutral-800">
           <h2 className="text-sm font-medium text-neutral-300">
-            Capacity at €{TARGET_HOURLY_RATE}/h
+            Klussen @ €{TARGET_HOURLY_RATE}/u
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Projects: fee ÷ €{TARGET_HOURLY_RATE} = hour budget, spread until the deadline.
-            Retainers: monthly fee ÷ €{TARGET_HOURLY_RATE} = hours included each month.
+            Project: fee ÷ €{TARGET_HOURLY_RATE} = urenbudget, verdeeld tot de deadline.
+            Retainer: maandfee ÷ €{TARGET_HOURLY_RATE} = uren per maand.
           </p>
         </div>
 
@@ -280,12 +280,12 @@ export function DealLoadPanel({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
-                <th className="px-5 py-2.5 font-medium">Job</th>
+                <th className="px-5 py-2.5 font-medium">Klus</th>
                 <th className="px-4 py-2.5 font-medium">Fee</th>
                 <th className="px-4 py-2.5 font-medium">Deadline</th>
                 <th className="px-4 py-2.5 font-medium text-right">Budget</th>
-                <th className="px-4 py-2.5 font-medium text-right">Pace</th>
-                <th className="px-4 py-2.5 font-medium text-right">Team load</th>
+                <th className="px-4 py-2.5 font-medium text-right">Tempo</th>
+                <th className="px-4 py-2.5 font-medium text-right">Teamlast</th>
                 <th className="px-5 py-2.5 font-medium">Status</th>
               </tr>
             </thead>
@@ -293,7 +293,7 @@ export function DealLoadPanel({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-5 py-10 text-center text-neutral-500">
-                    Add a fee on deals or opportunities to see capacity.
+                    Zet een fee op deals (of pipeline) om capacity te zien.
                   </td>
                 </tr>
               ) : (
@@ -315,15 +315,15 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-neutral-200 whitespace-nowrap">
                       {formatCurrency(row.valueExVat)}
                       <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                        {row.kind === "retainer" ? "excl. VAT / mo" : "excl. VAT"}
+                        {row.kind === "retainer" ? "excl. btw / mnd" : "excl. btw"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       {row.kind === "retainer" ? (
                         <div>
-                          <span className="text-xs text-neutral-400">Ongoing</span>
+                          <span className="text-xs text-neutral-400">Doorlopend</span>
                           <span className="block text-[10px] text-neutral-600 mt-0.5">
-                            {formatHours(row.budgetHours)}/mo @ €{TARGET_HOURLY_RATE}
+                            {formatHours(row.budgetHours)}/mnd @ €{TARGET_HOURLY_RATE}
                           </span>
                         </div>
                       ) : (
@@ -337,13 +337,13 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
                       <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                        {row.kind === "retainer" ? "per month" : "total"}
+                        {row.kind === "retainer" ? "per maand" : "totaal"}
                       </span>
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[#d4e052]">
                       {formatHours(row.hoursPerWeekNeeded)}
                       <span className="block text-[10px] text-neutral-500 font-sans mt-0.5">
-                        /wk · {formatHours(row.hoursPerMonthNeeded)}/mo
+                        /wk · {formatHours(row.hoursPerMonthNeeded)}/mnd
                       </span>
                     </td>
                     <td
@@ -359,7 +359,7 @@ export function DealLoadPanel({
                       {row.hoursPerWeekNeeded > 0 ? formatPct(row.teamLoadPct) : "—"}
                       {row.hoursPerWeekNeeded > 0 && (
                         <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
-                          of {firmWeekly}h/wk
+                          van {firmWeekly}u/wk
                         </span>
                       )}
                     </td>
@@ -375,7 +375,7 @@ export function DealLoadPanel({
                       </span>
                       {row.kind === "project" && row.endDate && row.status === "ok" && (
                         <span className="block text-[10px] text-neutral-600 mt-1">
-                          Due {formatDeadline(row.endDate)}
+                          Deadline {formatDeadline(row.endDate)}
                         </span>
                       )}
                     </td>
@@ -388,9 +388,9 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Project example: €17.500 excl. VAT ÷ €{TARGET_HOURLY_RATE} = 100h. Deadline in 10 weeks →
-        10h/week (≈ 43h/month). Retainer example: €1.750/mo ÷ €{TARGET_HOURLY_RATE} = 10h/month
-        included. Finishing under budget = effective rate above €{TARGET_HOURLY_RATE}.
+        Voorbeeld project: €17.500 excl. btw ÷ €{TARGET_HOURLY_RATE} = 100u. Deadline over 10
+        weken → 10u/week. Retainer: €1.750/mnd ÷ €{TARGET_HOURLY_RATE} = 10u/maand. Sneller klaar
+        = effectief tarief boven €{TARGET_HOURLY_RATE}.
       </p>
     </div>
   );

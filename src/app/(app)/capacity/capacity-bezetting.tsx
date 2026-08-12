@@ -1,15 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, ArrowUpRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   TARGET_HOURLY_RATE,
   buildDealLoadRows,
   buildMonthlyCapacity,
   buildWeeklyCapacity,
-  type DealLoadRow,
   type MonthlyCapacityColumn,
   type WeeklyCapacityColumn,
 } from "@/lib/deal-capacity";
@@ -22,10 +20,10 @@ const VISIBLE_MONTHS = 6;
 
 function formatHours(h: number) {
   const rounded = Math.round(h * 10) / 10;
-  if (Math.abs(rounded) < 0.05) return "0h";
+  if (Math.abs(rounded) < 0.05) return "0u";
   const sign = rounded < 0 ? "−" : "";
   const abs = Math.abs(rounded);
-  return `${sign}${Number.isInteger(abs) ? abs : abs.toFixed(1)}h`;
+  return `${sign}${Number.isInteger(abs) ? abs : abs.toFixed(1)}u`;
 }
 
 function formatPct(pct: number) {
@@ -136,7 +134,7 @@ function PeriodColumn({
 
       <ul className="space-y-2 flex-1">
         {jobs.length === 0 ? (
-          <li className="text-[11px] text-neutral-700">Geen last</li>
+          <li className="text-[11px] text-neutral-700">Niets gepland</li>
         ) : (
           jobs.slice(0, 5).map((job) => (
             <li key={job.key} className="flex justify-between gap-2 text-[11px]">
@@ -202,8 +200,7 @@ export function CapacityBezetting({
   );
 
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
-  const near = period === "week" ? weeks[0] : months[0];
-  const planned = near?.totalHours ?? 0;
+  const planned = (period === "week" ? weeks[0]?.totalHours : months[0]?.totalHours) ?? 0;
   const capacity =
     period === "week"
       ? (weeks[0]?.firmWeeklyHours ?? firmWeekly)
@@ -231,88 +228,65 @@ export function CapacityBezetting({
     return (withPipe?.totalHours ?? 0) - (actual?.totalHours ?? 0);
   }, [deals, projects, opportunities, actualOnly]);
 
-  const peak = period === "week"
-    ? weeks.reduce(
-        (best, c) => (c.loadPct > best.loadPct ? c : best),
-        weeks[0] ?? ({ loadPct: 0, totalHours: 0 } as WeeklyCapacityColumn),
-      )
-    : months.reduce(
-        (best, c) => (c.loadPct > best.loadPct ? c : best),
-        months[0] ?? ({ loadPct: 0, totalHours: 0 } as MonthlyCapacityColumn),
-      );
+  const peak =
+    period === "week"
+      ? weeks.reduce(
+          (best, c) => (c.loadPct > best.loadPct ? c : best),
+          weeks[0] ?? ({ loadPct: 0, totalHours: 0 } as WeeklyCapacityColumn),
+        )
+      : months.reduce(
+          (best, c) => (c.loadPct > best.loadPct ? c : best),
+          months[0] ?? ({ loadPct: 0, totalHours: 0 } as MonthlyCapacityColumn),
+        );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10">
-      <header className="space-y-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-600">
-              Capacity · €{TARGET_HOURLY_RATE}/h
-            </p>
-            <h1 className="text-3xl font-semibold text-neutral-100 tracking-tight">
-              Bezetting
-            </h1>
-            <p className="text-sm text-neutral-500 max-w-lg leading-relaxed">
-              Uren gelijkmatig verdeeld tot de deadline. Standaard alleen lopende deals —
-              pipeline is optioneel.
-            </p>
-          </div>
-          <Link
-            href="/allocation"
-            className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-[#d4e052] transition-colors"
-          >
-            Klussen & deadlines
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </Link>
+    <div className="space-y-10">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+          {(
+            [
+              { id: "actual" as const, label: "Actual" },
+              { id: "pipeline" as const, label: "Actual + pipeline" },
+            ] as const
+          ).map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setScope(entry.id)}
+              className={cn(
+                "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+                scope === entry.id
+                  ? "bg-neutral-800 text-neutral-100"
+                  : "text-neutral-500 hover:text-neutral-300",
+              )}
+            >
+              {entry.label}
+            </button>
+          ))}
         </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
-            {(
-              [
-                { id: "actual" as const, label: "Actual" },
-                { id: "pipeline" as const, label: "Actual + pipeline" },
-              ] as const
-            ).map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setScope(entry.id)}
-                className={cn(
-                  "px-3.5 py-1.5 text-sm rounded-md transition-colors",
-                  scope === entry.id
-                    ? "bg-neutral-800 text-neutral-100"
-                    : "text-neutral-500 hover:text-neutral-300",
-                )}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-          <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
-            {(
-              [
-                { id: "week" as const, label: "Week" },
-                { id: "month" as const, label: "Maand" },
-              ] as const
-            ).map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                onClick={() => setPeriod(entry.id)}
-                className={cn(
-                  "px-3.5 py-1.5 text-sm rounded-md transition-colors",
-                  period === entry.id
-                    ? "bg-neutral-800 text-neutral-100"
-                    : "text-neutral-500 hover:text-neutral-300",
-                )}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
+        <div className="inline-flex rounded-lg border border-neutral-800 p-0.5 bg-neutral-950/60">
+          {(
+            [
+              { id: "week" as const, label: "Week" },
+              { id: "month" as const, label: "Maand" },
+            ] as const
+          ).map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setPeriod(entry.id)}
+              className={cn(
+                "px-3.5 py-1.5 text-sm rounded-md transition-colors",
+                period === entry.id
+                  ? "bg-neutral-800 text-neutral-100"
+                  : "text-neutral-500 hover:text-neutral-300",
+              )}
+            >
+              {entry.label}
+            </button>
+          ))}
         </div>
-      </header>
+      </div>
 
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-8 py-2">
         <Metric
@@ -327,12 +301,12 @@ export function CapacityBezetting({
         <Metric
           label="Teamcapaciteit"
           value={formatHours(capacity)}
-          hint={`${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}h/wk`}
+          hint={`${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}u/wk`}
         />
         <Metric
           label="Ruimte"
           value={formatHours(room)}
-          hint={room >= 0 ? "Nog vrij op €175-tempo" : "Tekort t.o.v. teamweek"}
+          hint={room >= 0 ? "Nog vrij op €175-tempo" : "Tekort t.o.v. team"}
           tone={room < 0 ? "bad" : room < capacity * 0.15 ? "warn" : "ok"}
         />
         <Metric
@@ -346,7 +320,8 @@ export function CapacityBezetting({
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-neutral-400">
-            {period === "week" ? "Weken" : "Maanden"} · geschatte last
+            {period === "week" ? "Per week" : "Per maand"} · geschatte last @ €
+            {TARGET_HOURLY_RATE}/u
           </p>
           <div className="flex items-center gap-1">
             <Button
@@ -429,8 +404,8 @@ export function CapacityBezetting({
         </div>
 
         <p className="text-[11px] text-neutral-600 leading-relaxed pt-2">
-          Groen &lt; 85% · oranje krap · rood over teamcapaciteit. Ruimte = capaciteit − geplande
-          uren op €{TARGET_HOURLY_RATE}/h.
+          Groen &lt; 85% · oranje krap · rood boven teamcapaciteit. Ruimte = capaciteit − geplande
+          uren.
         </p>
       </section>
     </div>

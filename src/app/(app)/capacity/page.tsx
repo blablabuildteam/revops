@@ -2,13 +2,27 @@
 
 export const dynamic = "force-dynamic";
 
+import { useCallback, useState } from "react";
 import { useProjects, useOpportunities, useFinanceDeals } from "@/hooks/use-api-data";
 import { CapacityBezetting } from "./capacity-bezetting";
+import { DealLoadPanel } from "../allocation/deal-load-panel";
+import { TARGET_HOURLY_RATE } from "@/lib/deal-capacity";
+import { cn } from "@/lib/utils";
 
 export default function CapacityPage() {
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
-  const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
-  const { data: deals = [], isLoading: dealsLoading } = useFinanceDeals();
+  const [tab, setTab] = useState<"bezetting" | "klussen">("bezetting");
+  const { data: projects = [], isLoading: projectsLoading, mutate: mutateProjects } =
+    useProjects();
+  const { data: opportunities = [], isLoading: oppsLoading, mutate: mutateOpps } =
+    useOpportunities();
+  const { data: deals = [], isLoading: dealsLoading, mutate: mutateDeals } =
+    useFinanceDeals();
+
+  const refresh = useCallback(() => {
+    void mutateDeals();
+    void mutateOpps();
+    void mutateProjects();
+  }, [mutateDeals, mutateOpps, mutateProjects]);
 
   const loading =
     (projectsLoading && projects.length === 0) ||
@@ -19,23 +33,66 @@ export default function CapacityPage() {
     return (
       <div className="px-8 py-10 max-w-6xl mx-auto space-y-10">
         <div className="h-10 w-48 bg-neutral-900/60 rounded animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 bg-neutral-900/40 rounded animate-pulse" />
-          ))}
-        </div>
         <div className="h-64 bg-neutral-900/30 rounded-xl animate-pulse" />
       </div>
     );
   }
 
   return (
-    <div className="px-8 py-10">
-      <CapacityBezetting
-        deals={deals}
-        projects={projects}
-        opportunities={opportunities}
-      />
+    <div className="px-8 py-10 max-w-6xl mx-auto space-y-8">
+      <header className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-600">
+            Capacity · €{TARGET_HOURLY_RATE}/u
+          </p>
+          <h1 className="text-3xl font-semibold text-neutral-100 tracking-tight">
+            Capacity
+          </h1>
+          <p className="text-sm text-neutral-500 max-w-xl leading-relaxed">
+            Fee ÷ €{TARGET_HOURLY_RATE}/u tot de deadline. Standaard alleen lopende deals;
+            pipeline kun je erbij zetten.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 border-b border-neutral-800">
+          {(
+            [
+              { id: "bezetting" as const, label: "Bezetting" },
+              { id: "klussen" as const, label: "Klussen" },
+            ] as const
+          ).map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={() => setTab(entry.id)}
+              aria-current={tab === entry.id ? "page" : undefined}
+              className={cn(
+                "relative px-3 py-2.5 text-sm transition-colors -mb-px border-b-2",
+                tab === entry.id
+                  ? "text-[#d4e052] border-[#d4e052]"
+                  : "text-neutral-500 border-transparent hover:text-neutral-200",
+              )}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {tab === "bezetting" ? (
+        <CapacityBezetting
+          deals={deals}
+          projects={projects}
+          opportunities={opportunities}
+        />
+      ) : (
+        <DealLoadPanel
+          deals={deals}
+          projects={projects}
+          opportunities={opportunities}
+          onRefresh={refresh}
+        />
+      )}
     </div>
   );
 }

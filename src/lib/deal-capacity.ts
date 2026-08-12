@@ -120,11 +120,11 @@ function statusFor(row: {
 }
 
 export const DEAL_LOAD_STATUS_LABELS: Record<DealLoadStatus, string> = {
-  ok: "Fits at €175/h",
-  overloaded: "Needs more than the team",
-  missing_deadline: "Set deadline",
-  missing_value: "Set fee",
-  overdue: "Past deadline",
+  ok: "Past op €175/u",
+  overloaded: "Meer dan het team aankan",
+  missing_deadline: "Deadline nodig",
+  missing_value: "Fee nodig",
+  overdue: "Deadline verstreken",
 };
 
 type BuildArgs = {
