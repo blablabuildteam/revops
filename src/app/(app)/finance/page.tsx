@@ -91,8 +91,19 @@ const SnelstartPanel = dynamicImport(
   }
 );
 
+const BunqPanel = dynamicImport(
+  () => import("./bunq-panel").then((m) => m.BunqPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-96 border border-neutral-800 rounded-lg bg-neutral-900/40 animate-pulse" />
+    ),
+  }
+);
+
 const TABS = [
   { id: "overview", label: "Overview", sub: "Finance deals (incl. VAT), allocation & salary pot" },
+  { id: "bunq", label: "Bunq", sub: "Incoming bank payments matched to deals" },
   { id: "snelstart", label: "SnelStart", sub: "Invoices, paid amounts and outstanding from your books" },
   { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax as a VOF" },
   { id: "bv", label: "BV check", sub: "Whether converting to a BV is worth it yet" },
@@ -467,6 +478,8 @@ export default function FinancePage() {
           </button>
         ))}
       </div>
+
+      {tab === "bunq" && <BunqPanel />}
 
       {tab === "snelstart" && <SnelstartPanel />}
 

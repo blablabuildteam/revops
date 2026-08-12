@@ -187,6 +187,50 @@ async function runSchemaMigrations() {
   await migrateFinanceDealsToInclVat();
   await migrateStandardPhasesOnce();
   await ensureSnelstartInvoicesTable();
+  await ensureBunqTables();
+}
+
+async function ensureBunqTables() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS bunq_context (
+      id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      private_key_pem TEXT NOT NULL,
+      public_key_pem TEXT NOT NULL,
+      installation_token TEXT NOT NULL,
+      server_public_key TEXT,
+      device_id INTEGER,
+      session_token TEXT,
+      session_user_id INTEGER,
+      session_expires_at TIMESTAMPTZ,
+      api_key_fingerprint TEXT NOT NULL,
+      environment TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS bunq_payments (
+      id BIGINT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL,
+      amount NUMERIC(12,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      description TEXT NOT NULL DEFAULT '',
+      counterparty_name TEXT,
+      counterparty_iban TEXT,
+      monetary_account_id BIGINT NOT NULL,
+      account_iban TEXT,
+      account_name TEXT,
+      payment_type TEXT,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      finance_deal_id UUID REFERENCES finance_deals(id) ON DELETE SET NULL,
+      matched_confidence TEXT,
+      synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      raw JSONB DEFAULT '{}'::jsonb
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS bunq_payments_created_at
+    ON bunq_payments (created_at DESC)
+  `;
 }
 
 async function ensureSnelstartInvoicesTable() {
