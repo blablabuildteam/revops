@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, CalendarClock } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import {
   DEAL_LOAD_STATUS_LABELS,
@@ -11,19 +11,19 @@ import {
   type DealLoadRow,
   type DealLoadStatus,
 } from "@/lib/deal-capacity";
+import { ALLOCATION_WEEKLY_HOURS, TASK_ASSIGNEES } from "@/lib/types";
 import type { Allocation, FinanceDeal, Opportunity, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function statusTone(status: DealLoadStatus) {
   switch (status) {
     case "ok":
-      return "text-stone-300 bg-stone-500/10 border-stone-500/20";
-    case "under_allocated":
-      return "text-neutral-300 bg-neutral-700/40 border-neutral-600";
-    case "over_scoped":
-      return "text-neutral-200 bg-neutral-800 border-neutral-500";
-    case "no_capacity":
-      return "text-neutral-200 bg-neutral-800 border-neutral-500";
+      return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+    case "tight":
+      return "text-orange-300 bg-orange-500/10 border-orange-500/20";
+    case "overloaded":
+    case "over_planned":
+      return "text-red-400 bg-red-500/10 border-red-500/20";
     default:
       return "text-neutral-400 bg-neutral-800 border-neutral-700";
   }
@@ -31,13 +31,19 @@ function statusTone(status: DealLoadStatus) {
 
 function StatusIcon({ status }: { status: DealLoadStatus }) {
   if (status === "ok") return <CheckCircle2 className="w-3.5 h-3.5" />;
-  if (status === "under_allocated") return <Clock className="w-3.5 h-3.5" />;
+  if (status === "missing_dates" || status === "missing_value") {
+    return <CalendarClock className="w-3.5 h-3.5" />;
+  }
   return <AlertTriangle className="w-3.5 h-3.5" />;
 }
 
 function formatHours(h: number) {
   if (h <= 0) return "—";
   return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
+}
+
+function formatPct(pct: number) {
+  return `${Math.round(pct * 100)}%`;
 }
 
 function formatDateRange(start: string | null, end: string | null) {
@@ -64,7 +70,7 @@ function SummaryCard({
   const valueClass = {
     default: "text-neutral-100",
     accent: "text-[#d4e052]",
-    warn: "text-neutral-400",
+    warn: "text-orange-300",
     bad: "text-red-400",
   }[tone];
 
@@ -119,51 +125,59 @@ export function DealLoadPanel({
     [deals, projects, opportunities, allocations],
   );
 
-  const flagged = rows.filter((r) => r.status !== "ok" && r.status !== "missing_dates" && r.status !== "missing_value");
-  const overScoped = rows.filter((r) => r.status === "over_scoped").length;
-  const noCapacity = rows.filter((r) => r.status === "no_capacity").length;
+  const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
+  const flagged = rows.filter((r) => r.status === "overloaded" || r.status === "tight");
+  const overloaded = rows.filter((r) => r.status === "overloaded").length;
+  const tight = rows.filter((r) => r.status === "tight").length;
   const totalBudgetHours = rows.reduce((sum, r) => sum + r.budgetHours, 0);
+  const peakLoad = rows.reduce((max, r) => Math.max(max, r.teamLoadPct), 0);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <SummaryCard
-          label="Floor rate"
+          label="Planning rate"
           value={`€${TARGET_HOURLY_RATE}`}
-          sub="Per hour, excl. VAT"
+          sub="Fee excl. VAT ÷ hours"
           tone="accent"
         />
         <SummaryCard
-          label="Scoped hours"
+          label="Hour budget"
           value={formatHours(totalBudgetHours)}
-          sub={`Across ${rows.length} active jobs`}
+          sub={`${rows.length} jobs · ${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}h/wk team`}
         />
         <SummaryCard
-          label="Below €175/h"
-          value={String(overScoped)}
-          sub="Allocated more hours than the fee buys"
-          tone={overScoped > 0 ? "bad" : "default"}
+          label="Heaviest job"
+          value={peakLoad > 0 ? formatPct(peakLoad) : "—"}
+          sub="Of weekly team capacity"
+          tone={peakLoad > 1 ? "bad" : peakLoad > 0.7 ? "warn" : "default"}
         />
         <SummaryCard
-          label="Capacity short"
-          value={String(noCapacity)}
-          sub="Not enough free hours before the deadline"
-          tone={noCapacity > 0 ? "warn" : "default"}
+          label="Won’t fit"
+          value={String(overloaded + tight)}
+          sub={
+            overloaded + tight > 0
+              ? `${overloaded} overloaded · ${tight} calendar full`
+              : "All jobs fit at €175/h"
+          }
+          tone={overloaded + tight > 0 ? "warn" : "default"}
         />
       </div>
 
       <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/40">
         <div className="px-5 py-3.5 border-b border-neutral-800 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-medium text-neutral-300">Deal load at €{TARGET_HOURLY_RATE}/h</h2>
+            <h2 className="text-sm font-medium text-neutral-300">
+              Capacity at €{TARGET_HOURLY_RATE}/h
+            </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Fee ÷ €{TARGET_HOURLY_RATE} = hours you can spend. Compared to the delivery window and
-              your allocation grid.
+              No timesheets — only fee + delivery window. You may work faster (higher effective
+              rate) or slower; this is the planning floor.
             </p>
           </div>
           {flagged.length > 0 && (
-            <span className="text-xs text-neutral-400 shrink-0">
-              {flagged.length} need attention
+            <span className="text-xs text-orange-300 shrink-0">
+              {flagged.length} need a longer window or less scope
             </span>
           )}
         </div>
@@ -173,21 +187,20 @@ export function DealLoadPanel({
             <thead>
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
                 <th className="px-5 py-2.5 font-medium">Job</th>
-                <th className="px-4 py-2.5 font-medium">Value</th>
-                <th className="px-4 py-2.5 font-medium">Window</th>
+                <th className="px-4 py-2.5 font-medium">Fee excl. VAT</th>
+                <th className="px-4 py-2.5 font-medium">Deliver</th>
                 <th className="px-4 py-2.5 font-medium text-right">Budget</th>
-                <th className="px-4 py-2.5 font-medium text-right">/ week</th>
-                <th className="px-4 py-2.5 font-medium text-right">Allocated</th>
-                <th className="px-4 py-2.5 font-medium text-right">Free</th>
-                <th className="px-4 py-2.5 font-medium text-right">Eff. rate</th>
+                <th className="px-4 py-2.5 font-medium text-right">h / week</th>
+                <th className="px-4 py-2.5 font-medium text-right">Team load</th>
+                <th className="px-4 py-2.5 font-medium text-right">Room left</th>
                 <th className="px-5 py-2.5 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-10 text-center text-neutral-500">
-                    No deals or opportunities with a delivery window in the next 16 weeks.
+                  <td colSpan={8} className="px-5 py-10 text-center text-neutral-500">
+                    Add a fee and start/end dates on deals or opportunities to see capacity.
                   </td>
                 </tr>
               ) : (
@@ -223,27 +236,22 @@ export function DealLoadPanel({
                     <td
                       className={cn(
                         "px-4 py-3 font-mono text-right",
-                        row.allocatedHours > row.budgetHours
+                        row.teamLoadPct > 1
                           ? "text-red-400"
-                          : "text-neutral-300",
+                          : row.teamLoadPct > 0.7
+                            ? "text-orange-300"
+                            : "text-neutral-300",
                       )}
                     >
-                      {formatHours(row.allocatedHours)}
+                      {row.weeks > 0 ? formatPct(row.teamLoadPct) : "—"}
+                      {row.weeks > 0 && (
+                        <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+                          of {firmWeekly}h/wk
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-neutral-400">
                       {formatHours(row.freeHours)}
-                    </td>
-                    <td
-                      className={cn(
-                        "px-4 py-3 font-mono text-right",
-                        row.effectiveRate !== null && row.effectiveRate < TARGET_HOURLY_RATE
-                          ? "text-red-400"
-                          : "text-neutral-300",
-                      )}
-                    >
-                      {row.effectiveRate !== null
-                        ? formatCurrency(row.effectiveRate)
-                        : "—"}
                     </td>
                     <td className="px-5 py-3">
                       <span
@@ -265,9 +273,10 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Budget hours = fee excl. VAT ÷ €{TARGET_HOURLY_RATE}. Finishing faster is margin —
-        this view only flags when planned hours would drop you below the floor, or when the
-        calendar does not leave enough free capacity to deliver at that rate.
+        Budget = fee excl. VAT ÷ €{TARGET_HOURLY_RATE}. Spread over the delivery weeks → h/week.
+        Jobs are stacked on the same calendar against a {TASK_ASSIGNEES.length}-person ×{" "}
+        {ALLOCATION_WEEKLY_HOURS}h week. Finishing in fewer hours than budget = effective rate above
+        €{TARGET_HOURLY_RATE}; the model only warns when the calendar cannot absorb the budget.
       </p>
     </div>
   );

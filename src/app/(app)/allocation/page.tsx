@@ -125,7 +125,7 @@ export default function AllocationPage() {
   const { data: allocations = [], isLoading: allocationsLoading } = useAllocations();
   const { data: deals = [] } = useFinanceDeals();
   const { data: users = [] } = useUsers();
-  const [tab, setTab] = useState<"weeks" | "load">("weeks");
+  const [tab, setTab] = useState<"weeks" | "load">("load");
 
   const orderedAssignees = useMemo(() => {
     const list = [...TASK_ASSIGNEES];
@@ -454,7 +454,14 @@ export default function AllocationPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <Users className="w-6 h-6 text-[#d4e052]" />
-          <h1 className="text-xl font-semibold text-neutral-100">Allocation</h1>
+          <div>
+            <h1 className="text-xl font-semibold text-neutral-100">Capacity</h1>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              {tab === "load"
+                ? `Plan with fee ÷ €${TARGET_HOURLY_RATE}/h — no timesheets needed`
+                : "Optional week sketch if you want to split work by person"}
+            </p>
+          </div>
           <span className="text-xs text-neutral-600 ml-2">
             {activeProjects.length} project{activeProjects.length !== 1 ? "s" : ""}
             {" · "}
@@ -494,8 +501,8 @@ export default function AllocationPage() {
       <div className="flex items-center gap-1 border-b border-neutral-800 mb-5">
         {(
           [
-            { id: "weeks" as const, label: "Week grid" },
-            { id: "load" as const, label: `Deal load · €${TARGET_HOURLY_RATE}/h` },
+            { id: "load" as const, label: `€${TARGET_HOURLY_RATE}/h capacity` },
+            { id: "weeks" as const, label: "Week sketch" },
           ] as const
         ).map((entry) => (
           <button

@@ -9,14 +9,14 @@ import {
   type Project,
 } from "@/lib/types";
 
-/** Minimum billable rate the partners want to earn, excl. VAT. */
+/** Planning floor: fee excl. VAT ÷ this rate = hours you can “afford”. */
 export const TARGET_HOURLY_RATE = 175;
 
 export type DealLoadStatus =
   | "ok"
-  | "under_allocated"
-  | "over_scoped"
-  | "no_capacity"
+  | "overloaded"
+  | "tight"
+  | "over_planned"
   | "missing_dates"
   | "missing_value";
 
@@ -33,16 +33,21 @@ export type DealLoadRow = {
   startDate: string | null;
   endDate: string | null;
   weeks: number;
-  /** Hours you can spend and still hit €175/h. */
+  /** Hours the fee buys at €175/h. */
   budgetHours: number;
-  /** Hours/week needed across the firm to hit the rate. */
+  /** Hours/week the job needs across the firm to hit that budget. */
   hoursPerWeekNeeded: number;
-  /** Hours already planned on this target in the window. */
-  allocatedHours: number;
-  /** Firm free capacity (unused %) in the same weeks. */
+  /** Firm weekly capacity (people × hours/week). */
+  firmWeeklyHours: number;
+  /** Share of firm week this job claims (0–1+). */
+  teamLoadPct: number;
+  /**
+   * Free hours left in the window after other overlapping jobs
+   * have claimed their €175 budgets (this job excluded).
+   */
   freeHours: number;
-  /** What the effective rate would be if you burn all allocated hours. */
-  effectiveRate: number | null;
+  /** Optional: hours sketched on the week grid for this job. */
+  plannedHours: number;
   status: DealLoadStatus;
 };
 
@@ -97,30 +102,35 @@ export function budgetHoursForValue(
   return Math.round((valueExVat / rate) * 10) / 10;
 }
 
-function statusFor(row: Omit<DealLoadRow, "status" | "key" | "source" | "name" | "companyName"> & {
+function statusFor(row: {
+  startDate: string | null;
+  endDate: string | null;
   weeks: number;
   valueExVat: number;
+  hoursPerWeekNeeded: number;
+  firmWeeklyHours: number;
+  freeHours: number;
+  budgetHours: number;
+  plannedHours: number;
 }): DealLoadStatus {
-  if (!row.startDate || !row.endDate) return "missing_dates";
+  if (!row.startDate || !row.endDate || row.weeks <= 0) return "missing_dates";
   if (row.valueExVat <= 0) return "missing_value";
-  if (row.weeks <= 0) return "missing_dates";
-  if (row.allocatedHours > row.budgetHours * 1.05) return "over_scoped";
-  if (row.hoursPerWeekNeeded > 0 && row.freeHours + row.allocatedHours + 0.5 < row.budgetHours) {
-    return "no_capacity";
-  }
-  if (row.allocatedHours + 0.5 < row.budgetHours * 0.5 && row.budgetHours >= 8) {
-    return "under_allocated";
-  }
+  // Single job already needs more than the whole team can give in a week.
+  if (row.hoursPerWeekNeeded > row.firmWeeklyHours + 0.5) return "overloaded";
+  // Other work leaves too little room for this budget before the deadline.
+  if (row.budgetHours > row.freeHours + 0.5) return "tight";
+  // Optional week-grid sketch spends more hours than the fee buys.
+  if (row.plannedHours > row.budgetHours * 1.05) return "over_planned";
   return "ok";
 }
 
 export const DEAL_LOAD_STATUS_LABELS: Record<DealLoadStatus, string> = {
-  ok: "On track",
-  under_allocated: "Under-planned",
-  over_scoped: "Below €175/h",
-  no_capacity: "Not enough capacity",
-  missing_dates: "Missing dates",
-  missing_value: "Missing value",
+  ok: "Fits at €175/h",
+  overloaded: "Needs more than the team",
+  tight: "Calendar too full",
+  over_planned: "Sketch above budget",
+  missing_dates: "Set start & end",
+  missing_value: "Set fee",
 };
 
 type BuildArgs = {
@@ -134,10 +144,28 @@ type BuildArgs = {
   horizonWeeks?: number;
 };
 
+type DraftRow = {
+  key: string;
+  source: "deal" | "opportunity";
+  dealId?: string;
+  opportunityId?: string;
+  projectId?: string | null;
+  name: string;
+  companyName: string;
+  valueExVat: number;
+  startDate: string | null;
+  endDate: string | null;
+  weeks: number;
+  weekKeys: string[];
+  budgetHours: number;
+  hoursPerWeekNeeded: number;
+  plannedHours: number;
+};
+
 /**
- * For each active finance deal (and open opportunity without a deal), compute
- * how many hours the €175 floor allows within the delivery window, and how
- * that compares to allocation + free capacity.
+ * Planning model (no time tracking required):
+ * fee excl. VAT ÷ €175 = hour budget → ÷ delivery weeks = h/week claim.
+ * Stack those claims on the calendar against firm weekly capacity.
  */
 export function buildDealLoadRows({
   deals,
@@ -153,13 +181,17 @@ export function buildDealLoadRows({
   const horizonEnd = new Date(today);
   horizonEnd.setDate(horizonEnd.getDate() + horizonWeeks * 7);
 
+  const firmWeeklyHours = people.length * ALLOCATION_WEEKLY_HOURS;
   const projectById = new Map(projects.map((p) => [p.id, p]));
   const dealOpportunityIds = new Set(
     deals.map((d) => d.opportunity_id).filter(Boolean) as string[],
   );
 
-  // Pre-index allocations: week → person → list of {target, %}
-  const byWeekPerson = new Map<string, Map<string, { targetType: string; targetId: string; pct: number }[]>>();
+  // Optional week-grid sketches (not required for the €175 calc).
+  const byWeekPerson = new Map<
+    string,
+    Map<string, { targetType: string; targetId: string; pct: number }[]>
+  >();
   for (const a of allocations) {
     const week = normalizeWeekKey(a.week);
     if (!people.includes(a.person)) continue;
@@ -177,7 +209,7 @@ export function buildDealLoadRows({
     perPerson.set(a.person, list);
   }
 
-  function allocatedHoursFor(
+  function plannedHoursFor(
     weekKeys: string[],
     match: (targetType: string, targetId: string) => boolean,
   ): number {
@@ -197,87 +229,55 @@ export function buildDealLoadRows({
     return Math.round(hours * 10) / 10;
   }
 
-  function freeHoursFor(weekKeys: string[]): number {
-    let hours = 0;
-    for (const week of weekKeys) {
-      const perPerson = byWeekPerson.get(week);
-      for (const person of people) {
-        const cells = perPerson?.get(person) ?? [];
-        const used = cells.reduce((sum, c) => sum + c.pct, 0);
-        const freePct = Math.max(0, 100 - used);
-        hours += (freePct / 100) * ALLOCATION_WEEKLY_HOURS;
-      }
-    }
-    return Math.round(hours * 10) / 10;
-  }
-
   function overlapsHorizon(start: Date | null, end: Date | null): boolean {
-    if (!start || !end) return true; // keep visible so the missing-dates flag shows
+    if (!start || !end) return true;
     return end >= today && start <= horizonEnd;
   }
 
-  const rows: DealLoadRow[] = [];
+  const drafts: DraftRow[] = [];
 
   for (const deal of deals) {
     const project = deal.project_id ? projectById.get(deal.project_id) : undefined;
     const start =
-      parseDate(deal.start_date) ??
-      parseDate(project?.start_date) ??
-      null;
-    const end =
-      parseDate(deal.end_date) ??
-      parseDate(project?.end_date) ??
-      null;
+      parseDate(deal.start_date) ?? parseDate(project?.start_date) ?? null;
+    const end = parseDate(deal.end_date) ?? parseDate(project?.end_date) ?? null;
 
     if (!overlapsHorizon(start, end)) continue;
-
-    // Skip retainers without a finite window — the rate check is for scoped work.
     if (deal.deal_type === "retainer" && (!start || !end)) continue;
 
     const valueExVat = removeVat(dealContractValue(deal));
     const weekKeys = start && end ? weeksBetween(start, end) : [];
     const weeks = weekKeys.length;
     const budgetHours = budgetHoursForValue(valueExVat, rate);
-    const hoursPerWeekNeeded = weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
+    const hoursPerWeekNeeded =
+      weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
 
     const projectId = deal.project_id ?? null;
     const opportunityId = deal.opportunity_id ?? undefined;
 
-    const allocatedHours = allocatedHoursFor(weekKeys, (type, id) => {
-      if (projectId && type === "project" && id === projectId) return true;
-      if (opportunityId && type === "opportunity" && id === opportunityId) return true;
-      return false;
-    });
-    const freeHours = freeHoursFor(weekKeys);
-    const effectiveRate =
-      allocatedHours > 0 ? Math.round((valueExVat / allocatedHours) * 10) / 10 : null;
-
-    const base = {
+    drafts.push({
+      key: `deal:${deal.id}`,
+      source: "deal",
       dealId: deal.id,
       opportunityId,
       projectId,
+      name: deal.project_name,
+      companyName: deal.company_name,
       valueExVat,
       startDate: start ? start.toISOString().slice(0, 10) : null,
       endDate: end ? end.toISOString().slice(0, 10) : null,
       weeks,
+      weekKeys,
       budgetHours,
       hoursPerWeekNeeded,
-      allocatedHours,
-      freeHours,
-      effectiveRate,
-    };
-
-    rows.push({
-      key: `deal:${deal.id}`,
-      source: "deal",
-      name: deal.project_name,
-      companyName: deal.company_name,
-      ...base,
-      status: statusFor(base),
+      plannedHours: plannedHoursFor(weekKeys, (type, id) => {
+        if (projectId && type === "project" && id === projectId) return true;
+        if (opportunityId && type === "opportunity" && id === opportunityId) return true;
+        return false;
+      }),
     });
   }
 
-  // Open opportunities that do not yet have a finance deal.
   for (const opp of opportunities) {
     if (opp.stage === "won" || opp.stage === "lost") continue;
     if (dealOpportunityIds.has(opp.id)) continue;
@@ -290,46 +290,91 @@ export function buildDealLoadRows({
     const weekKeys = start && end ? weeksBetween(start, end) : [];
     const weeks = weekKeys.length;
     const budgetHours = budgetHoursForValue(valueExVat, rate);
-    const hoursPerWeekNeeded = weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
+    const hoursPerWeekNeeded =
+      weeks > 0 ? Math.round((budgetHours / weeks) * 10) / 10 : 0;
 
-    const allocatedHours = allocatedHoursFor(
-      weekKeys,
-      (type, id) => type === "opportunity" && id === opp.id,
-    );
-    const freeHours = freeHoursFor(weekKeys);
-    const effectiveRate =
-      allocatedHours > 0 ? Math.round((valueExVat / allocatedHours) * 10) / 10 : null;
-
-    const base = {
+    drafts.push({
+      key: `opp:${opp.id}`,
+      source: "opportunity",
       opportunityId: opp.id,
-      projectId: null as string | null,
+      projectId: null,
+      name: opp.name,
+      companyName: opp.company?.name ?? "—",
       valueExVat,
       startDate: start ? start.toISOString().slice(0, 10) : null,
       endDate: end ? end.toISOString().slice(0, 10) : null,
       weeks,
+      weekKeys,
       budgetHours,
       hoursPerWeekNeeded,
-      allocatedHours,
-      freeHours,
-      effectiveRate,
-    };
-
-    rows.push({
-      key: `opp:${opp.id}`,
-      source: "opportunity",
-      name: opp.name,
-      companyName: opp.company?.name ?? "—",
-      ...base,
-      status: statusFor(base),
+      plannedHours: plannedHoursFor(
+        weekKeys,
+        (type, id) => type === "opportunity" && id === opp.id,
+      ),
     });
   }
 
+  // Stack every job’s h/week claim onto the calendar.
+  const weekLoad = new Map<string, number>();
+  for (const draft of drafts) {
+    for (const week of draft.weekKeys) {
+      weekLoad.set(week, (weekLoad.get(week) ?? 0) + draft.hoursPerWeekNeeded);
+    }
+  }
+
+  const rows: DealLoadRow[] = drafts.map((draft) => {
+    let freeHours = 0;
+    for (const week of draft.weekKeys) {
+      const total = weekLoad.get(week) ?? 0;
+      const others = Math.max(0, total - draft.hoursPerWeekNeeded);
+      freeHours += Math.max(0, firmWeeklyHours - others);
+    }
+    freeHours = Math.round(freeHours * 10) / 10;
+
+    const teamLoadPct =
+      firmWeeklyHours > 0
+        ? Math.round((draft.hoursPerWeekNeeded / firmWeeklyHours) * 1000) / 1000
+        : 0;
+
+    const base = {
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      weeks: draft.weeks,
+      valueExVat: draft.valueExVat,
+      hoursPerWeekNeeded: draft.hoursPerWeekNeeded,
+      firmWeeklyHours,
+      freeHours,
+      budgetHours: draft.budgetHours,
+      plannedHours: draft.plannedHours,
+    };
+
+    return {
+      key: draft.key,
+      source: draft.source,
+      dealId: draft.dealId,
+      opportunityId: draft.opportunityId,
+      projectId: draft.projectId,
+      name: draft.name,
+      companyName: draft.companyName,
+      valueExVat: draft.valueExVat,
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      weeks: draft.weeks,
+      budgetHours: draft.budgetHours,
+      hoursPerWeekNeeded: draft.hoursPerWeekNeeded,
+      firmWeeklyHours,
+      teamLoadPct,
+      freeHours,
+      plannedHours: draft.plannedHours,
+      status: statusFor(base),
+    };
+  });
+
   return rows.sort((a, b) => {
-    // Flagged first, then soonest end date.
     const statusRank: Record<DealLoadStatus, number> = {
-      no_capacity: 0,
-      over_scoped: 1,
-      under_allocated: 2,
+      overloaded: 0,
+      tight: 1,
+      over_planned: 2,
       missing_dates: 3,
       missing_value: 4,
       ok: 5,
