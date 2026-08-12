@@ -452,7 +452,7 @@ export default function FinancePage() {
         {tab === "overview" && (
           <Button
             onClick={() => setManualDealOpen(true)}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2"
           >
             <Plus className="w-4 h-4" />
             Add deal
@@ -470,7 +470,7 @@ export default function FinancePage() {
             className={cn(
               "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
               tab === entry.id
-                ? "text-[#e8ff47] border-[#e8ff47]"
+                ? "text-[#b8c47a] border-[#b8c47a]"
                 : "text-neutral-500 border-transparent hover:text-neutral-200",
             )}
           >
@@ -541,7 +541,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Expected revenue</span>
                     <RevenueBreakdownTooltip
                       amount={insights.expected}
-                      amountClassName="text-[#e8ff47]"
+                      amountClassName="text-[#b8c47a]"
                       breakdown={expectedBreakdown}
                       emptyMessage="No expected revenue this month"
                       onDealClick={handleDealBreakdownClick}
@@ -557,7 +557,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Actual revenue</span>
                     <RevenueBreakdownTooltip
                       amount={insights.actual}
-                      amountClassName="text-emerald-400"
+                      amountClassName="text-stone-300"
                       breakdown={actualBreakdown}
                       emptyMessage="No payments recorded this month"
                       onDealClick={handleDealBreakdownClick}
@@ -567,7 +567,7 @@ export default function FinancePage() {
                     <div className="flex items-center gap-2 mt-1.5">
                       <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-emerald-500/70 rounded-full transition-all"
+                          className="h-full bg-stone-500/50 rounded-full transition-all"
                           style={{ width: `${Math.min(100, insights.expected > 0 ? (insights.actual / insights.expected) * 100 : 0)}%` }}
                         />
                       </div>
@@ -598,7 +598,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Available salary</span>
                     <span className={cn(
                       "text-sm font-mono font-semibold",
-                      insights.availableSalary >= 0 ? "text-emerald-400" : "text-orange-400"
+                      insights.availableSalary >= 0 ? "text-stone-300" : "text-neutral-400"
                     )}>
                       {insights.availableSalary >= 0
                         ? formatCurrency(insights.availableSalary) + " surplus"
@@ -611,7 +611,7 @@ export default function FinancePage() {
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          insights.availableSalary >= 0 ? "bg-emerald-500" : "bg-orange-500/70"
+                          insights.availableSalary >= 0 ? "bg-stone-500" : "bg-neutral-500/50"
                         )}
                         style={{
                           width: `${Math.min(
@@ -688,7 +688,7 @@ export default function FinancePage() {
                               <span className={cn(
                                 "text-xs font-mono px-2 py-0.5 rounded",
                                 deal.deal_type === "project"
-                                  ? "bg-violet-950 text-violet-300"
+                                  ? "bg-stone-900/80 text-stone-300"
                                   : "bg-blue-950 text-blue-300"
                               )}>
                                 {DEAL_TYPE_LABELS[deal.deal_type]}
@@ -698,7 +698,7 @@ export default function FinancePage() {
                               <div className="flex items-center justify-end gap-3 font-mono text-sm">
                                 <span className="text-neutral-300">{formatCurrency(contractValue)}</span>
                                 <span className="text-neutral-700">·</span>
-                                <span className={outstanding > 0 ? "text-orange-300" : "text-emerald-400"}>
+                                <span className={outstanding > 0 ? "text-neutral-400" : "text-stone-300"}>
                                   {formatCurrency(outstanding)} left
                                 </span>
                               </div>
@@ -708,14 +708,14 @@ export default function FinancePage() {
                                     <div
                                       className={cn(
                                         "h-full rounded-full transition-all",
-                                        paidPct >= 100 ? "bg-emerald-500" : paidPct > 0 ? "bg-emerald-500/70" : ""
+                                        paidPct >= 100 ? "bg-stone-500" : paidPct > 0 ? "bg-stone-500/50" : ""
                                       )}
                                       style={{ width: `${paidPct}%` }}
                                     />
                                   </div>
                                   <span className={cn(
                                     "text-[10px] font-mono tabular-nums w-8 text-right",
-                                    paidPct >= 100 ? "text-emerald-400" : paidPct > 0 ? "text-neutral-500" : "text-neutral-700"
+                                    paidPct >= 100 ? "text-stone-300" : paidPct > 0 ? "text-neutral-500" : "text-neutral-700"
                                   )}>
                                     {paidPct}%
                                   </span>
@@ -748,11 +748,11 @@ export default function FinancePage() {
                           </span>
                           <div className="w-full bg-neutral-800 rounded-t relative" style={{ height: "80px" }}>
                             <div
-                              className={`absolute bottom-0 w-full rounded-t transition-all ${isCurrentMonth ? "bg-[#e8ff47]" : "bg-neutral-600"}`}
+                              className={`absolute bottom-0 w-full rounded-t transition-all ${isCurrentMonth ? "bg-[#b8c47a]" : "bg-neutral-600"}`}
                               style={{ height: `${pct}%` }}
                             />
                           </div>
-                          <span className={`text-xs font-mono ${isCurrentMonth ? "text-[#e8ff47]" : "text-neutral-700"}`}>
+                          <span className={`text-xs font-mono ${isCurrentMonth ? "text-[#b8c47a]" : "text-neutral-700"}`}>
                             {h.month.slice(5)}
                           </span>
                         </div>
@@ -805,7 +805,7 @@ export default function FinancePage() {
                       className={cn(
                         "px-4 py-2 rounded text-sm font-medium border transition-colors",
                         editForm.deal_type === type
-                          ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+                          ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
                           : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
                       )}
                     >
@@ -874,8 +874,8 @@ export default function FinancePage() {
                     <span className={cn(
                       "text-xs font-mono",
                       (editForm.payment_schedule ?? []).reduce((s, e) => s + (Number(e.percentage) || 0), 0) === 100
-                        ? "text-emerald-400"
-                        : "text-orange-400"
+                        ? "text-stone-300"
+                        : "text-neutral-400"
                     )}>
                       Total: {(editForm.payment_schedule ?? []).reduce((s, e) => s + (Number(e.percentage) || 0), 0)}%
                     </span>
@@ -985,11 +985,11 @@ export default function FinancePage() {
                       </div>
                       <div>
                         <p className="text-xs text-neutral-500">Paid (incl. VAT)</p>
-                        <p className="font-mono text-emerald-400 mt-0.5">{formatCurrency(amountPaid)}</p>
+                        <p className="font-mono text-stone-300 mt-0.5">{formatCurrency(amountPaid)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-neutral-500">Outstanding (incl. VAT)</p>
-                        <p className={cn("font-mono mt-0.5", outstanding > 0 ? "text-orange-300" : "text-emerald-400")}>
+                        <p className={cn("font-mono mt-0.5", outstanding > 0 ? "text-neutral-400" : "text-stone-300")}>
                           {formatCurrency(outstanding)}
                         </p>
                       </div>
@@ -1003,7 +1003,7 @@ export default function FinancePage() {
                         </div>
                         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
+                            className="h-full bg-stone-500 rounded-full transition-all"
                             style={{ width: `${paidPct}%` }}
                           />
                         </div>
@@ -1032,7 +1032,7 @@ export default function FinancePage() {
               type="button"
               disabled={savingDeal}
               onClick={saveDeal}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
             >
               {savingDeal ? "Saving..." : "Save"}
             </Button>

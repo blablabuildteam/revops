@@ -35,11 +35,11 @@ function ChartTooltip({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-6">
           <span className="text-neutral-400">VOF net</span>
-          <span className="font-mono text-[#e8ff47]">{formatCurrency(point.vofNet)}</span>
+          <span className="font-mono text-[#b8c47a]">{formatCurrency(point.vofNet)}</span>
         </div>
         <div className="flex items-center justify-between gap-6">
           <span className="text-neutral-400">BV total</span>
-          <span className="font-mono text-violet-400">{formatCurrency(point.bvNet)}</span>
+          <span className="font-mono text-stone-400">{formatCurrency(point.bvNet)}</span>
         </div>
         {point.bvRetained > 0 && (
           <>
@@ -57,7 +57,7 @@ function ChartTooltip({
       <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center justify-between gap-6">
         <span className="text-neutral-500">{bvWins ? "BV ahead" : "VOF ahead"}</span>
         <span
-          className={`font-mono font-medium ${bvWins ? "text-emerald-400" : "text-orange-400"}`}
+          className={`font-mono font-medium ${bvWins ? "text-stone-300" : "text-neutral-400"}`}
         >
           {formatCurrency(Math.abs(point.difference))}
         </span>
@@ -88,10 +88,10 @@ export function BvComparisonChart({
           <ReferenceArea
             x1={advantageFrom}
             x2={advantageTo ?? maxProfit}
-            fill="#a78bfa"
-            fillOpacity={0.07}
-            stroke="#a78bfa"
-            strokeOpacity={0.25}
+            fill="#78716c"
+            fillOpacity={0.08}
+            stroke="#78716c"
+            strokeOpacity={0.3}
             strokeDasharray="4 4"
           />
         )}
@@ -115,7 +115,7 @@ export function BvComparisonChart({
         <Line
           dataKey="vofNet"
           name="VOF"
-          stroke="#e8ff47"
+          stroke="#b8c47a"
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}
@@ -123,7 +123,7 @@ export function BvComparisonChart({
         <Line
           dataKey="bvNet"
           name="BV"
-          stroke="#a78bfa"
+          stroke="#a8a29e"
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}
@@ -132,12 +132,12 @@ export function BvComparisonChart({
         {currentProfit > 0 && currentProfit <= maxProfit && (
           <ReferenceLine
             x={currentProfit}
-            stroke="#34d399"
+            stroke="#a8a29e"
             strokeDasharray="4 4"
             label={{
               value: "you",
               position: "top",
-              fill: "#34d399",
+              fill: "#a8a29e",
               fontSize: 11,
             }}
           />

@@ -57,7 +57,7 @@ export function Sidebar() {
             />
           </span>
           <div className="space-y-0.5">
-            <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#e8ff47]">
+            <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#b8c47a]">
               blablabuild
             </p>
             <p className="text-[10px] text-neutral-600 tracking-widest uppercase">
@@ -78,7 +78,7 @@ export function Sidebar() {
               className={cn(
                 "flex items-center gap-3 px-2.5 py-2 rounded text-sm transition-colors",
                 active
-                  ? "bg-[#e8ff47]/10 text-[#e8ff47] font-medium"
+                  ? "bg-[#b8c47a]/10 text-[#b8c47a] font-medium"
                   : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900"
               )}
             >

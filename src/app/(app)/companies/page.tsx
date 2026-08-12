@@ -192,7 +192,7 @@ function CompanyForm({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
               {loading ? "Saving..." : initial ? "Save" : "Add"}
             </Button>
           </DialogFooter>
@@ -204,7 +204,7 @@ function CompanyForm({
 
 const retainerBadge = (c: Company) => {
   if (c.retainer_type === "fixed")
-    return <span className="text-xs text-emerald-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {formatCurrency(c.retainer_amount ?? 0)}/mo</span>;
+    return <span className="text-xs text-stone-300 flex items-center gap-1"><Repeat className="w-3 h-3" /> {formatCurrency(c.retainer_amount ?? 0)}/mo</span>;
   if (c.retainer_type === "commission")
     return <span className="text-xs text-blue-400 flex items-center gap-1"><Repeat className="w-3 h-3" /> {c.commission_pct}% commission</span>;
   return null;
@@ -243,7 +243,7 @@ export default function CompaniesPage() {
           <p className="text-sm text-neutral-500 mt-0.5">{companies.length} companies</p>
         </div>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New company
         </Button>
       </div>
@@ -299,13 +299,13 @@ export default function CompaniesPage() {
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Revenue (excl. VAT)</p>
-                    <p className="text-sm font-mono text-emerald-400 font-medium">
+                    <p className="text-sm font-mono text-stone-300 font-medium">
                       {revenue > 0 ? formatCurrency(revenue) : "—"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Pipeline (excl. VAT)</p>
-                    <p className="text-sm font-mono text-[#e8ff47] font-medium">
+                    <p className="text-sm font-mono text-[#b8c47a] font-medium">
                       {pipeline > 0 ? formatCurrency(pipeline) : "—"}
                     </p>
                   </div>

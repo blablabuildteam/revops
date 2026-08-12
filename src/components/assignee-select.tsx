@@ -239,7 +239,7 @@ export function AssigneeSelectItems({
       {showAddUser && (
         <SelectItem
           value={ADD_USER_VALUE}
-          className={cn("text-[#e8ff47] text-xs", itemClassName)}
+          className={cn("text-[#b8c47a] text-xs", itemClassName)}
         >
           <span className="flex items-center gap-1.5">
             <Plus className="size-3.5" />
@@ -305,7 +305,7 @@ function AddUserDialog({
             <Button
               type="submit"
               disabled={!name.trim()}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
             >
               Add
             </Button>

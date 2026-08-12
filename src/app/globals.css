@@ -18,26 +18,26 @@ html.light {
   --color-neutral-950: #fafafa;
 }
 
-/* neutral-950 is also used as dark text on lime/accent buttons —            */
+/* neutral-950 is also used as dark text on accent buttons —                 */
 /* override the text utility so it stays dark in light mode.                 */
 html.light .text-neutral-950 {
   color: #0a0a0a;
 }
 
-/* Lime accent text → dark olive in light mode for legibility                */
-html.light .text-\[\#e8ff47\] {
-  color: #5a6600;
+/* Accent text → muted olive in light mode for legibility                    */
+html.light .text-\[\#b8c47a\] {
+  color: #5a6340;
 }
 
 /* Active nav bg tint: slightly stronger on white                            */
-html.light .bg-\[\#e8ff47\]\/10 {
-  background-color: rgba(90, 102, 0, 0.08);
+html.light .bg-\[\#b8c47a\]\/10 {
+  background-color: rgba(90, 99, 64, 0.1);
 }
 
 :root {
   --font-sans: "Space Grotesk", var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --bb-accent: #e8ff47;
+  --bb-accent: #b8c47a;
 }
 
 @theme inline {
@@ -74,7 +74,7 @@ body {
   background: #525252;
 }
 
-/* Sidebar logo — pulsing accent radiation glow */
+/* Sidebar logo — soft static glow (no pulsing rings) */
 .logo-radiation-wrap {
   position: relative;
   display: inline-flex;
@@ -82,51 +82,10 @@ body {
   border-radius: 0.375rem;
 }
 
-.logo-radiation-wrap::before,
-.logo-radiation-wrap::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 1.5px solid color-mix(in srgb, var(--bb-accent) 70%, transparent);
-  pointer-events: none;
-  animation: logo-ring-radiate 2.4s ease-out infinite;
-}
-
-.logo-radiation-wrap::after {
-  animation-delay: 1.2s;
-}
-
 .logo-radiation-wrap img {
   position: relative;
   z-index: 1;
-  animation: logo-glow-pulse 2s ease-in-out infinite;
-}
-
-@keyframes logo-glow-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 6px 1px color-mix(in srgb, var(--bb-accent) 25%, transparent),
-      0 0 12px 3px color-mix(in srgb, var(--bb-accent) 10%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 10px 3px color-mix(in srgb, var(--bb-accent) 42%, transparent),
-      0 0 20px 6px color-mix(in srgb, var(--bb-accent) 21%, transparent),
-      0 0 32px 10px color-mix(in srgb, var(--bb-accent) 8%, transparent);
-  }
-}
-
-@keyframes logo-ring-radiate {
-  0% {
-    transform: scale(1);
-    opacity: 0.38;
-  }
-  100% {
-    transform: scale(1.75);
-    opacity: 0;
-  }
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--bb-accent) 12%, transparent);
 }
 
 /* Native month inputs — readable text; custom Lucide icon replaces browser indicator */

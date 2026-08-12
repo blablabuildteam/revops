@@ -25,9 +25,9 @@ export function StatCard({
 }) {
   const valueTone = {
     default: "text-neutral-100",
-    accent: "text-[#e8ff47]",
-    positive: "text-emerald-400",
-    warning: "text-orange-400",
+    accent: "text-[#b8c47a]",
+    positive: "text-stone-300",
+    warning: "text-neutral-400",
   }[tone];
 
   return (
@@ -58,9 +58,9 @@ export function AmountRow({
   const valueTone = {
     default: "text-neutral-200",
     muted: "text-neutral-400",
-    positive: "text-emerald-400",
+    positive: "text-stone-300",
     negative: "text-red-400",
-    accent: "text-[#e8ff47]",
+    accent: "text-[#b8c47a]",
   }[tone];
 
   return (
@@ -107,7 +107,7 @@ export function ToggleChip({
       className={cn(
         "px-3 h-10 rounded-md border text-sm transition-colors",
         active
-          ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+          ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
           : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200",
       )}
     >

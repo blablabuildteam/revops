@@ -385,7 +385,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                             type="button"
                             onClick={handleAddCompany}
                             disabled={addingCompany || !newCompanyName.trim()}
-                            className="shrink-0 h-6 w-6 rounded bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="shrink-0 h-6 w-6 rounded bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                           >+</button>
                         </div>
                       </div>
@@ -456,7 +456,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   type="range" min="0" max="100" step="5"
                   value={form.probability}
                   onChange={(e) => set("probability", e.target.value)}
-                  className="h-2 bg-neutral-800 accent-[#e8ff47] mt-2 w-full"
+                  className="h-2 bg-neutral-800 accent-[#b8c47a] mt-2 w-full"
                 />
               </div>
 
@@ -501,7 +501,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
               {initial && (
                 <span className="text-xs text-neutral-500 transition-opacity">
                   {saveStatus === "saving" && "Saving..."}
-                  {saveStatus === "saved" && <span className="text-emerald-400">✓ Saved</span>}
+                  {saveStatus === "saved" && <span className="text-stone-300">✓ Saved</span>}
                 </span>
               )}
               {initial ? (
@@ -521,7 +521,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   </Button>
                   <Button
                     type="submit" disabled={loading}
-                    className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+                    className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
                   >
                     {loading ? "Saving..." : "Add"}
                   </Button>

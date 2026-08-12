@@ -191,7 +191,7 @@ function PhaseColorInput({
       title="Phase color"
       className="group relative h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-neutral-700 p-[3px] transition-colors hover:border-neutral-500"
       style={{
-        background: "conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #84cc16, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+        background: "conic-gradient(from 0deg, #57534e, #78716c, #a8a29e, #b8c47a, #a8a29e, #78716c, #57534e)",
       }}
     >
       <span
@@ -270,23 +270,23 @@ function PendingTaskRow({
   onApprove: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 bg-orange-950/30 border border-orange-900/40 rounded-lg mx-2 my-1">
-      <div className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-neutral-900/50 border border-neutral-700 rounded-lg mx-2 my-1">
+      <div className="w-1.5 h-1.5 rounded-full bg-stone-400 shrink-0" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-orange-200">{task.title}</p>
+        <p className="text-sm text-neutral-200">{task.title}</p>
         {task.description && (
           extractLinks(task.description).length > 0 ? (
             <BoardLinkChips text={task.description} max={2} />
           ) : (
-            <p className="text-xs text-orange-400/60 mt-0.5 truncate">
+            <p className="text-xs text-neutral-400/60 mt-0.5 truncate">
               <BinaryText text={task.description} id={`${task.id}-desc`} />
             </p>
           )
         )}
-        <p className="text-xs text-orange-600 mt-0.5">Client request</p>
+        <p className="text-xs text-neutral-500 mt-0.5">Client request</p>
       </div>
       <button onClick={() => onApprove(task.id)}
-        className="flex items-center gap-1 text-xs bg-emerald-900/50 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-900 transition-colors">
+        className="flex items-center gap-1 text-xs bg-neutral-800 text-stone-300 px-2 py-1 rounded hover:bg-neutral-700 transition-colors">
         <Check className="w-3 h-3" /> Approve
       </button>
       <button onClick={() => onDelete(task.id)}
@@ -604,7 +604,7 @@ function SubtaskRow({
 
   return (
     <div
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#b8c47a]/[0.06] ring-1 ring-[#b8c47a]/20" : ""}`}
     >
       <label
         className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -619,10 +619,10 @@ function SubtaskRow({
         />
         <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
           selected
-            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
             : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
         }`}>
-          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+          {selected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
         </span>
       </label>
 
@@ -723,7 +723,7 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#e8ff47]/[0.06] ring-1 ring-[#e8ff47]/20" : ""}`}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#b8c47a]/[0.06] ring-1 ring-[#b8c47a]/20" : ""}`}
     >
       <label
         className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -738,10 +738,10 @@ function SortableTaskRow({
         />
         <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
           selected
-            ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+            ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
             : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
         }`}>
-          {selected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
+          {selected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
         </span>
       </label>
 
@@ -902,7 +902,7 @@ function TaskWithSubtasks({
           <span />
           <span />
           <div className="flex items-center gap-1 justify-self-end">
-            <Button type="submit" size="sm" className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
+            <Button type="submit" size="sm" className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
               <Check className="w-3 h-3" />
             </Button>
             <Button
@@ -976,7 +976,7 @@ function BulkActionsBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
-      <span className="text-sm font-medium text-[#e8ff47] tabular-nums whitespace-nowrap">
+      <span className="text-sm font-medium text-[#b8c47a] tabular-nums whitespace-nowrap">
         {count} task{count !== 1 ? "s" : ""} selected
       </span>
 
@@ -1037,7 +1037,7 @@ function BulkActionsBar({
               type="button"
               size="sm"
               disabled={moving}
-              className="h-8 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium px-3 shrink-0"
+              className="h-8 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium px-3 shrink-0"
               onClick={confirmProjectMove}
             >
               {moving ? "Moving…" : "Move"}
@@ -1125,7 +1125,7 @@ function AddTaskInline({
         placeholder="Task description..."
         className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1" />
       <Button type="submit" size="sm"
-        className="h-7 text-xs bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 px-2">
+        className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
         <Check className="w-3 h-3" />
       </Button>
       <Button type="button" size="sm" variant="ghost"
@@ -1199,9 +1199,9 @@ function MilestoneSection({
   return (
     <div className={`border rounded-lg overflow-hidden transition-colors ${
       isUnassigned
-        ? "border-amber-900/50 bg-amber-950/10"
+        ? "border-neutral-700 bg-neutral-900/40"
         : "border-neutral-800"
-    } ${isOver ? "border-[#e8ff47]/30 bg-[#e8ff47]/[0.02]" : ""}`}>
+    } ${isOver ? "border-[#b8c47a]/30 bg-[#b8c47a]/[0.02]" : ""}`}>
       <div
         className={`flex items-center gap-3 px-4 py-3 bg-neutral-900/60 group/phase ${
           expanded ? "border-b border-neutral-800" : ""
@@ -1221,13 +1221,13 @@ function MilestoneSection({
           />
           <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
             allPhaseSelected
-              ? "border-[#e8ff47]/50 bg-[#e8ff47]/15"
+              ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
               : somePhaseSelected
-                ? "border-[#e8ff47]/30 bg-[#e8ff47]/5"
+                ? "border-[#b8c47a]/30 bg-[#b8c47a]/5"
                 : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
           }`}>
-            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#e8ff47]" />}
-            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#e8ff47]/60" />}
+            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
+            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#b8c47a]/60" />}
           </span>
         </label>
         <button
@@ -1247,7 +1247,7 @@ function MilestoneSection({
           </h3>
           <div className="flex items-center gap-3 shrink-0">
             {!isUnassigned && pendingTasks.length > 0 && (
-              <span className="text-xs text-orange-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
+              <span className="text-xs text-neutral-400">{pendingTasks.length} request{pendingTasks.length !== 1 ? "s" : ""}</span>
             )}
             <span className="text-xs text-neutral-600 font-mono">{total} task{total !== 1 ? "s" : ""}</span>
             {!isUnassigned && milestone.due_date && (
@@ -2188,7 +2188,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </button>
             )}
             {project.edit_token && (
-              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-amber-950/50 border border-amber-800/50 text-amber-400">
+              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-neutral-300">
                 External
               </span>
             )}
@@ -2211,7 +2211,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Button
             type="button"
             onClick={openNewTask}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
+            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
           >
             <Plus className="w-3.5 h-3.5" />
             Add task
@@ -2220,7 +2220,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <PopoverTrigger
               className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                 filters.length > 0
-                  ? "border-[#e8ff47]/30 text-[#e8ff47] hover:border-[#e8ff47]/50"
+                  ? "border-[#b8c47a]/30 text-[#b8c47a] hover:border-[#b8c47a]/50"
                   : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
               }`}
             >
@@ -2248,7 +2248,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <button
             onClick={shareEditAccess}
             disabled={sharingEdit}
-            className="flex items-center gap-2 text-xs border border-[#e8ff47]/30 px-3 py-2 rounded-lg text-[#e8ff47] hover:border-[#e8ff47]/50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 text-xs border border-[#b8c47a]/30 px-3 py-2 rounded-lg text-[#b8c47a] hover:border-[#b8c47a]/50 transition-colors disabled:opacity-50"
           >
             {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
             {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share board access"}
@@ -2276,9 +2276,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       {confirmDialog}
 
       {pendingRequests > 0 && (
-        <div className="flex items-center gap-3 bg-orange-950/40 border border-orange-900/50 rounded-lg px-4 py-3">
-          <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse shrink-0" />
-          <p className="text-sm text-orange-300">
+        <div className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-lg px-4 py-3">
+          <div className="w-2 h-2 rounded-full bg-stone-400 animate-pulse shrink-0" />
+          <p className="text-sm text-neutral-400">
             <span className="font-medium">{pendingRequests} task request{pendingRequests !== 1 ? "s" : ""}</span> from the client awaiting approval
           </p>
         </div>
@@ -2382,7 +2382,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1"
         />
         <Button type="submit" disabled={addingMilestone || !newMilestoneName.trim()}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 shrink-0">
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 shrink-0">
           <Plus className="w-4 h-4" /> Phase
         </Button>
       </form>

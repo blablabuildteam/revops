@@ -319,7 +319,7 @@ export function TaskDetailDialog({
                       </SelectTrigger>
                       <SelectContent className="bg-neutral-800 border-neutral-700">
                         <SelectItem value="high" className="text-red-400">High</SelectItem>
-                        <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
+                        <SelectItem value="medium" className="text-neutral-300">Medium</SelectItem>
                         <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
                       </SelectContent>
                     </Select>
@@ -371,7 +371,7 @@ export function TaskDetailDialog({
                 <Button
                   type="submit"
                   disabled={loading || !form.title.trim() || (isCreate && !api.createTask)}
-                  className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950"
+                  className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950"
                 >
                   {loading
                     ? (isCreate

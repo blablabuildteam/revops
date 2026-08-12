@@ -17,13 +17,13 @@ import { cn } from "@/lib/utils";
 function statusTone(status: DealLoadStatus) {
   switch (status) {
     case "ok":
-      return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+      return "text-stone-300 bg-stone-500/10 border-stone-500/20";
     case "under_allocated":
-      return "text-orange-300 bg-orange-500/10 border-orange-500/20";
+      return "text-neutral-300 bg-neutral-700/40 border-neutral-600";
     case "over_scoped":
-      return "text-red-400 bg-red-500/10 border-red-500/20";
+      return "text-neutral-200 bg-neutral-800 border-neutral-500";
     case "no_capacity":
-      return "text-red-400 bg-red-500/10 border-red-500/20";
+      return "text-neutral-200 bg-neutral-800 border-neutral-500";
     default:
       return "text-neutral-400 bg-neutral-800 border-neutral-700";
   }
@@ -63,8 +63,8 @@ function SummaryCard({
 }) {
   const valueClass = {
     default: "text-neutral-100",
-    accent: "text-[#e8ff47]",
-    warn: "text-orange-300",
+    accent: "text-[#b8c47a]",
+    warn: "text-neutral-400",
     bad: "text-red-400",
   }[tone];
 
@@ -82,7 +82,7 @@ function RowLink({ row }: { row: DealLoadRow }) {
     return (
       <Link
         href={`/projects/${row.projectId}`}
-        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#e8ff47] transition-colors"
+        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#b8c47a] transition-colors"
       >
         {row.name}
         <ArrowUpRight className="w-3 h-3 opacity-50" />
@@ -93,7 +93,7 @@ function RowLink({ row }: { row: DealLoadRow }) {
     return (
       <Link
         href="/opportunities"
-        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#e8ff47] transition-colors"
+        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#b8c47a] transition-colors"
       >
         {row.name}
         <ArrowUpRight className="w-3 h-3 opacity-50" />
@@ -162,7 +162,7 @@ export function DealLoadPanel({
             </p>
           </div>
           {flagged.length > 0 && (
-            <span className="text-xs text-orange-300 shrink-0">
+            <span className="text-xs text-neutral-400 shrink-0">
               {flagged.length} need attention
             </span>
           )}
@@ -217,7 +217,7 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
                     </td>
-                    <td className="px-4 py-3 font-mono text-right text-[#e8ff47]">
+                    <td className="px-4 py-3 font-mono text-right text-[#b8c47a]">
                       {formatHours(row.hoursPerWeekNeeded)}
                     </td>
                     <td

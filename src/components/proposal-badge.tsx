@@ -4,11 +4,11 @@ import { ProposalStatus, PROPOSAL_STATUS_LABELS } from "@/lib/types";
 const styles: Record<ProposalStatus, string> = {
   not_sent: "text-neutral-600",
   draft: "text-neutral-400",
-  sent: "text-blue-400",
-  viewed: "text-violet-400",
-  accepted: "text-emerald-400",
-  declined: "text-red-400",
-  expired: "text-orange-400",
+  sent: "text-neutral-300",
+  viewed: "text-stone-300",
+  accepted: "text-[#b8c47a]",
+  declined: "text-neutral-500",
+  expired: "text-neutral-500",
 };
 
 interface ProposalBadgeProps {

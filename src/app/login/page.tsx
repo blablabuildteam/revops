@@ -37,7 +37,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-10">
-          <p className="text-xs font-bold tracking-[0.25em] uppercase text-[#e8ff47] mb-1">
+          <p className="text-xs font-bold tracking-[0.25em] uppercase text-[#b8c47a] mb-1">
             blablabuild
           </p>
           <p className="text-neutral-600 text-xs tracking-widest uppercase">
@@ -84,7 +84,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#e8ff47] hover:bg-[#d4eb30] disabled:opacity-50 text-neutral-950 font-semibold py-3 rounded-lg text-sm transition-colors mt-2"
+            className="w-full bg-[#b8c47a] hover:bg-[#a3ad68] disabled:opacity-50 text-neutral-950 font-semibold py-3 rounded-lg text-sm transition-colors mt-2"
           >
             {loading ? "Logging in..." : "Log in"}
           </button>

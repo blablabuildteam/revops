@@ -272,7 +272,7 @@ export function DealActivationWizard({
                     className={cn(
                       "h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium border",
                       step >= s
-                        ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+                        ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
                         : "border-neutral-700 text-neutral-600"
                     )}
                   >
@@ -364,7 +364,7 @@ export function DealActivationWizard({
                               type="button"
                               onClick={handleAddCompany}
                               disabled={addingCompany || !newCompanyName.trim()}
-                              className="shrink-0 h-6 w-6 rounded bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="shrink-0 h-6 w-6 rounded bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                             >+</button>
                           </div>
                         </div>
@@ -400,7 +400,7 @@ export function DealActivationWizard({
                       className={cn(
                         "px-4 py-2 rounded text-sm font-medium border transition-colors",
                         dealType === type
-                          ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+                          ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
                           : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
                       )}
                     >
@@ -428,7 +428,7 @@ export function DealActivationWizard({
                       <Label className="text-neutral-400 text-xs">Payment schedule</Label>
                       <span className={cn(
                         "text-xs font-mono",
-                        paymentTotal === 100 ? "text-emerald-400" : "text-orange-400"
+                        paymentTotal === 100 ? "text-stone-300" : "text-neutral-400"
                       )}>
                         Total: {paymentTotal}%
                       </span>
@@ -542,7 +542,7 @@ export function DealActivationWizard({
               (step === 2 && (!projectName.trim() || !companyName.trim()))
             }
             onClick={step === 1 ? handleCreateProject : handleCreateDeal}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium"
+            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
           >
             {loading
               ? "Saving..."

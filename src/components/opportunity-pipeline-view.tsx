@@ -16,18 +16,18 @@ const PIPELINE_STAGES: Stage[] = [
 
 const stageAccent: Record<string, string> = {
   prospect: "border-neutral-700",
-  qualified: "border-blue-800",
-  proposal: "border-violet-800",
-  negotiation: "border-[#e8ff47]/40",
-  won: "border-emerald-800",
+  qualified: "border-neutral-600",
+  proposal: "border-stone-600",
+  negotiation: "border-[#b8c47a]/40",
+  won: "border-stone-500",
 };
 
 const stageHeader: Record<string, string> = {
   prospect: "text-neutral-400",
-  qualified: "text-blue-400",
-  proposal: "text-violet-400",
-  negotiation: "text-[#e8ff47]",
-  won: "text-emerald-400",
+  qualified: "text-neutral-300",
+  proposal: "text-stone-400",
+  negotiation: "text-[#b8c47a]",
+  won: "text-stone-300",
 };
 
 function OpportunityCard({
@@ -73,7 +73,7 @@ function OpportunityCard({
 
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-base font-mono font-semibold text-[#e8ff47]">
+          <p className="text-base font-mono font-semibold text-[#b8c47a]">
             {formatCurrency(opp.expected_value)}
           </p>
           <p className="text-xs text-neutral-600 font-mono">

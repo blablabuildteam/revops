@@ -39,12 +39,12 @@ import { cacheKeys, getCached } from "@/lib/query-cache";
 type SortKey = "name" | "stage" | "expected_value" | "probability" | "updated_at";
 
 const stageStyles: Record<Stage, string> = {
-  prospect: "bg-neutral-800 text-neutral-300",
-  qualified: "bg-blue-950 text-blue-300",
-  proposal: "bg-violet-950 text-violet-300",
-  negotiation: "bg-[#e8ff47]/10 text-[#e8ff47]",
-  won: "bg-emerald-950 text-emerald-300",
-  lost: "bg-red-950 text-red-400",
+  prospect: "bg-neutral-800 text-neutral-400",
+  qualified: "bg-slate-900/80 text-slate-400",
+  proposal: "bg-stone-900/80 text-stone-400",
+  negotiation: "bg-[#b8c47a]/10 text-[#b8c47a]",
+  won: "bg-stone-900/80 text-stone-300",
+  lost: "bg-neutral-900 text-neutral-500",
   on_hold: "bg-neutral-800 text-neutral-500",
 };
 
@@ -109,7 +109,7 @@ function InlineProbability({
           setText(String(next));
         }}
         onPointerUp={() => commit(local)}
-        className="flex-1 h-2.5 min-w-0 cursor-pointer accent-[#e8ff47]"
+        className="flex-1 h-2.5 min-w-0 cursor-pointer accent-[#b8c47a]"
       />
       <input
         type="number"
@@ -473,7 +473,7 @@ export default function OpportunitiesPageClient() {
           <p className="text-sm text-neutral-500 mt-0.5">
             {filtered.length} opportunities ·{" "}
             <span className="font-mono">{formatCurrency(totalExpected)}</span> deal order excl. VAT ·{" "}
-            <span className="font-mono text-[#e8ff47]">
+            <span className="font-mono text-[#b8c47a]">
               {formatCurrency(totalWeighted)}
             </span>{" "}
             weighted
@@ -508,7 +508,7 @@ export default function OpportunitiesPageClient() {
               setEditingOpp(null);
               setFormOpen(true);
             }}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2"
           >
             <Plus className="w-4 h-4" />
             New opportunity

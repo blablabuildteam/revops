@@ -46,9 +46,9 @@ function Stat({
 }) {
   const toneClass = {
     default: "text-neutral-100",
-    accent: "text-[#e8ff47]",
-    positive: "text-emerald-400",
-    warn: "text-orange-300",
+    accent: "text-[#b8c47a]",
+    positive: "text-stone-300",
+    warn: "text-neutral-400",
   }[tone];
 
   return (
@@ -147,22 +147,21 @@ export function BunqPanel() {
   return (
     <div className="space-y-6">
       {!configured && (
-        <div className="border border-orange-500/30 bg-orange-500/5 rounded-lg p-5 space-y-3">
+        <div className="border border-neutral-600 bg-neutral-800/60 rounded-lg p-5 space-y-3">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-orange-300 mt-0.5 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-neutral-400 mt-0.5 shrink-0" />
             <div className="space-y-2 text-sm">
               <p className="font-medium text-neutral-100">Connect your bunq account</p>
               <ol className="list-decimal list-inside text-neutral-400 space-y-1">
                 <li>Open the bunq app → Profile → Security & Settings → Developers → API keys</li>
                 <li>Add a key and enable “Allow all IP addresses” (needed for Vercel)</li>
                 <li>
-                  Put it in <code className="text-neutral-300">.env.local</code> and Vercel:
+                  Set <code className="text-neutral-300">BUNQ_API_KEY</code> in{" "}
+                  <code className="text-neutral-300">.env.local</code> and Vercel
                 </li>
               </ol>
               <pre className="text-xs bg-neutral-950 border border-neutral-800 rounded-md p-3 text-neutral-300 overflow-x-auto">
-{`BUNQ_API_KEY=…
-BUNQ_ENVIRONMENT=production
-BUNQ_PERMITTED_IPS=*`}
+{`BUNQ_API_KEY=…`}
               </pre>
             </div>
           </div>
@@ -185,7 +184,7 @@ BUNQ_PERMITTED_IPS=*`}
           <p className="text-xs text-neutral-500 mt-0.5">
             Last sync: {formatSyncTime(totals?.lastSync ?? null)}
             {configured && status?.connection?.ok && (
-              <span className="inline-flex items-center gap-1 ml-2 text-emerald-400">
+              <span className="inline-flex items-center gap-1 ml-2 text-stone-300">
                 <CheckCircle2 className="w-3 h-3" />
                 {status.connection.accounts ?? 0} account
                 {(status.connection.accounts ?? 0) === 1 ? "" : "s"}
@@ -200,7 +199,7 @@ BUNQ_PERMITTED_IPS=*`}
             className={cn(
               "px-3 h-9 rounded-md border text-sm transition-colors",
               unmatchedOnly
-                ? "bg-[#e8ff47]/10 border-[#e8ff47] text-[#e8ff47]"
+                ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
                 : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200",
             )}
           >
@@ -209,7 +208,7 @@ BUNQ_PERMITTED_IPS=*`}
           <Button
             onClick={() => void handleSync()}
             disabled={!configured || syncing}
-            className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 disabled:opacity-50"
+            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
             {syncing ? "Syncing…" : "Sync now"}
@@ -223,7 +222,7 @@ BUNQ_PERMITTED_IPS=*`}
         </p>
       )}
       {lastResult && !error && (
-        <p className="text-sm text-emerald-400/90 border border-emerald-500/20 bg-emerald-500/5 rounded-md px-3 py-2">
+        <p className="text-sm text-stone-300/90 border border-stone-500/20 bg-stone-500/10 rounded-md px-3 py-2">
           {lastResult}
         </p>
       )}
@@ -287,18 +286,18 @@ BUNQ_PERMITTED_IPS=*`}
                     <td className="px-4 py-3 text-neutral-400 max-w-xs truncate" title={p.description}>
                       {p.description || "—"}
                     </td>
-                    <td className="px-4 py-3 font-mono text-right text-emerald-400">
+                    <td className="px-4 py-3 font-mono text-right text-stone-300">
                       {formatCurrency(p.amount)}
                     </td>
                     <td className="px-5 py-3">
                       {p.finance_deal_id ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-stone-300">
                           <Link2 className="w-3 h-3" />
                           Deal
                           {p.matched_confidence ? ` · ${p.matched_confidence}` : ""}
                         </span>
                       ) : p.company_id ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-orange-300">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
                           <Link2 className="w-3 h-3" />
                           Company only
                         </span>

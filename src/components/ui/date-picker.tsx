@@ -113,9 +113,9 @@ function Calendar({ value, onSelect, className }: CalendarProps) {
               className={cn(
                 "flex h-8 items-center justify-center rounded-md text-sm transition-colors",
                 isSelected
-                  ? "bg-[#e8ff47] font-medium text-neutral-950"
+                  ? "bg-[#b8c47a] font-medium text-neutral-950"
                   : "text-neutral-200 hover:bg-neutral-800 hover:text-neutral-50",
-                isToday && !isSelected && "ring-1 ring-[#e8ff47]/40"
+                isToday && !isSelected && "ring-1 ring-[#b8c47a]/40"
               )}
             >
               {date.getDate()}

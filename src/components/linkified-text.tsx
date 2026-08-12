@@ -34,13 +34,13 @@ function kindIcon(kind: LinkKind) {
 function kindChipClass(kind: LinkKind): string {
   switch (kind) {
     case "google_doc":
-      return "border-sky-500/30 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20";
+      return "border-neutral-600 bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700";
     case "google_sheet":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20";
+      return "border-neutral-600 bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700";
     case "google_slides":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20";
+      return "border-neutral-600 bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700";
     case "google_drive":
-      return "border-yellow-500/30 bg-yellow-500/10 text-yellow-100 hover:bg-yellow-500/20";
+      return "border-neutral-600 bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700";
     default:
       return "border-neutral-600 bg-neutral-800 text-neutral-200 hover:bg-neutral-700";
   }

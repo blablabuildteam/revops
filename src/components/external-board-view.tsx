@@ -43,7 +43,7 @@ function PhaseColorInput({
       title="Phase color"
       className="group relative h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-neutral-700 p-[3px] transition-colors hover:border-neutral-500"
       style={{
-        background: "conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #84cc16, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)",
+        background: "conic-gradient(from 0deg, #57534e, #78716c, #a8a29e, #b8c47a, #a8a29e, #78716c, #57534e)",
       }}
     >
       <span className="flex h-full w-full items-center justify-center rounded-[5px] bg-neutral-950/90">
@@ -134,7 +134,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#e8ff47]/30 border-t-[#e8ff47] rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-[#b8c47a]/30 border-t-[#b8c47a] rounded-full animate-spin" />
       </div>
     );
   }
@@ -143,7 +143,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-center px-6">
         <div>
-          <p className="text-xs text-[#e8ff47] tracking-[0.2em] uppercase font-bold mb-4">blablabuild</p>
+          <p className="text-xs text-[#b8c47a] tracking-[0.2em] uppercase font-bold mb-4">blablabuild</p>
           <h1 className="text-xl font-semibold text-neutral-300 mb-2">Board access not found</h1>
           <p className="text-sm text-neutral-600">This link is invalid or access has been removed.</p>
         </div>
@@ -157,7 +157,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         <div className="border-b border-neutral-800 bg-neutral-950/90 sticky top-0 z-10">
           <div className="max-w-6xl mx-auto px-6 py-4">
-            <p className="text-xs text-[#e8ff47] tracking-[0.2em] uppercase font-bold mb-1">blablabuild</p>
+            <p className="text-xs text-[#b8c47a] tracking-[0.2em] uppercase font-bold mb-1">blablabuild</p>
             <h1 className="text-xl font-semibold text-neutral-100">{project.name}</h1>
             {project.description && (
               <p className="text-sm text-neutral-500 mt-1">{project.description}</p>
@@ -171,7 +171,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
               <PopoverTrigger
                 className={`flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border transition-colors cursor-pointer ${
                   filters.length > 0
-                    ? "border-[#e8ff47]/30 text-[#e8ff47]"
+                    ? "border-[#b8c47a]/30 text-[#b8c47a]"
                     : "border-neutral-700 text-neutral-400 hover:text-neutral-200"
                 }`}
               >
@@ -199,7 +199,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
             <Button
               type="button"
               onClick={() => setCreateOpen(true)}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
             >
               <Plus className="w-3.5 h-3.5" />
               Add task
@@ -228,7 +228,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
             <Button
               type="submit"
               disabled={addingMilestone || !newMilestoneName.trim()}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2 shrink-0"
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 shrink-0"
             >
               <Plus className="w-4 h-4" /> Phase
             </Button>

@@ -430,7 +430,7 @@ function TodoFormDialog({
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
                   <SelectItem value="high" className="text-red-400">High</SelectItem>
-                  <SelectItem value="medium" className="text-amber-400">Medium</SelectItem>
+                  <SelectItem value="medium" className="text-neutral-300">Medium</SelectItem>
                   <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
                 </SelectContent>
               </Select>
@@ -525,7 +525,7 @@ function TodoFormDialog({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading || (showPhaseStatus && (milestonesLoading || !form.milestone_id))}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
               {loading ? (isEdit ? "Saving..." : "Adding...") : (isEdit ? "Save" : "Add")}
             </Button>
             </div>
@@ -593,7 +593,7 @@ function QuickAddTodo({ onAdd, currentUser }: {
           type="submit"
           disabled={loading}
           size="sm"
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium h-8 px-3 text-xs shrink-0"
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium h-8 px-3 text-xs shrink-0"
         >
           {loading ? "..." : "Add"}
         </Button>
@@ -901,7 +901,7 @@ function ProjectGroup({
         >
           {total > 0 && (
             <div
-              className="h-full rounded-full bg-emerald-500/70 transition-all"
+              className="h-full rounded-full bg-stone-500/50 transition-all"
               style={{ width: `${(doneCount / total) * 100}%` }}
             />
           )}
@@ -949,7 +949,7 @@ function ProjectGroup({
             <span className="text-neutral-800">·</span>
             <Link
               href={`/projects/${projectId}`}
-              className="text-xs text-neutral-600 hover:text-[#e8ff47] transition-colors"
+              className="text-xs text-neutral-600 hover:text-[#b8c47a] transition-colors"
             >
               Open project board
             </Link>
@@ -1310,7 +1310,7 @@ export default function TodosPage() {
             Tasks
             {refreshing && !loading && (
               <span
-                className="w-1.5 h-1.5 rounded-full bg-[#e8ff47] animate-pulse"
+                className="w-1.5 h-1.5 rounded-full bg-[#b8c47a] animate-pulse"
                 title="Refreshing"
                 aria-label="Refreshing"
               />
@@ -1322,7 +1322,7 @@ export default function TodosPage() {
           </p>
         </div>
         <Button onClick={openNewTask}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New task
         </Button>
       </div>
@@ -1377,7 +1377,7 @@ export default function TodosPage() {
           <SelectContent className="bg-neutral-800 border-neutral-700">
             <SelectItem value="active" className="text-neutral-100">Active</SelectItem>
             <SelectItem value="all" className="text-neutral-400">All</SelectItem>
-            <SelectItem value="done" className="text-emerald-400">Done</SelectItem>
+            <SelectItem value="done" className="text-stone-300">Done</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sortKey} onValueChange={(v) => setSortKey((v ?? "smart") as TodoSortKey)}>

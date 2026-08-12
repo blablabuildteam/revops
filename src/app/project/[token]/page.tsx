@@ -48,7 +48,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
   if (loading) {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#e8ff47]/30 border-t-[#e8ff47] rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-[#b8c47a]/30 border-t-[#b8c47a] rounded-full animate-spin" />
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center text-center px-6">
         <div>
-          <p className="text-xs text-[#e8ff47] tracking-[0.2em] uppercase font-bold mb-4">blablabuild</p>
+          <p className="text-xs text-[#b8c47a] tracking-[0.2em] uppercase font-bold mb-4">blablabuild</p>
           <h1 className="text-xl font-semibold text-neutral-300 mb-2">Project not found</h1>
           <p className="text-sm text-neutral-600">This link is invalid or expired.</p>
         </div>
@@ -84,7 +84,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Header */}
       <div className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
-        <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#e8ff47]">blablabuild</p>
+        <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#b8c47a]">blablabuild</p>
         <p className="text-xs text-neutral-600 font-mono">projectupdate</p>
       </div>
 
@@ -109,11 +109,11 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
           </div>
           <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-[#e8ff47] rounded-full transition-all duration-500"
+              className="h-full bg-[#b8c47a] rounded-full transition-all duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <p className="text-right text-xs font-mono text-[#e8ff47] mt-1.5">{progress}%</p>
+          <p className="text-right text-xs font-mono text-[#b8c47a] mt-1.5">{progress}%</p>
         </div>
 
         {/* Milestones */}
@@ -153,12 +153,12 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
 
         {/* Pending client requests */}
         {pendingClientTasks.length > 0 && (
-          <div className="border border-orange-900/40 rounded-lg p-4 space-y-2">
-            <p className="text-xs text-orange-400 uppercase tracking-widest">Your requests · awaiting approval</p>
+          <div className="border border-neutral-700 rounded-lg p-4 space-y-2">
+            <p className="text-xs text-neutral-400 uppercase tracking-widest">Your requests · awaiting approval</p>
             {pendingClientTasks.map((task) => (
               <div key={task.id} className="flex items-center gap-3 py-1">
-                <div className="w-3 h-3 rounded border border-orange-600 shrink-0" />
-                <span className="text-sm text-orange-300/70">{task.title}</span>
+                <div className="w-3 h-3 rounded border border-neutral-500 shrink-0" />
+                <span className="text-sm text-neutral-400/70">{task.title}</span>
               </div>
             ))}
           </div>
@@ -180,7 +180,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
           {requestOpen && (
             <form onSubmit={handleSubmitRequest} className="p-4 space-y-3">
               {submitted ? (
-                <div className="flex items-center gap-2 text-emerald-400 py-2">
+                <div className="flex items-center gap-2 text-stone-300 py-2">
                   <Check className="w-4 h-4" />
                   <span className="text-sm">Request submitted — we'll review it shortly!</span>
                 </div>
@@ -203,7 +203,7 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
                   <button
                     type="submit"
                     disabled={submitting || !requestTitle.trim()}
-                    className="flex items-center gap-2 text-sm bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 text-sm bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     {submitting ? "Sending..." : "Submit request"}

@@ -32,10 +32,10 @@ import Link from "next/link";
 import { CompanyAvatar } from "@/components/company-avatar";
 
 const statusColors: Record<string, string> = {
-  active: "bg-[#e8ff47]/10 text-[#e8ff47]",
+  active: "bg-[#b8c47a]/10 text-[#b8c47a]",
   on_hold: "bg-neutral-800 text-neutral-500",
-  completed: "bg-emerald-950 text-emerald-400",
-  cancelled: "bg-red-950 text-red-500",
+  completed: "bg-stone-900/80 text-stone-300",
+  cancelled: "bg-neutral-900 text-neutral-500",
 };
 
 function NewProjectDialog({
@@ -151,7 +151,7 @@ function NewProjectDialog({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
-              className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium">
+              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
               {loading ? "Creating..." : "Create project"}
             </Button>
           </DialogFooter>
@@ -214,7 +214,7 @@ export default function ProjectsPage() {
     cn(
       "px-3 py-1 rounded-full text-xs font-medium transition-colors border shrink-0",
       active
-        ? "bg-[#e8ff47]/10 text-[#e8ff47] border-[#e8ff47]/30"
+        ? "bg-[#b8c47a]/10 text-[#b8c47a] border-[#b8c47a]/30"
         : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700 hover:text-neutral-300"
     );
 
@@ -232,12 +232,12 @@ export default function ProjectsPage() {
               </span>
             )}
             {pendingRequests > 0 && (
-              <span className="ml-2 text-orange-400 font-medium">· {pendingRequests} request{pendingRequests !== 1 ? "s" : ""} pending</span>
+              <span className="ml-2 text-neutral-400 font-medium">· {pendingRequests} request{pendingRequests !== 1 ? "s" : ""} pending</span>
             )}
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2">
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" />
           New project
         </Button>
@@ -314,7 +314,7 @@ export default function ProjectsPage() {
                         {PROJECT_STATUS_LABELS[project.status]}
                       </span>
                       {pendingReqs > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-orange-400">
+                        <span className="flex items-center gap-1 text-xs text-neutral-400">
                           <AlertCircle className="w-3 h-3" />
                           {pendingReqs} request
                         </span>
@@ -343,7 +343,7 @@ export default function ProjectsPage() {
                   </div>
                   <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#e8ff47]/60 rounded-full transition-all"
+                      className="h-full bg-[#b8c47a]/60 rounded-full transition-all"
                       style={{ width: `${progress}%` }}
                     />
                   </div>

@@ -55,14 +55,14 @@ function Verdict({
     <div
       className={`rounded-lg border p-5 ${
         favoursBv
-          ? "border-violet-500/40 bg-violet-500/5"
-          : "border-[#e8ff47]/30 bg-[#e8ff47]/5"
+          ? "border-stone-500/40 bg-stone-500/5"
+          : "border-[#b8c47a]/30 bg-[#b8c47a]/5"
       }`}
     >
       <div className="flex items-start gap-3">
         <div
           className={`mt-0.5 rounded-full p-1 ${
-            favoursBv ? "bg-violet-500/20 text-violet-300" : "bg-[#e8ff47]/15 text-[#e8ff47]"
+            favoursBv ? "bg-stone-500/20 text-stone-300" : "bg-[#b8c47a]/15 text-[#b8c47a]"
           }`}
         >
           {favoursBv ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
@@ -248,16 +248,16 @@ export function BvCheckPanel({
         </div>
         <div className="flex items-center gap-4 text-xs -mt-1">
           <span className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 bg-[#e8ff47]" />
+            <span className="w-4 h-0.5 bg-[#b8c47a]" />
             <span className="text-neutral-400">VOF</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 bg-violet-400" />
+            <span className="w-4 h-0.5 bg-stone-400" />
             <span className="text-neutral-400">BV</span>
           </span>
           {range.from !== null && (
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-2.5 rounded-sm bg-violet-400/15 border border-violet-400/30" />
+              <span className="w-4 h-2.5 rounded-sm bg-stone-400/15 border border-stone-400/30" />
               <span className="text-neutral-400">BV ahead</span>
             </span>
           )}
@@ -274,13 +274,13 @@ export function BvCheckPanel({
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-neutral-400 pt-1">
             <span>
               BV wins from{" "}
-              <span className="font-mono text-violet-300">
+              <span className="font-mono text-stone-300">
                 {formatCurrency(range.from)}
               </span>
               {range.to !== null && (
                 <>
                   {" "}up to{" "}
-                  <span className="font-mono text-violet-300">
+                  <span className="font-mono text-stone-300">
                     {formatCurrency(range.to)}
                   </span>
                 </>
@@ -292,7 +292,7 @@ export function BvCheckPanel({
             </span>
             <span
               className={
-                inBand ? "text-violet-300" : "text-neutral-500"
+                inBand ? "text-stone-300" : "text-neutral-500"
               }
             >
               {inBand ? "You are inside this band" : "You are outside this band"}

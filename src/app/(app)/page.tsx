@@ -26,7 +26,7 @@ function KpiCard({
     <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
       <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">{label}</p>
       <p
-        className={`text-2xl font-mono font-semibold ${accent ? "text-[#e8ff47]" : "text-neutral-100"}`}
+        className={`text-2xl font-mono font-semibold ${accent ? "text-[#b8c47a]" : "text-neutral-100"}`}
       >
         {value}
       </p>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
         </div>
         <Button
           onClick={() => setFormOpen(true)}
-          className="bg-[#e8ff47] hover:bg-[#d4eb30] text-neutral-950 font-medium gap-2"
+          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
           New opportunity
@@ -176,7 +176,7 @@ export default function DashboardPage() {
                     <div className="flex-1">
                       <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#e8ff47]/60 rounded-full transition-all"
+                          className="h-full bg-[#b8c47a]/60 rounded-full transition-all"
                           style={{
                             width: pipeline
                               ? `${Math.min((stageValue / pipeline) * 100, 100)}%`
@@ -203,7 +203,7 @@ export default function DashboardPage() {
               .slice(0, 3)
               .map((opp) => (
                 <div key={opp.id} className="flex items-start gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 text-orange-500 shrink-0 mt-0.5" />
+                  <AlertCircle className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <p className="text-xs text-neutral-300 truncate">{opp.name}</p>
                     <p className="text-xs text-neutral-600">
@@ -216,7 +216,7 @@ export default function DashboardPage() {
               (o) => o.sentiment === "negative" || o.sentiment === "very_negative"
             ).length === 0 && (
               <div className="flex items-center gap-2 text-xs text-neutral-600">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-stone-400" />
                 Everything looks good
               </div>
             )}

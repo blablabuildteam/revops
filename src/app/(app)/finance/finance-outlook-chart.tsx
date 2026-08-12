@@ -112,14 +112,14 @@ function InsightChartTooltip({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-neutral-400">Expected</span>
-            <span className="font-mono font-semibold text-[#e8ff47]">{formatCurrency(expected)}</span>
+            <span className="font-mono font-semibold text-[#b8c47a]">{formatCurrency(expected)}</span>
           </div>
           {expectedBreakdown.length === 0 ? (
             <p className="text-neutral-600">No expected revenue</p>
           ) : (
             <BreakdownItems
               breakdown={expectedBreakdown}
-              amountClassName="text-[#e8ff47]"
+              amountClassName="text-[#b8c47a]"
               onDealClick={onDealClick}
             />
           )}
@@ -130,14 +130,14 @@ function InsightChartTooltip({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-neutral-400">Actual</span>
-            <span className="font-mono font-semibold text-emerald-400">{formatCurrency(actual)}</span>
+            <span className="font-mono font-semibold text-stone-300">{formatCurrency(actual)}</span>
           </div>
           {actualBreakdown.length === 0 ? (
             <p className="text-neutral-600">No payments recorded</p>
           ) : (
             <BreakdownItems
               breakdown={actualBreakdown}
-              amountClassName="text-emerald-400"
+              amountClassName="text-stone-300"
               onDealClick={onDealClick}
             />
           )}
@@ -148,14 +148,14 @@ function InsightChartTooltip({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-neutral-400">Forecasted</span>
-            <span className="font-mono font-semibold text-violet-300">{formatCurrency(forecast)}</span>
+            <span className="font-mono font-semibold text-neutral-400">{formatCurrency(forecast)}</span>
           </div>
           {forecastBreakdown.length === 0 ? (
             <p className="text-neutral-600">No pipeline forecast</p>
           ) : (
             <BreakdownItems
               breakdown={forecastBreakdown}
-              amountClassName="text-violet-300"
+              amountClassName="text-neutral-400"
             />
           )}
         </div>
@@ -163,7 +163,7 @@ function InsightChartTooltip({
         <div className="border-t border-neutral-800 pt-2">
           <div className="flex items-center justify-between text-neutral-500">
             <span>Net after salary</span>
-            <span className="font-mono text-orange-400">{formatCurrency(netAfterSalary)}</span>
+            <span className="font-mono text-neutral-300">{formatCurrency(netAfterSalary)}</span>
           </div>
         </div>
       </div>
@@ -225,64 +225,64 @@ export function FinanceOutlookChart({
           <Line
             type="monotone"
             dataKey="expected"
-            stroke="#e8ff47"
+            stroke="#b8c47a"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: "#e8ff47" }}
+            activeDot={{ r: 4, fill: "#b8c47a" }}
           />
           <Line
             type="monotone"
             dataKey="actual"
-            stroke="#34d399"
+            stroke="#a8a29e"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: "#34d399" }}
+            activeDot={{ r: 4, fill: "#a8a29e" }}
           />
           <Line
             type="monotone"
             dataKey="forecast"
-            stroke="#a78bfa"
+            stroke="#737373"
             strokeWidth={2}
             strokeDasharray="6 3"
             dot={false}
-            activeDot={{ r: 4, fill: "#a78bfa" }}
+            activeDot={{ r: 4, fill: "#737373" }}
           />
           <Line
             type="monotone"
             dataKey="netAfterSalary"
-            stroke="#f97316"
+            stroke="#78716c"
             strokeWidth={1.5}
             strokeDasharray="5 3"
             dot={false}
-            activeDot={{ r: 4, fill: "#f97316" }}
+            activeDot={{ r: 4, fill: "#78716c" }}
           />
         </LineChart>
       </ResponsiveContainer>
       <div className="flex items-center justify-center gap-6 mt-3">
         <div className="flex items-center gap-2">
           <div
-            className="w-4 h-0.5 bg-violet-400 rounded"
+            className="w-4 h-0.5 bg-neutral-500 rounded"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(90deg, #a78bfa 0 4px, transparent 4px 7px)",
+                "repeating-linear-gradient(90deg, #737373 0 4px, transparent 4px 7px)",
             }}
           />
           <span className="text-xs text-neutral-500">Forecasted</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-[#e8ff47] rounded" />
+          <div className="w-4 h-0.5 bg-[#b8c47a] rounded" />
           <span className="text-xs text-neutral-500">Expected</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-emerald-400 rounded" />
+          <div className="w-4 h-0.5 bg-stone-400 rounded" />
           <span className="text-xs text-neutral-500">Actual</span>
         </div>
         <div className="flex items-center gap-2">
           <div
-            className="w-4 h-0.5 bg-orange-500 rounded"
+            className="w-4 h-0.5 bg-stone-600 rounded"
             style={{
               backgroundImage:
-                "repeating-linear-gradient(90deg, #f97316 0 3px, transparent 3px 6px)",
+                "repeating-linear-gradient(90deg, #78716c 0 3px, transparent 3px 6px)",
             }}
           />
           <span className="text-xs text-neutral-500">Net after salary</span>
