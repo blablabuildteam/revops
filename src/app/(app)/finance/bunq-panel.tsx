@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { getFinanceDeals } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
+import { cacheKeys, invalidateCache, invalidateCachePrefix } from "@/lib/query-cache";
 import type { FinanceDeal } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
