@@ -96,18 +96,32 @@ export function BvCheckPanel({
     [deals, opportunities, year],
   );
 
-  const projectedProfit = useMemo(
-    () =>
-      buildTaxReserve(revenue, {
-        annualCosts: settings.tax_annual_costs,
-        firstPartnerSharePct: settings.tax_profit_split,
-        partners,
-        includePipeline: false,
-        urencriterium: settings.tax_urencriterium,
-        startersaftrek: settings.tax_startersaftrek,
-      }).projectedProfit,
-    [revenue, settings, partners],
+  const reserveBase = useMemo(
+    () => ({
+      annualCosts: settings.tax_annual_costs,
+      firstPartnerSharePct: settings.tax_profit_split,
+      partners,
+      urencriterium: settings.tax_urencriterium,
+      startersaftrek: settings.tax_startersaftrek,
+    }),
+    [settings, partners],
   );
+
+  const confirmed = useMemo(
+    () => buildTaxReserve(revenue, { ...reserveBase, includePipeline: false }),
+    [revenue, reserveBase],
+  );
+
+  const withKansen = useMemo(
+    () => buildTaxReserve(revenue, { ...reserveBase, includePipeline: true }),
+    [revenue, reserveBase],
+  );
+
+  const [profitSource, setProfitSource] = useState<"confirmed" | "kansen">("confirmed");
+  const projectedProfit =
+    profitSource === "kansen"
+      ? withKansen.projectedProfit
+      : confirmed.projectedProfit;
 
   const [profitOverride, setProfitOverride] = useState<number | null>(null);
   const profit = profitOverride ?? projectedProfit;
@@ -193,9 +207,21 @@ export function BvCheckPanel({
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard
-          label="Projected profit"
+          label={
+            profitOverride !== null
+              ? "Manual profit"
+              : profitSource === "kansen"
+                ? "Profit + kansen"
+                : "Profit (confirmed)"
+          }
           value={formatCurrency(profit)}
-          sub={profitOverride !== null ? "Manual scenario" : `Based on ${year} deals`}
+          sub={
+            profitOverride !== null
+              ? "Manual scenario"
+              : profitSource === "kansen"
+                ? `Deals + ${formatCurrency(revenue.pipelineRemaining)} weighted pipeline`
+                : `Received ${formatCurrency(revenue.realised)} + due ${formatCurrency(revenue.contractedRemaining)}`
+          }
           tone="accent"
         />
         <StatCard
@@ -229,6 +255,76 @@ export function BvCheckPanel({
       </div>
 
       <Verdict favoursBv={favoursBv} headline={headline} body={body} />
+
+      <div className={`${CARD} space-y-4`}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium text-neutral-300">How projected profit is built</h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Confirmed = finance deals (received + unpaid schedule). Kansen = open opportunities ×
+              win probability.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <ToggleChip
+              active={profitSource === "confirmed" && profitOverride === null}
+              onClick={() => {
+                setProfitSource("confirmed");
+                setProfitOverride(null);
+              }}
+            >
+              Confirmed deals
+            </ToggleChip>
+            <ToggleChip
+              active={profitSource === "kansen" && profitOverride === null}
+              onClick={() => {
+                setProfitSource("kansen");
+                setProfitOverride(null);
+              }}
+            >
+              + Kansen
+            </ToggleChip>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <AmountRow label="Received this year" value={revenue.realised} tone="positive" />
+            <AmountRow
+              label="Still due on confirmed deals"
+              value={revenue.contractedRemaining}
+              hint="Schedule / retainer not yet paid"
+            />
+            <AmountRow
+              label="Costs"
+              value={settings.tax_annual_costs}
+              tone="negative"
+              negative
+            />
+            <AmountRow
+              label="Profit (confirmed)"
+              value={confirmed.projectedProfit}
+              emphasis
+              tone={profitSource === "confirmed" && profitOverride === null ? "accent" : "default"}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <AmountRow
+              label="Weighted kansen"
+              value={revenue.pipelineRemaining}
+              hint="Pipeline × probability, rest of year"
+            />
+            <AmountRow
+              label="Profit if kansen land"
+              value={withKansen.projectedProfit}
+              emphasis
+              tone={profitSource === "kansen" && profitOverride === null ? "accent" : "default"}
+            />
+            <p className="text-[11px] text-neutral-600 leading-relaxed pt-2">
+              Default for the BV verdict is confirmed deals only — kansen are upside, not a promise.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className={`${CARD} space-y-3`}>
@@ -547,7 +643,7 @@ export function BvCheckPanel({
             onChange={(value) => setProfitOverride(value)}
             hint={
               profitOverride !== null
-                ? `Projection says ${formatCurrency(projectedProfit)}`
+                ? `Confirmed ${formatCurrency(confirmed.projectedProfit)} · +kansen ${formatCurrency(withKansen.projectedProfit)}`
                 : "Change to test another scenario"
             }
           />

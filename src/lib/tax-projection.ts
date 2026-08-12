@@ -34,6 +34,9 @@ function monthKey(year: number, monthIndex: number) {
  * Revenue picture for one calendar year, split into what has landed and what
  * is still expected. Deal amounts are stored including VAT, so everything is
  * converted to a net figure here — VAT is never part of the profit.
+ *
+ * Confirmed path  = realised payments + unpaid schedule on finance deals.
+ * Pipeline path   = same + probability-weighted open opportunities.
  */
 export function buildYearRevenue(
   deals: FinanceDeal[],
@@ -54,14 +57,15 @@ export function buildYearRevenue(
 
   for (let m = 0; m < 12; m++) {
     const key = monthKey(year, m);
-    realisedGross += actualRevenueForMonth(deals, key);
+    const expected = expectedRevenueForMonth(deals, key);
+    const paid = actualRevenueForMonth(deals, key);
 
+    realisedGross += paid;
+    // Unpaid schedule on confirmed deals — including overdue months.
+    contractedGross += Math.max(0, expected - paid);
+
+    // Pipeline only for the rest of the year (not rewriting the past).
     if (m > lastElapsedIndex) {
-      // Only count contracted revenue that has not been paid yet, so a deal
-      // paid ahead of schedule is not counted twice.
-      const expected = expectedRevenueForMonth(deals, key);
-      const paid = actualRevenueForMonth(deals, key);
-      contractedGross += Math.max(0, expected - paid);
       pipelineGross += forecastRevenueForMonth(opportunities, key);
     }
   }
@@ -86,11 +90,16 @@ export type TaxReserveOptions = PartnerTaxOptions & {
 };
 
 export type TaxReserve = {
+  /** Confirmed deals only: received + unpaid schedule − costs. */
   projectedRevenue: number;
   projectedProfit: number;
+  /** Same plus probability-weighted open opportunities. */
+  projectedRevenueWithPipeline: number;
+  projectedProfitWithPipeline: number;
   /** Profit earned so far, after a pro-rata share of the yearly costs. */
   profitToDate: number;
   projected: VofTaxResult;
+  projectedWithPipeline: VofTaxResult;
   /** Effective tax rate of the projected year, applied to profit to date. */
   effectiveRate: number;
   /** What should already be sitting in the tax account. */
@@ -114,12 +123,12 @@ export function buildTaxReserve(
     ...taxOptions
   } = options;
 
-  const projectedRevenue =
-    revenue.realised +
-    revenue.contractedRemaining +
-    (includePipeline ? revenue.pipelineRemaining : 0);
+  const confirmedRevenue = revenue.realised + revenue.contractedRemaining;
+  const withPipelineRevenue = confirmedRevenue + revenue.pipelineRemaining;
 
+  const projectedRevenue = includePipeline ? withPipelineRevenue : confirmedRevenue;
   const projectedProfit = Math.max(0, projectedRevenue - annualCosts);
+  const projectedProfitWithPipeline = Math.max(0, withPipelineRevenue - annualCosts);
 
   const shares =
     partners === 2
@@ -128,6 +137,10 @@ export function buildTaxReserve(
 
   const perPartnerShares = splitProfit(projectedProfit, shares);
   const projected = vofTax(perPartnerShares, taxOptions);
+  const projectedWithPipeline = vofTax(
+    splitProfit(projectedProfitWithPipeline, shares),
+    taxOptions,
+  );
 
   const elapsedShare = revenue.monthsElapsed / 12;
   const profitToDate = Math.max(0, revenue.realised - annualCosts * elapsedShare);
@@ -139,8 +152,11 @@ export function buildTaxReserve(
   return {
     projectedRevenue,
     projectedProfit,
+    projectedRevenueWithPipeline: withPipelineRevenue,
+    projectedProfitWithPipeline,
     profitToDate,
     projected,
+    projectedWithPipeline,
     effectiveRate,
     reserveToDate: profitToDate * effectiveRate,
     reserveFullYear: projected.totalDue,

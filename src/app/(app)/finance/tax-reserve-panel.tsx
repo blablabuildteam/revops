@@ -98,28 +98,35 @@ export function TaxReservePanel({
             <AmountRow
               label="Received so far"
               value={revenue.realised}
-              hint={`${revenue.monthsElapsed} of 12 months, excl. VAT`}
+              hint={`${revenue.monthsElapsed} of 12 months, excl. VAT · from Bunq / deal payments`}
               tone="positive"
             />
             <AmountRow
-              label="Contracted for the rest of the year"
+              label="Still due on confirmed deals"
               value={revenue.contractedRemaining}
-              hint="Signed deals still to be invoiced"
+              hint="Payment schedule + retainers not yet paid (incl. overdue)"
             />
             <AmountRow
-              label="Weighted pipeline"
-              value={includePipeline ? revenue.pipelineRemaining : 0}
-              hint={
-                includePipeline
-                  ? "Open opportunities, weighted by probability"
-                  : `Excluded — ${formatCurrency(revenue.pipelineRemaining)} available`
-              }
+              label="Confirmed revenue"
+              value={revenue.realised + revenue.contractedRemaining}
+              hint="Received + outstanding on signed deals"
+              emphasis
+            />
+            <AmountRow
+              label="Weighted kansen (pipeline)"
+              value={revenue.pipelineRemaining}
+              hint="Open opportunities × win probability, rest of year"
               tone={includePipeline ? "default" : "muted"}
             />
             <AmountRow
-              label={`Projected ${year} revenue`}
+              label={
+                includePipeline
+                  ? `Projected ${year} revenue (deals + kansen)`
+                  : `Projected ${year} revenue (confirmed deals)`
+              }
               value={reserve.projectedRevenue}
               emphasis
+              tone="accent"
             />
             <AmountRow
               label="Estimated business costs"
@@ -129,11 +136,19 @@ export function TaxReservePanel({
               negative
             />
             <AmountRow
-              label="Profit to divide"
+              label={includePipeline ? "Profit (with kansen)" : "Profit (confirmed deals)"}
               value={reserve.projectedProfit}
               emphasis
               tone="accent"
             />
+            {!includePipeline && revenue.pipelineRemaining > 0 && (
+              <AmountRow
+                label="Profit if pipeline also lands"
+                value={reserve.projectedProfitWithPipeline}
+                hint={`${formatCurrency(revenue.pipelineRemaining)} weighted kansen on top`}
+                tone="muted"
+              />
+            )}
           </div>
 
           <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-neutral-800">
@@ -165,7 +180,7 @@ export function TaxReservePanel({
               active={includePipeline}
               onClick={() => setIncludePipeline((v) => !v)}
             >
-              Include pipeline
+              Include kansen
             </ToggleChip>
             <ToggleChip
               active={settings.tax_urencriterium}
