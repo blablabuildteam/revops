@@ -564,8 +564,8 @@ export type BunqIncomingPayment = {
 };
 
 /**
- * Collect incoming money: events on our accounts where we are not the debtor.
- * Falls back to treating payment-list entries as outgoing-only reference set.
+ * Collect incoming money from each active monetary account.
+ * In the payment list, positive amounts are credits (money in).
  */
 export async function fetchIncomingPayments(opts?: {
   maxPages?: number;
@@ -573,67 +573,40 @@ export async function fetchIncomingPayments(opts?: {
   const maxPages = opts?.maxPages ?? 5;
   const { sessionToken, userId } = await ensureSession();
   const accounts = await listMonetaryAccounts();
-  const accountById = new Map(accounts.map((a) => [a.id, a]));
-  const ourIbans = new Set(
-    accounts.map((a) => a.iban).filter((x): x is string => Boolean(x)),
-  );
 
-  const outgoingIds = new Set<number>();
+  const incomingById = new Map<number, BunqIncomingPayment>();
+
   for (const account of accounts) {
     let olderId: number | undefined;
     for (let page = 0; page < maxPages; page++) {
       const payments = await listPaymentsPage(userId, account.id, sessionToken, olderId);
       if (payments.length === 0) break;
-      for (const p of payments) outgoingIds.add(p.id);
+
+      for (const payment of payments) {
+        if (!payment?.id || !payment.amount) continue;
+        const amount = Number(payment.amount.value);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+
+        incomingById.set(payment.id, {
+          id: payment.id,
+          created: payment.created,
+          amount,
+          currency: payment.amount.currency || "EUR",
+          description: payment.description?.trim() || "",
+          counterpartyName: extractName(payment.counterparty_alias) || extractName(payment.alias),
+          counterpartyIban: extractIban(payment.counterparty_alias) || extractIban(payment.alias),
+          monetaryAccountId: account.id,
+          accountIban: account.iban ?? null,
+          accountName: account.displayName || account.description || null,
+          type: payment.type || payment.sub_type || null,
+          raw: payment,
+        });
+      }
+
       olderId = payments[payments.length - 1]?.id;
       if (payments.length < 200) break;
     }
   }
-
-  const incomingById = new Map<number, BunqIncomingPayment>();
-  let olderEventId: number | undefined;
-  for (let page = 0; page < maxPages; page++) {
-    const events = await listEventsPage(userId, sessionToken, olderEventId);
-    if (events.length === 0) break;
-
-    for (const event of events) {
-      const payment = event.Payment;
-      if (!payment?.id || !payment.amount) continue;
-      if (outgoingIds.has(payment.id)) continue;
-
-      const accountId = event.monetary_account_id;
-      if (!accountId || !accountById.has(accountId)) continue;
-
-      const debtorIban = extractIban(payment.alias);
-      // Skip if we are clearly the debtor (outgoing that slipped through).
-      if (debtorIban && ourIbans.has(debtorIban)) continue;
-
-      const account = accountById.get(accountId)!;
-      const amount = Number(payment.amount.value);
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-
-      incomingById.set(payment.id, {
-        id: payment.id,
-        created: payment.created,
-        amount,
-        currency: payment.amount.currency || "EUR",
-        description: payment.description?.trim() || "",
-        counterpartyName: extractName(payment.alias) || extractName(payment.counterparty_alias),
-        counterpartyIban: debtorIban || extractIban(payment.counterparty_alias),
-        monetaryAccountId: accountId,
-        accountIban: account.iban ?? null,
-        accountName: account.displayName || account.description || null,
-        type: payment.type || payment.sub_type || null,
-        raw: payment,
-      });
-    }
-
-    olderEventId = events[events.length - 1]?.id;
-    if (events.length < 200) break;
-  }
-
-  // Also: some credits only appear as payments where counterparty is us —
-  // already covered by excluding outgoingIds from events.
 
   return [...incomingById.values()].sort((a, b) => b.created.localeCompare(a.created));
 }
