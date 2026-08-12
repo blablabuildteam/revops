@@ -303,3 +303,100 @@ export function buildDealLoadRows({
     return b.hoursPerWeekNeeded - a.hoursPerWeekNeeded;
   });
 }
+
+export type WeeklyJobSlice = {
+  key: string;
+  name: string;
+  companyName: string;
+  kind: DealLoadKind;
+  source: "deal" | "opportunity";
+  hours: number;
+};
+
+export type WeeklyCapacityColumn = {
+  weekKey: string;
+  weekStart: Date;
+  totalHours: number;
+  firmWeeklyHours: number;
+  loadPct: number;
+  jobs: WeeklyJobSlice[];
+};
+
+/**
+ * Spread each job’s €175 pace evenly across weeks:
+ * - Project: today → deadline
+ * - Retainer: every week in the horizon
+ */
+export function buildWeeklyCapacity({
+  rows,
+  weekCount = 12,
+  weekOffset = 0,
+  today = new Date(),
+}: {
+  rows: DealLoadRow[];
+  weekCount?: number;
+  weekOffset?: number;
+  today?: Date;
+}): WeeklyCapacityColumn[] {
+  const firmWeeklyHours =
+    rows[0]?.firmWeeklyHours ?? TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
+  const startMonday = getMonday(today);
+  startMonday.setDate(startMonday.getDate() + weekOffset * 7);
+
+  const columns: WeeklyCapacityColumn[] = [];
+  for (let i = 0; i < weekCount; i++) {
+    const weekStart = new Date(startMonday);
+    weekStart.setDate(weekStart.getDate() + i * 7);
+    columns.push({
+      weekKey: formatWeekKey(weekStart),
+      weekStart,
+      totalHours: 0,
+      firmWeeklyHours,
+      loadPct: 0,
+      jobs: [],
+    });
+  }
+
+  const byKey = new Map(columns.map((c) => [c.weekKey, c]));
+  const horizonEnd = columns[columns.length - 1]?.weekStart;
+  if (!horizonEnd) return columns;
+
+  for (const row of rows) {
+    if (row.hoursPerWeekNeeded <= 0) continue;
+
+    let weekKeys: string[] = [];
+    if (row.kind === "retainer") {
+      weekKeys = columns.map((c) => c.weekKey);
+    } else if (row.endDate) {
+      const end = parseDate(row.endDate);
+      if (!end) continue;
+      const from = getMonday(today);
+      weekKeys = weeksBetween(from, end).filter((key) => byKey.has(key));
+    }
+
+    for (const key of weekKeys) {
+      const col = byKey.get(key);
+      if (!col) continue;
+      col.jobs.push({
+        key: row.key,
+        name: row.name,
+        companyName: row.companyName,
+        kind: row.kind,
+        source: row.source,
+        hours: row.hoursPerWeekNeeded,
+      });
+      col.totalHours += row.hoursPerWeekNeeded;
+    }
+  }
+
+  for (const col of columns) {
+    col.totalHours = Math.round(col.totalHours * 10) / 10;
+    col.loadPct =
+      firmWeeklyHours > 0
+        ? Math.round((col.totalHours / firmWeeklyHours) * 1000) / 1000
+        : 0;
+    col.jobs.sort((a, b) => b.hours - a.hours);
+  }
+
+  return columns;
+}
