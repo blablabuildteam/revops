@@ -173,6 +173,8 @@ export function BunqPanel() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Link failed");
+      invalidateCache(cacheKeys.financeDeals());
+      invalidateCachePrefix("finance-summary:");
       setLastResult(
         dealId
           ? `Linked payment to deal — ledger updated.`
