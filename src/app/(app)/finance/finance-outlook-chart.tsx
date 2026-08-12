@@ -112,14 +112,14 @@ function InsightChartTooltip({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-neutral-400">Expected</span>
-            <span className="font-mono font-semibold text-[#b8c47a]">{formatCurrency(expected)}</span>
+            <span className="font-mono font-semibold text-[#d4e052]">{formatCurrency(expected)}</span>
           </div>
           {expectedBreakdown.length === 0 ? (
             <p className="text-neutral-600">No expected revenue</p>
           ) : (
             <BreakdownItems
               breakdown={expectedBreakdown}
-              amountClassName="text-[#b8c47a]"
+              amountClassName="text-[#d4e052]"
               onDealClick={onDealClick}
             />
           )}
@@ -225,10 +225,10 @@ export function FinanceOutlookChart({
           <Line
             type="monotone"
             dataKey="expected"
-            stroke="#b8c47a"
+            stroke="#d4e052"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, fill: "#b8c47a" }}
+            activeDot={{ r: 4, fill: "#d4e052" }}
           />
           <Line
             type="monotone"
@@ -270,7 +270,7 @@ export function FinanceOutlookChart({
           <span className="text-xs text-neutral-500">Forecasted</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-0.5 bg-[#b8c47a] rounded" />
+          <div className="w-4 h-0.5 bg-[#d4e052] rounded" />
           <span className="text-xs text-neutral-500">Expected</span>
         </div>
         <div className="flex items-center gap-2">

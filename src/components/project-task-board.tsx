@@ -588,7 +588,7 @@ function TaskWithSubtasks({
           />
           <span /><span /><span /><span />
           <div className="flex items-center gap-1 justify-self-end">
-            <Button type="submit" size="sm" className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
+            <Button type="submit" size="sm" className="h-7 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 px-2">
               <Check className="w-3 h-3" />
             </Button>
             <Button type="button" size="sm" variant="ghost"
@@ -639,7 +639,7 @@ function AddTaskInline({
       <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)}
         placeholder="Task description..."
         className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1" />
-      <Button type="submit" size="sm" className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
+      <Button type="submit" size="sm" className="h-7 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 px-2">
         <Check className="w-3 h-3" />
       </Button>
       <Button type="button" size="sm" variant="ghost"
@@ -975,7 +975,7 @@ export function ProjectTaskBoardPanel({
             <PopoverTrigger
               className={`flex items-center gap-1.5 text-xs py-1 px-2 rounded transition-colors cursor-pointer ${
                 filters.length > 0
-                  ? "text-[#b8c47a]"
+                  ? "text-[#d4e052]"
                   : "text-neutral-600 hover:text-neutral-300"
               }`}
             >

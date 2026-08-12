@@ -61,6 +61,37 @@ function normalizeName(name: string): string {
     .trim();
 }
 
+/** Skip internal transfers, interest and VAT sweeps — keep client revenue. */
+export function isClientRevenuePayment(payment: {
+  counterpartyName?: string | null;
+  counterparty_name?: string | null;
+  description?: string | null;
+  accountName?: string | null;
+  account_name?: string | null;
+}): boolean {
+  const counterparty = (
+    payment.counterpartyName ||
+    payment.counterparty_name ||
+    ""
+  ).toLowerCase();
+  const description = (payment.description || "").toLowerCase();
+  const account = (payment.accountName || payment.account_name || "").toLowerCase();
+
+  if (!counterparty && !description) return false;
+  if (counterparty === "bunq" || counterparty.startsWith("bunq ")) return false;
+  if (description.includes("autovat") || description.includes("payday")) return false;
+  if (description.includes("interest") || description.includes("rente")) return false;
+  // Own-account sweeps (Salaris / IB / BTW) are not client revenue.
+  if (["salaris", "ib", "btw"].includes(account)) return false;
+  if (counterparty.includes("blablabuild")) return false;
+  return true;
+}
+
+function extractInvoiceTokens(text: string): string[] {
+  const matches = text.match(/\b\d{4,8}\b/g) || [];
+  return [...new Set(matches)];
+}
+
 async function loadCompanyMap(): Promise<Map<string, string>> {
   const { rows } = await sql`SELECT id, name FROM companies`;
   const map = new Map<string, string>();
@@ -131,6 +162,32 @@ function matchPayment(
     return false;
   });
 
+  // Invoice / order numbers in the payment description (e.g. 100058).
+  const tokens = extractInvoiceTokens(payment.description || "");
+  if (tokens.length > 0) {
+    const byInvoice = deals.filter((d) => {
+      const hay = `${d.project_name} ${d.company_name}`.toLowerCase();
+      return tokens.some((t) => hay.includes(t) || d.project_name.includes(t));
+    });
+    if (byInvoice.length === 1) {
+      return {
+        companyId: companyId ?? byInvoice[0].company_id,
+        dealId: byInvoice[0].id,
+        confidence: "invoice",
+      };
+    }
+    if (byInvoice.length > 1 && companyId) {
+      const narrowed = byInvoice.filter((d) => d.company_id === companyId);
+      if (narrowed.length === 1) {
+        return {
+          companyId,
+          dealId: narrowed[0].id,
+          confidence: "invoice",
+        };
+      }
+    }
+  }
+
   if (candidates.length === 0) {
     return { companyId, dealId: null, confidence: companyId ? "company" : null };
   }
@@ -185,10 +242,18 @@ export async function syncBunqPayments(): Promise<BunqSyncResult> {
   let totalIncoming = 0;
 
   for (const payment of payments) {
-    const match = matchPayment(payment, companyMap, deals);
+    // Still store everything for audit, but only auto-match client revenue.
+    const revenue = isClientRevenuePayment({
+      counterpartyName: payment.counterpartyName,
+      description: payment.description,
+      accountName: payment.accountName,
+    });
+    const match = revenue
+      ? matchPayment(payment, companyMap, deals)
+      : { companyId: null, dealId: null, confidence: "internal" };
     if (match.companyId) matchedCompanies += 1;
     if (match.dealId) matchedDeals += 1;
-    totalIncoming += payment.amount;
+    if (revenue) totalIncoming += payment.amount;
 
     await sql`
       INSERT INTO bunq_payments (
@@ -292,6 +357,7 @@ export async function getBunqPaymentTotals() {
       COUNT(*) FILTER (WHERE finance_deal_id IS NOT NULL)::int AS matched_deals,
       COUNT(*) FILTER (WHERE company_id IS NOT NULL)::int AS matched_companies
     FROM bunq_payments
+    WHERE COALESCE(matched_confidence, '') <> 'internal'
   `;
   const { rows: syncRows } = await sql`
     SELECT value FROM finance_settings WHERE key = 'bunq_last_sync'
@@ -304,6 +370,41 @@ export async function getBunqPaymentTotals() {
     matchedCompanies: Number(row?.matched_companies) || 0,
     lastSync: syncRows[0]?.value ? String(syncRows[0].value) : null,
   };
+}
+
+/** Manually link (or unlink) a Bunq payment to a finance deal, then apply ledger. */
+export async function linkBunqPaymentToDeal(
+  paymentId: number,
+  dealId: string | null,
+): Promise<{ ok: true; dealId: string | null }> {
+  await ensureTables();
+  await ensureBunqPaymentsTable();
+
+  let companyId: string | null = null;
+  if (dealId) {
+    const { rows } = await sql`
+      SELECT company_id FROM finance_deals WHERE id = ${dealId}::uuid
+    `;
+    if (!rows[0]) throw new Error("Deal not found");
+    companyId = rows[0].company_id ? String(rows[0].company_id) : null;
+  }
+
+  const { rows: existing } = await sql`
+    SELECT id FROM bunq_payments WHERE id = ${paymentId}
+  `;
+  if (!existing[0]) throw new Error("Payment not found");
+
+  await sql`
+    UPDATE bunq_payments
+    SET finance_deal_id = ${dealId},
+        company_id = COALESCE(${companyId}, company_id),
+        matched_confidence = ${dealId ? "manual" : null},
+        synced_at = now()
+    WHERE id = ${paymentId}
+  `;
+
+  await applyBunqPaymentsToDeals();
+  return { ok: true, dealId };
 }
 
 /** Apply matched Bunq payments onto finance deal payment entries (idempotent by bunq id). */

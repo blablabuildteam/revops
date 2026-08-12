@@ -117,7 +117,7 @@ async function runSchemaMigrations() {
   await sql`UPDATE milestones SET color = '#9ca3af' WHERE name = 'Backlog' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#c084fc' WHERE name = 'Up Next' AND color IS NULL`;
-  await sql`UPDATE milestones SET color = '#b8c47a' WHERE name = 'In Progress' AND color IS NULL`;
+  await sql`UPDATE milestones SET color = '#d4e052' WHERE name = 'In Progress' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#f87171' WHERE name = 'On Hold' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#4ade80' WHERE name = 'Done' AND color IS NULL`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;

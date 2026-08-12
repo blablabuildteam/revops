@@ -272,7 +272,7 @@ export function DealActivationWizard({
                     className={cn(
                       "h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium border",
                       step >= s
-                        ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
+                        ? "bg-[#d4e052]/10 border-[#d4e052] text-[#d4e052]"
                         : "border-neutral-700 text-neutral-600"
                     )}
                   >
@@ -364,7 +364,7 @@ export function DealActivationWizard({
                               type="button"
                               onClick={handleAddCompany}
                               disabled={addingCompany || !newCompanyName.trim()}
-                              className="shrink-0 h-6 w-6 rounded bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="shrink-0 h-6 w-6 rounded bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                             >+</button>
                           </div>
                         </div>
@@ -400,7 +400,7 @@ export function DealActivationWizard({
                       className={cn(
                         "px-4 py-2 rounded text-sm font-medium border transition-colors",
                         dealType === type
-                          ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
+                          ? "bg-[#d4e052]/10 border-[#d4e052] text-[#d4e052]"
                           : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
                       )}
                     >
@@ -542,7 +542,7 @@ export function DealActivationWizard({
               (step === 2 && (!projectName.trim() || !companyName.trim()))
             }
             onClick={step === 1 ? handleCreateProject : handleCreateDeal}
-            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium"
           >
             {loading
               ? "Saving..."

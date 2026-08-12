@@ -192,7 +192,7 @@ function CompanyForm({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
-              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium">
               {loading ? "Saving..." : initial ? "Save" : "Add"}
             </Button>
           </DialogFooter>
@@ -243,7 +243,7 @@ export default function CompaniesPage() {
           <p className="text-sm text-neutral-500 mt-0.5">{companies.length} companies</p>
         </div>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }}
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New company
         </Button>
       </div>
@@ -305,7 +305,7 @@ export default function CompaniesPage() {
                   </div>
                   <div>
                     <p className="text-xs text-neutral-600 mb-1">Pipeline (excl. VAT)</p>
-                    <p className="text-sm font-mono text-[#b8c47a] font-medium">
+                    <p className="text-sm font-mono text-[#d4e052] font-medium">
                       {pipeline > 0 ? formatCurrency(pipeline) : "—"}
                     </p>
                   </div>

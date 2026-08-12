@@ -385,7 +385,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                             type="button"
                             onClick={handleAddCompany}
                             disabled={addingCompany || !newCompanyName.trim()}
-                            className="shrink-0 h-6 w-6 rounded bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="shrink-0 h-6 w-6 rounded bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                           >+</button>
                         </div>
                       </div>
@@ -456,7 +456,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   type="range" min="0" max="100" step="5"
                   value={form.probability}
                   onChange={(e) => set("probability", e.target.value)}
-                  className="h-2 bg-neutral-800 accent-[#b8c47a] mt-2 w-full"
+                  className="h-2 bg-neutral-800 accent-[#d4e052] mt-2 w-full"
                 />
               </div>
 
@@ -521,7 +521,7 @@ export function OpportunityForm({ open, onClose, onSave, onDelete, initial }: Op
                   </Button>
                   <Button
                     type="submit" disabled={loading}
-                    className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
+                    className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium"
                   >
                     {loading ? "Saving..." : "Add"}
                   </Button>

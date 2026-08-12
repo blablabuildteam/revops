@@ -46,9 +46,9 @@ function Stat({
 }) {
   const toneClass = {
     default: "text-neutral-100",
-    accent: "text-[#b8c47a]",
-    positive: "text-stone-300",
-    warn: "text-neutral-400",
+    accent: "text-[#d4e052]",
+    positive: "text-emerald-400",
+    warn: "text-orange-300",
   }[tone];
 
   return (
@@ -186,7 +186,7 @@ SNELSTART_CLIENT_KEY=...   # maatwerksleutel`}
           <p className="text-xs text-neutral-500 mt-0.5">
             Last sync: {formatSyncTime(totals?.lastSync ?? null)}
             {configured && status?.connection?.ok && (
-              <span className="inline-flex items-center gap-1 ml-2 text-stone-300">
+              <span className="inline-flex items-center gap-1 ml-2 text-emerald-400">
                 <CheckCircle2 className="w-3 h-3" /> Connected
               </span>
             )}
@@ -199,7 +199,7 @@ SNELSTART_CLIENT_KEY=...   # maatwerksleutel`}
             className={cn(
               "px-3 h-9 rounded-md border text-sm transition-colors",
               openOnly
-                ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
+                ? "bg-[#d4e052]/10 border-[#d4e052] text-[#d4e052]"
                 : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-neutral-200",
             )}
           >
@@ -208,7 +208,7 @@ SNELSTART_CLIENT_KEY=...   # maatwerksleutel`}
           <Button
             onClick={() => void handleSync()}
             disabled={!configured || syncing}
-            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 disabled:opacity-50"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 disabled:opacity-50"
           >
             <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
             {syncing ? "Syncing…" : "Sync now"}
@@ -287,7 +287,7 @@ SNELSTART_CLIENT_KEY=...   # maatwerksleutel`}
                       <td className="px-4 py-3 font-mono text-right text-neutral-200">
                         {formatCurrency(inv.factuur_bedrag)}
                       </td>
-                      <td className="px-4 py-3 font-mono text-right text-stone-300">
+                      <td className="px-4 py-3 font-mono text-right text-emerald-400">
                         {formatCurrency(inv.betaald_bedrag)}
                         <span className="text-neutral-600 text-[10px] ml-1">{paidPct}%</span>
                       </td>
@@ -301,7 +301,7 @@ SNELSTART_CLIENT_KEY=...   # maatwerksleutel`}
                       </td>
                       <td className="px-5 py-3">
                         {inv.finance_deal_id || inv.company_id ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-stone-300">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
                             <Link2 className="w-3 h-3" />
                             {inv.finance_deal_id ? "Deal" : "Company"}
                           </span>

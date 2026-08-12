@@ -100,7 +100,7 @@ function SortableStatusRow({
       style={style}
       className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors ${
         isDragging
-          ? "border-[#b8c47a]/30 bg-neutral-800/80"
+          ? "border-[#d4e052]/30 bg-neutral-800/80"
           : "border-neutral-700/60 bg-neutral-800/40 hover:border-neutral-600"
       }`}
     >
@@ -323,7 +323,7 @@ export function EditStatusesDialog({
             type="button"
             onClick={handleSave}
             disabled={saving || !hasValidEntry}
-            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950"
           >
             {saving ? "Saving..." : "Apply changes"}
           </Button>

@@ -32,7 +32,7 @@ import Link from "next/link";
 import { CompanyAvatar } from "@/components/company-avatar";
 
 const statusColors: Record<string, string> = {
-  active: "bg-[#b8c47a]/10 text-[#b8c47a]",
+  active: "bg-[#d4e052]/10 text-[#d4e052]",
   on_hold: "bg-neutral-800 text-neutral-500",
   completed: "bg-stone-900/80 text-stone-300",
   cancelled: "bg-neutral-900 text-neutral-500",
@@ -151,7 +151,7 @@ function NewProjectDialog({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading}
-              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium">
               {loading ? "Creating..." : "Create project"}
             </Button>
           </DialogFooter>
@@ -214,7 +214,7 @@ export default function ProjectsPage() {
     cn(
       "px-3 py-1 rounded-full text-xs font-medium transition-colors border shrink-0",
       active
-        ? "bg-[#b8c47a]/10 text-[#b8c47a] border-[#b8c47a]/30"
+        ? "bg-[#d4e052]/10 text-[#d4e052] border-[#d4e052]/30"
         : "bg-neutral-900 text-neutral-400 border-neutral-800 hover:border-neutral-700 hover:text-neutral-300"
     );
 
@@ -237,7 +237,7 @@ export default function ProjectsPage() {
           </p>
         </div>
         <Button onClick={() => setFormOpen(true)}
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" />
           New project
         </Button>
@@ -343,7 +343,7 @@ export default function ProjectsPage() {
                   </div>
                   <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-[#b8c47a]/60 rounded-full transition-all"
+                      className="h-full bg-[#d4e052]/60 rounded-full transition-all"
                       style={{ width: `${progress}%` }}
                     />
                   </div>

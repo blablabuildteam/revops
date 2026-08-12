@@ -371,7 +371,7 @@ export function TaskDetailDialog({
                 <Button
                   type="submit"
                   disabled={loading || !form.title.trim() || (isCreate && !api.createTask)}
-                  className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950"
+                  className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950"
                 >
                   {loading
                     ? (isCreate

@@ -306,7 +306,7 @@ export const DEFAULT_PHASE_COLORS: Record<(typeof DEFAULT_PROJECT_MILESTONES)[nu
   Backlog: "#9ca3af",
   Open: "#60a5fa",
   "Up Next": "#c084fc",
-  "In Progress": "#b8c47a",
+  "In Progress": "#d4e052",
   "On Hold": "#f87171",
   Done: "#4ade80",
 };

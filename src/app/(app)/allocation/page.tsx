@@ -434,7 +434,7 @@ export default function AllocationPage() {
     return (
       <div className="p-6">
         <div className="flex items-center gap-3 mb-8">
-          <Users className="w-6 h-6 text-[#b8c47a]" />
+          <Users className="w-6 h-6 text-[#d4e052]" />
           <h1 className="text-xl font-semibold text-neutral-100">Allocation</h1>
         </div>
         <div className="space-y-4">
@@ -453,7 +453,7 @@ export default function AllocationPage() {
     <div className="p-6 max-w-full">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <Users className="w-6 h-6 text-[#b8c47a]" />
+          <Users className="w-6 h-6 text-[#d4e052]" />
           <h1 className="text-xl font-semibold text-neutral-100">Allocation</h1>
           <span className="text-xs text-neutral-600 ml-2">
             {activeProjects.length} project{activeProjects.length !== 1 ? "s" : ""}
@@ -506,7 +506,7 @@ export default function AllocationPage() {
             className={cn(
               "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
               tab === entry.id
-                ? "text-[#b8c47a] border-[#b8c47a]"
+                ? "text-[#d4e052] border-[#d4e052]"
                 : "text-neutral-500 border-transparent hover:text-neutral-200",
             )}
           >
@@ -708,7 +708,7 @@ function PersonAllocation({
             className={cn(
               "px-2.5 py-1 text-[11px] font-semibold rounded transition-colors",
               unit === "percent"
-                ? "bg-[#b8c47a] text-neutral-950"
+                ? "bg-[#d4e052] text-neutral-950"
                 : "text-neutral-500 hover:text-neutral-200"
             )}
           >
@@ -720,7 +720,7 @@ function PersonAllocation({
             className={cn(
               "px-2.5 py-1 text-[11px] font-semibold rounded transition-colors",
               unit === "hours"
-                ? "bg-[#b8c47a] text-neutral-950"
+                ? "bg-[#d4e052] text-neutral-950"
                 : "text-neutral-500 hover:text-neutral-200"
             )}
           >
@@ -752,7 +752,7 @@ function PersonAllocation({
                     key={weekKey}
                     className={cn(
                       "px-2 py-2.5 text-center font-medium min-w-[110px]",
-                      current ? "text-[#b8c47a] bg-[#b8c47a]/5" : "text-neutral-500"
+                      current ? "text-[#d4e052] bg-[#d4e052]/5" : "text-neutral-500"
                     )}
                   >
                     <div className="whitespace-nowrap leading-tight">{formatWeekRange(w)}</div>
@@ -949,8 +949,8 @@ function AllocRowView({
             data-alloc-week-idx={weekIdx}
             className={cn(
               "px-1 py-1 relative",
-              current && "bg-[#b8c47a]/5",
-              inDragRange && "bg-[#b8c47a]/15"
+              current && "bg-[#d4e052]/5",
+              inDragRange && "bg-[#d4e052]/15"
             )}
           >
             <AllocationCell
@@ -1106,9 +1106,9 @@ function AllocationCell({
         className={cn(
           "w-full h-7 px-1.5 rounded text-center text-xs transition-colors select-none",
           value > 0
-            ? "bg-[#b8c47a]/10 text-[#b8c47a] hover:bg-[#b8c47a]/20 font-medium cursor-grab active:cursor-grabbing"
+            ? "bg-[#d4e052]/10 text-[#d4e052] hover:bg-[#d4e052]/20 font-medium cursor-grab active:cursor-grabbing"
             : "text-neutral-700 hover:bg-neutral-800 hover:text-neutral-400 cursor-pointer",
-          open && "ring-1 ring-[#b8c47a]/50"
+          open && "ring-1 ring-[#d4e052]/50"
         )}
       >
         {display}
@@ -1129,7 +1129,7 @@ function AllocationCell({
                 className={cn(
                   "h-7 rounded text-[11px] font-medium transition-colors",
                   value === pct
-                    ? "bg-[#b8c47a] text-neutral-950"
+                    ? "bg-[#d4e052] text-neutral-950"
                     : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
                 )}
               >
@@ -1174,7 +1174,7 @@ function AllocationCell({
                 // Don't commit on blur if clicking a preset — presets use pointerdown first
               }}
               placeholder="Hours"
-              className="flex-1 h-7 px-2 rounded bg-neutral-800 border border-neutral-700 text-xs text-neutral-100 outline-none focus:border-[#b8c47a]/50"
+              className="flex-1 h-7 px-2 rounded bg-neutral-800 border border-neutral-700 text-xs text-neutral-100 outline-none focus:border-[#d4e052]/50"
             />
             <button
               type="button"
@@ -1183,7 +1183,7 @@ function AllocationCell({
                 e.stopPropagation();
                 commitHours(hoursDraft);
               }}
-              className="h-7 px-2 rounded text-[11px] font-medium bg-[#b8c47a] text-neutral-950 hover:bg-[#b8c47a]/90"
+              className="h-7 px-2 rounded text-[11px] font-medium bg-[#d4e052] text-neutral-950 hover:bg-[#d4e052]/90"
             >
               Set
             </button>
@@ -1201,7 +1201,7 @@ function AllocationCell({
                 className={cn(
                   "h-7 rounded text-[11px] font-medium transition-colors",
                   hours === h
-                    ? "bg-[#b8c47a] text-neutral-950"
+                    ? "bg-[#d4e052] text-neutral-950"
                     : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
                 )}
               >

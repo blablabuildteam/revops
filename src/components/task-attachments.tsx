@@ -132,7 +132,7 @@ export function TaskAttachments(props: LiveProps | PendingProps) {
         className={cn(
           "relative flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 transition-colors cursor-pointer",
           dragging
-            ? "border-[#b8c47a] bg-[#b8c47a]/5"
+            ? "border-[#d4e052] bg-[#d4e052]/5"
             : "border-neutral-700 bg-neutral-800/40 hover:border-neutral-600 hover:bg-neutral-800/70",
           busy && "pointer-events-none opacity-60",
         )}
@@ -218,7 +218,7 @@ export function TaskAttachments(props: LiveProps | PendingProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Download attachment"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:text-[#b8c47a] hover:bg-neutral-800 shrink-0"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:text-[#d4e052] hover:bg-neutral-800 shrink-0"
               >
                 <Download className="w-3.5 h-3.5" />
               </a>

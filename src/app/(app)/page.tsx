@@ -26,7 +26,7 @@ function KpiCard({
     <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
       <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">{label}</p>
       <p
-        className={`text-2xl font-mono font-semibold ${accent ? "text-[#b8c47a]" : "text-neutral-100"}`}
+        className={`text-2xl font-mono font-semibold ${accent ? "text-[#d4e052]" : "text-neutral-100"}`}
       >
         {value}
       </p>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
         </div>
         <Button
           onClick={() => setFormOpen(true)}
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2"
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
         >
           <Plus className="w-4 h-4" />
           New opportunity
@@ -176,7 +176,7 @@ export default function DashboardPage() {
                     <div className="flex-1">
                       <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-[#b8c47a]/60 rounded-full transition-all"
+                          className="h-full bg-[#d4e052]/60 rounded-full transition-all"
                           style={{
                             width: pipeline
                               ? `${Math.min((stageValue / pipeline) * 100, 100)}%`

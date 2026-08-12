@@ -63,7 +63,7 @@ function SummaryCard({
 }) {
   const valueClass = {
     default: "text-neutral-100",
-    accent: "text-[#b8c47a]",
+    accent: "text-[#d4e052]",
     warn: "text-neutral-400",
     bad: "text-red-400",
   }[tone];
@@ -82,7 +82,7 @@ function RowLink({ row }: { row: DealLoadRow }) {
     return (
       <Link
         href={`/projects/${row.projectId}`}
-        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#b8c47a] transition-colors"
+        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#d4e052] transition-colors"
       >
         {row.name}
         <ArrowUpRight className="w-3 h-3 opacity-50" />
@@ -93,7 +93,7 @@ function RowLink({ row }: { row: DealLoadRow }) {
     return (
       <Link
         href="/opportunities"
-        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#b8c47a] transition-colors"
+        className="inline-flex items-center gap-1 text-neutral-200 hover:text-[#d4e052] transition-colors"
       >
         {row.name}
         <ArrowUpRight className="w-3 h-3 opacity-50" />
@@ -217,7 +217,7 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
                     </td>
-                    <td className="px-4 py-3 font-mono text-right text-[#b8c47a]">
+                    <td className="px-4 py-3 font-mono text-right text-[#d4e052]">
                       {formatHours(row.hoursPerWeekNeeded)}
                     </td>
                     <td

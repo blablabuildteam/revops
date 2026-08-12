@@ -56,13 +56,13 @@ function Verdict({
       className={`rounded-lg border p-5 ${
         favoursBv
           ? "border-stone-500/40 bg-stone-500/5"
-          : "border-[#b8c47a]/30 bg-[#b8c47a]/5"
+          : "border-[#d4e052]/30 bg-[#d4e052]/5"
       }`}
     >
       <div className="flex items-start gap-3">
         <div
           className={`mt-0.5 rounded-full p-1 ${
-            favoursBv ? "bg-stone-500/20 text-stone-300" : "bg-[#b8c47a]/15 text-[#b8c47a]"
+            favoursBv ? "bg-stone-500/20 text-stone-300" : "bg-[#d4e052]/15 text-[#d4e052]"
           }`}
         >
           {favoursBv ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
@@ -248,7 +248,7 @@ export function BvCheckPanel({
         </div>
         <div className="flex items-center gap-4 text-xs -mt-1">
           <span className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 bg-[#b8c47a]" />
+            <span className="w-4 h-0.5 bg-[#d4e052]" />
             <span className="text-neutral-400">VOF</span>
           </span>
           <span className="flex items-center gap-1.5">

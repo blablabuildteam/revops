@@ -525,7 +525,7 @@ function TodoFormDialog({
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
             <Button type="submit" disabled={loading || (showPhaseStatus && (milestonesLoading || !form.milestone_id))}
-              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium">
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium">
               {loading ? (isEdit ? "Saving..." : "Adding...") : (isEdit ? "Save" : "Add")}
             </Button>
             </div>
@@ -593,7 +593,7 @@ function QuickAddTodo({ onAdd, currentUser }: {
           type="submit"
           disabled={loading}
           size="sm"
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium h-8 px-3 text-xs shrink-0"
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium h-8 px-3 text-xs shrink-0"
         >
           {loading ? "..." : "Add"}
         </Button>
@@ -949,7 +949,7 @@ function ProjectGroup({
             <span className="text-neutral-800">·</span>
             <Link
               href={`/projects/${projectId}`}
-              className="text-xs text-neutral-600 hover:text-[#b8c47a] transition-colors"
+              className="text-xs text-neutral-600 hover:text-[#d4e052] transition-colors"
             >
               Open project board
             </Link>
@@ -1310,7 +1310,7 @@ export default function TodosPage() {
             Tasks
             {refreshing && !loading && (
               <span
-                className="w-1.5 h-1.5 rounded-full bg-[#b8c47a] animate-pulse"
+                className="w-1.5 h-1.5 rounded-full bg-[#d4e052] animate-pulse"
                 title="Refreshing"
                 aria-label="Refreshing"
               />
@@ -1322,7 +1322,7 @@ export default function TodosPage() {
           </p>
         </div>
         <Button onClick={openNewTask}
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2">
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2">
           <Plus className="w-4 h-4" /> New task
         </Button>
       </div>

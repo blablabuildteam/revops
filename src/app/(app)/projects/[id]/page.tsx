@@ -191,7 +191,7 @@ function PhaseColorInput({
       title="Phase color"
       className="group relative h-8 w-8 shrink-0 cursor-pointer rounded-lg border border-neutral-700 p-[3px] transition-colors hover:border-neutral-500"
       style={{
-        background: "conic-gradient(from 0deg, #57534e, #78716c, #a8a29e, #b8c47a, #a8a29e, #78716c, #57534e)",
+        background: "conic-gradient(from 0deg, #57534e, #78716c, #a8a29e, #d4e052, #a8a29e, #78716c, #57534e)",
       }}
     >
       <span
@@ -604,7 +604,7 @@ function SubtaskRow({
 
   return (
     <div
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#b8c47a]/[0.06] ring-1 ring-[#b8c47a]/20" : ""}`}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#d4e052]/[0.06] ring-1 ring-[#d4e052]/20" : ""}`}
     >
       <label
         className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -619,10 +619,10 @@ function SubtaskRow({
         />
         <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
           selected
-            ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
+            ? "border-[#d4e052]/50 bg-[#d4e052]/15"
             : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
         }`}>
-          {selected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
+          {selected && <Check className="w-2.5 h-2.5 text-[#d4e052]" />}
         </span>
       </label>
 
@@ -723,7 +723,7 @@ function SortableTaskRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#b8c47a]/[0.06] ring-1 ring-[#b8c47a]/20" : ""}`}
+      className={`${TASK_ROW_GRID} px-3 py-1.5 rounded-lg hover:bg-neutral-900/50 transition-colors group ${selected ? "bg-[#d4e052]/[0.06] ring-1 ring-[#d4e052]/20" : ""}`}
     >
       <label
         className={`flex items-center justify-center cursor-pointer transition-opacity ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
@@ -738,10 +738,10 @@ function SortableTaskRow({
         />
         <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
           selected
-            ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
+            ? "border-[#d4e052]/50 bg-[#d4e052]/15"
             : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
         }`}>
-          {selected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
+          {selected && <Check className="w-2.5 h-2.5 text-[#d4e052]" />}
         </span>
       </label>
 
@@ -902,7 +902,7 @@ function TaskWithSubtasks({
           <span />
           <span />
           <div className="flex items-center gap-1 justify-self-end">
-            <Button type="submit" size="sm" className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
+            <Button type="submit" size="sm" className="h-7 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 px-2">
               <Check className="w-3 h-3" />
             </Button>
             <Button
@@ -976,7 +976,7 @@ function BulkActionsBar({
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-5 py-3 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
-      <span className="text-sm font-medium text-[#b8c47a] tabular-nums whitespace-nowrap">
+      <span className="text-sm font-medium text-[#d4e052] tabular-nums whitespace-nowrap">
         {count} task{count !== 1 ? "s" : ""} selected
       </span>
 
@@ -1037,7 +1037,7 @@ function BulkActionsBar({
               type="button"
               size="sm"
               disabled={moving}
-              className="h-8 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium px-3 shrink-0"
+              className="h-8 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium px-3 shrink-0"
               onClick={confirmProjectMove}
             >
               {moving ? "Moving…" : "Move"}
@@ -1125,7 +1125,7 @@ function AddTaskInline({
         placeholder="Task description..."
         className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1" />
       <Button type="submit" size="sm"
-        className="h-7 text-xs bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 px-2">
+        className="h-7 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 px-2">
         <Check className="w-3 h-3" />
       </Button>
       <Button type="button" size="sm" variant="ghost"
@@ -1201,7 +1201,7 @@ function MilestoneSection({
       isUnassigned
         ? "border-neutral-700 bg-neutral-900/40"
         : "border-neutral-800"
-    } ${isOver ? "border-[#b8c47a]/30 bg-[#b8c47a]/[0.02]" : ""}`}>
+    } ${isOver ? "border-[#d4e052]/30 bg-[#d4e052]/[0.02]" : ""}`}>
       <div
         className={`flex items-center gap-3 px-4 py-3 bg-neutral-900/60 group/phase ${
           expanded ? "border-b border-neutral-800" : ""
@@ -1221,13 +1221,13 @@ function MilestoneSection({
           />
           <span className={`flex items-center justify-center w-3.5 h-3.5 rounded border transition-colors cursor-pointer ${
             allPhaseSelected
-              ? "border-[#b8c47a]/50 bg-[#b8c47a]/15"
+              ? "border-[#d4e052]/50 bg-[#d4e052]/15"
               : somePhaseSelected
-                ? "border-[#b8c47a]/30 bg-[#b8c47a]/5"
+                ? "border-[#d4e052]/30 bg-[#d4e052]/5"
                 : "border-neutral-700 bg-neutral-800/60 hover:border-neutral-500"
           }`}>
-            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#b8c47a]" />}
-            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#b8c47a]/60" />}
+            {allPhaseSelected && <Check className="w-2.5 h-2.5 text-[#d4e052]" />}
+            {somePhaseSelected && !allPhaseSelected && <span className="w-1.5 h-0.5 rounded-full bg-[#d4e052]/60" />}
           </span>
         </label>
         <button
@@ -2211,7 +2211,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Button
             type="button"
             onClick={openNewTask}
-            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
           >
             <Plus className="w-3.5 h-3.5" />
             Add task
@@ -2220,7 +2220,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <PopoverTrigger
               className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                 filters.length > 0
-                  ? "border-[#b8c47a]/30 text-[#b8c47a] hover:border-[#b8c47a]/50"
+                  ? "border-[#d4e052]/30 text-[#d4e052] hover:border-[#d4e052]/50"
                   : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
               }`}
             >
@@ -2248,7 +2248,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <button
             onClick={shareEditAccess}
             disabled={sharingEdit}
-            className="flex items-center gap-2 text-xs border border-[#b8c47a]/30 px-3 py-2 rounded-lg text-[#b8c47a] hover:border-[#b8c47a]/50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 text-xs border border-[#d4e052]/30 px-3 py-2 rounded-lg text-[#d4e052] hover:border-[#d4e052]/50 transition-colors disabled:opacity-50"
           >
             {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
             {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share board access"}
@@ -2382,7 +2382,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           className="bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 flex-1"
         />
         <Button type="submit" disabled={addingMilestone || !newMilestoneName.trim()}
-          className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2 shrink-0">
+          className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 shrink-0">
           <Plus className="w-4 h-4" /> Phase
         </Button>
       </form>

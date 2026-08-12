@@ -19,8 +19,8 @@ export const TODO_STATUS_LABELS: Record<TodoStatus, string> = {
 
 export const TODO_STATUS_TEXT: Record<TodoStatus, string> = {
   open: "text-neutral-400",
-  in_progress: "text-[#b8c47a]",
-  done: "text-stone-400",
+  in_progress: "text-sky-400/90",
+  done: "text-emerald-400/90",
 };
 
 export function TodoStatusIcon({
@@ -30,8 +30,8 @@ export function TodoStatusIcon({
   status: TodoStatus;
   className?: string;
 }): ReactNode {
-  if (status === "done") return <CheckCircle2 className={`${className} text-stone-400 shrink-0`} />;
-  if (status === "in_progress") return <Clock className={`${className} text-[#b8c47a] shrink-0`} />;
+  if (status === "done") return <CheckCircle2 className={`${className} text-emerald-400/90 shrink-0`} />;
+  if (status === "in_progress") return <Clock className={`${className} text-sky-400/90 shrink-0`} />;
   return <Circle className={`${className} text-neutral-500 shrink-0`} />;
 }
 

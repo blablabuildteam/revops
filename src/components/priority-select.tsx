@@ -17,8 +17,8 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 
 const TEXT_COLORS: Record<Priority, string> = {
   low: "text-neutral-500",
-  medium: "text-neutral-300",
-  high: "text-neutral-100",
+  medium: "text-amber-400/90",
+  high: "text-red-400/90",
 };
 
 const SHORT_LABELS: Record<Priority, string> = {

@@ -6,7 +6,7 @@ const styles: Record<ProposalStatus, string> = {
   draft: "text-neutral-400",
   sent: "text-neutral-300",
   viewed: "text-stone-300",
-  accepted: "text-[#b8c47a]",
+  accepted: "text-[#d4e052]",
   declined: "text-neutral-500",
   expired: "text-neutral-500",
 };

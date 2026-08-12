@@ -35,7 +35,7 @@ function ChartTooltip({
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-6">
           <span className="text-neutral-400">VOF net</span>
-          <span className="font-mono text-[#b8c47a]">{formatCurrency(point.vofNet)}</span>
+          <span className="font-mono text-[#d4e052]">{formatCurrency(point.vofNet)}</span>
         </div>
         <div className="flex items-center justify-between gap-6">
           <span className="text-neutral-400">BV total</span>
@@ -115,7 +115,7 @@ export function BvComparisonChart({
         <Line
           dataKey="vofNet"
           name="VOF"
-          stroke="#b8c47a"
+          stroke="#d4e052"
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}

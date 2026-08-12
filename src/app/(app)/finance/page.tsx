@@ -33,12 +33,14 @@ import {
   useTaxSettings,
 } from "@/hooks/use-api-data";
 import { DEFAULT_TAX_SETTINGS, type TaxSettings } from "@/lib/tax-settings";
+import { buildTaxReserve, buildYearRevenue } from "@/lib/tax-projection";
 import {
   DEAL_TYPE_LABELS,
   DealType,
   DealPaymentEntry,
   FinanceDeal,
   PaymentScheduleEntry,
+  TASK_ASSIGNEES,
   dealContractValue,
   dealOutstanding,
   sumDealPayments,
@@ -102,10 +104,10 @@ const BunqPanel = dynamicImport(
 );
 
 const TABS = [
-  { id: "overview", label: "Overview", sub: "Finance deals (incl. VAT), allocation & salary pot" },
-  { id: "bunq", label: "Bunq", sub: "Incoming bank payments matched to deals" },
-  { id: "snelstart", label: "SnelStart", sub: "Invoices, paid amounts and outstanding from your books" },
-  { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax as a VOF" },
+  { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
+  { id: "bunq", label: "Bunq", sub: "Bank revenue → link to clients & orders" },
+  { id: "snelstart", label: "SnelStart", sub: "Invoices from your books (optional)" },
+  { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax (VOF)" },
   { id: "bv", label: "BV check", sub: "Whether converting to a BV is worth it yet" },
 ] as const;
 
@@ -440,6 +442,36 @@ export default function FinancePage() {
   );
   const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
 
+  const cashPosition = useMemo(() => {
+    const year = new Date().getFullYear();
+    const outstanding = deals.reduce((sum, d) => sum + dealOutstanding(d), 0);
+    const receivedYtd = deals.reduce((sum, d) => {
+      const payments = Array.isArray(d.payments) ? d.payments : [];
+      return (
+        sum +
+        payments.reduce((s, p) => {
+          if (!p?.date || !String(p.date).startsWith(String(year))) return s;
+          return s + (Number(p.amount) || 0);
+        }, 0)
+      );
+    }, 0);
+    const revenue = buildYearRevenue(deals, opportunities, year);
+    const reserve = buildTaxReserve(revenue, {
+      annualCosts: taxSettings.tax_annual_costs,
+      firstPartnerSharePct: taxSettings.tax_profit_split,
+      partners: TASK_ASSIGNEES.length,
+      includePipeline: false,
+      urencriterium: taxSettings.tax_urencriterium,
+      startersaftrek: taxSettings.tax_startersaftrek,
+    });
+    return {
+      outstanding,
+      receivedYtd,
+      taxSetAside: reserve.reserveToDate,
+      taxFullYear: reserve.reserveFullYear,
+    };
+  }, [deals, opportunities, taxSettings]);
+
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
   return (
@@ -452,7 +484,7 @@ export default function FinancePage() {
         {tab === "overview" && (
           <Button
             onClick={() => setManualDealOpen(true)}
-            className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium gap-2"
+            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
           >
             <Plus className="w-4 h-4" />
             Add deal
@@ -470,7 +502,7 @@ export default function FinancePage() {
             className={cn(
               "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
               tab === entry.id
-                ? "text-[#b8c47a] border-[#b8c47a]"
+                ? "text-[#d4e052] border-[#d4e052]"
                 : "text-neutral-500 border-transparent hover:text-neutral-200",
             )}
           >
@@ -505,6 +537,51 @@ export default function FinancePage() {
         <div className="h-64 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
       ) : summary && (
         <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Received YTD</p>
+              <p className="text-2xl font-mono font-semibold text-emerald-400">
+                {formatCurrency(cashPosition.receivedYtd)}
+              </p>
+              <p className="text-xs text-neutral-500 mt-1">On deals this year (incl. VAT)</p>
+            </div>
+            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Still outstanding</p>
+              <p
+                className={cn(
+                  "text-2xl font-mono font-semibold",
+                  cashPosition.outstanding > 0 ? "text-orange-300" : "text-emerald-400",
+                )}
+              >
+                {formatCurrency(cashPosition.outstanding)}
+              </p>
+              <p className="text-xs text-neutral-500 mt-1">Contracted minus paid</p>
+            </div>
+            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax set aside now</p>
+              <p className="text-2xl font-mono font-semibold text-[#d4e052]">
+                {formatCurrency(cashPosition.taxSetAside)}
+              </p>
+              <p className="text-xs text-neutral-500 mt-1">IB + Zvw on profit so far</p>
+            </div>
+            <div className="border border-neutral-800 rounded-lg px-5 py-4 bg-neutral-900/40">
+              <p className="text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax full-year est.</p>
+              <p className="text-2xl font-mono font-semibold text-neutral-100">
+                {formatCurrency(cashPosition.taxFullYear)}
+              </p>
+              <p className="text-xs text-neutral-500 mt-1">
+                Detail in{" "}
+                <button
+                  type="button"
+                  className="text-[#d4e052] hover:underline"
+                  onClick={() => setTab("tax")}
+                >
+                  Tax reserve
+                </button>
+              </p>
+            </div>
+          </div>
+
           {insightSeries.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <FinanceOutlookChart
@@ -541,7 +618,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Expected revenue</span>
                     <RevenueBreakdownTooltip
                       amount={insights.expected}
-                      amountClassName="text-[#b8c47a]"
+                      amountClassName="text-[#d4e052]"
                       breakdown={expectedBreakdown}
                       emptyMessage="No expected revenue this month"
                       onDealClick={handleDealBreakdownClick}
@@ -557,7 +634,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Actual revenue</span>
                     <RevenueBreakdownTooltip
                       amount={insights.actual}
-                      amountClassName="text-stone-300"
+                      amountClassName="text-emerald-400"
                       breakdown={actualBreakdown}
                       emptyMessage="No payments recorded this month"
                       onDealClick={handleDealBreakdownClick}
@@ -567,7 +644,7 @@ export default function FinancePage() {
                     <div className="flex items-center gap-2 mt-1.5">
                       <div className="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-stone-500/50 rounded-full transition-all"
+                          className="h-full bg-emerald-500/70 rounded-full transition-all"
                           style={{ width: `${Math.min(100, insights.expected > 0 ? (insights.actual / insights.expected) * 100 : 0)}%` }}
                         />
                       </div>
@@ -598,7 +675,7 @@ export default function FinancePage() {
                     <span className="text-xs text-neutral-500">Available salary</span>
                     <span className={cn(
                       "text-sm font-mono font-semibold",
-                      insights.availableSalary >= 0 ? "text-stone-300" : "text-neutral-400"
+                      insights.availableSalary >= 0 ? "text-emerald-400" : "text-orange-300"
                     )}>
                       {insights.availableSalary >= 0
                         ? formatCurrency(insights.availableSalary) + " surplus"
@@ -611,7 +688,7 @@ export default function FinancePage() {
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          insights.availableSalary >= 0 ? "bg-stone-500" : "bg-neutral-500/50"
+                          insights.availableSalary >= 0 ? "bg-emerald-500" : "bg-neutral-500/50"
                         )}
                         style={{
                           width: `${Math.min(
@@ -688,7 +765,7 @@ export default function FinancePage() {
                               <span className={cn(
                                 "text-xs font-mono px-2 py-0.5 rounded",
                                 deal.deal_type === "project"
-                                  ? "bg-stone-900/80 text-stone-300"
+                                  ? "bg-violet-950 text-violet-300"
                                   : "bg-blue-950 text-blue-300"
                               )}>
                                 {DEAL_TYPE_LABELS[deal.deal_type]}
@@ -698,7 +775,7 @@ export default function FinancePage() {
                               <div className="flex items-center justify-end gap-3 font-mono text-sm">
                                 <span className="text-neutral-300">{formatCurrency(contractValue)}</span>
                                 <span className="text-neutral-700">·</span>
-                                <span className={outstanding > 0 ? "text-neutral-400" : "text-stone-300"}>
+                                <span className={outstanding > 0 ? "text-orange-300" : "text-emerald-400"}>
                                   {formatCurrency(outstanding)} left
                                 </span>
                               </div>
@@ -708,14 +785,14 @@ export default function FinancePage() {
                                     <div
                                       className={cn(
                                         "h-full rounded-full transition-all",
-                                        paidPct >= 100 ? "bg-stone-500" : paidPct > 0 ? "bg-stone-500/50" : ""
+                                        paidPct >= 100 ? "bg-emerald-500" : paidPct > 0 ? "bg-emerald-500/70" : ""
                                       )}
                                       style={{ width: `${paidPct}%` }}
                                     />
                                   </div>
                                   <span className={cn(
                                     "text-[10px] font-mono tabular-nums w-8 text-right",
-                                    paidPct >= 100 ? "text-stone-300" : paidPct > 0 ? "text-neutral-500" : "text-neutral-700"
+                                    paidPct >= 100 ? "text-emerald-400" : paidPct > 0 ? "text-neutral-500" : "text-neutral-700"
                                   )}>
                                     {paidPct}%
                                   </span>
@@ -748,11 +825,11 @@ export default function FinancePage() {
                           </span>
                           <div className="w-full bg-neutral-800 rounded-t relative" style={{ height: "80px" }}>
                             <div
-                              className={`absolute bottom-0 w-full rounded-t transition-all ${isCurrentMonth ? "bg-[#b8c47a]" : "bg-neutral-600"}`}
+                              className={`absolute bottom-0 w-full rounded-t transition-all ${isCurrentMonth ? "bg-[#d4e052]" : "bg-neutral-600"}`}
                               style={{ height: `${pct}%` }}
                             />
                           </div>
-                          <span className={`text-xs font-mono ${isCurrentMonth ? "text-[#b8c47a]" : "text-neutral-700"}`}>
+                          <span className={`text-xs font-mono ${isCurrentMonth ? "text-[#d4e052]" : "text-neutral-700"}`}>
                             {h.month.slice(5)}
                           </span>
                         </div>
@@ -805,7 +882,7 @@ export default function FinancePage() {
                       className={cn(
                         "px-4 py-2 rounded text-sm font-medium border transition-colors",
                         editForm.deal_type === type
-                          ? "bg-[#b8c47a]/10 border-[#b8c47a] text-[#b8c47a]"
+                          ? "bg-[#d4e052]/10 border-[#d4e052] text-[#d4e052]"
                           : "border-neutral-700 text-neutral-500 hover:text-neutral-300"
                       )}
                     >
@@ -985,11 +1062,11 @@ export default function FinancePage() {
                       </div>
                       <div>
                         <p className="text-xs text-neutral-500">Paid (incl. VAT)</p>
-                        <p className="font-mono text-stone-300 mt-0.5">{formatCurrency(amountPaid)}</p>
+                        <p className="font-mono text-emerald-400 mt-0.5">{formatCurrency(amountPaid)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-neutral-500">Outstanding (incl. VAT)</p>
-                        <p className={cn("font-mono mt-0.5", outstanding > 0 ? "text-neutral-400" : "text-stone-300")}>
+                        <p className={cn("font-mono mt-0.5", outstanding > 0 ? "text-orange-300" : "text-emerald-400")}>
                           {formatCurrency(outstanding)}
                         </p>
                       </div>
@@ -1003,7 +1080,7 @@ export default function FinancePage() {
                         </div>
                         <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-stone-500 rounded-full transition-all"
+                            className="h-full bg-emerald-500 rounded-full transition-all"
                             style={{ width: `${paidPct}%` }}
                           />
                         </div>
@@ -1032,7 +1109,7 @@ export default function FinancePage() {
               type="button"
               disabled={savingDeal}
               onClick={saveDeal}
-              className="bg-[#b8c47a] hover:bg-[#a3ad68] text-neutral-950 font-medium"
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium"
             >
               {savingDeal ? "Saving..." : "Save"}
             </Button>

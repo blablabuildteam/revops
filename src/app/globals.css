@@ -25,19 +25,19 @@ html.light .text-neutral-950 {
 }
 
 /* Accent text → muted olive in light mode for legibility                    */
-html.light .text-\[\#b8c47a\] {
-  color: #5a6340;
+html.light .text-\[\#d4e052\] {
+  color: #5c6608;
 }
 
 /* Active nav bg tint: slightly stronger on white                            */
-html.light .bg-\[\#b8c47a\]\/10 {
+html.light .bg-\[\#d4e052\]\/10 {
   background-color: rgba(90, 99, 64, 0.1);
 }
 
 :root {
   --font-sans: "Space Grotesk", var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --bb-accent: #b8c47a;
+  --bb-accent: #d4e052;
 }
 
 @theme inline {
