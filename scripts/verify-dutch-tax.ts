@@ -101,12 +101,13 @@ if (bv.dgaSalaryTotal !== 116_000) {
   console.log("[PASS] statutory salary applied for both directors");
 }
 
-console.log("\n--- BV advantage band (2 partners) ---");
+console.log("\n--- BV advantage band (2 partners, holding-style retain) ---");
 for (const extraAnnualCost of [0, 2_500, 5_000]) {
   const range = findBvAdvantageRange({
     partners: 2,
     urencriterium: true,
     extraAnnualCost,
+    payout: "salary_only",
   });
   const from = range.from === null ? "never" : `EUR ${range.from.toLocaleString("nl-NL")}`;
   const to = range.to === null ? "no upper bound" : `EUR ${range.to.toLocaleString("nl-NL")}`;
@@ -114,24 +115,25 @@ for (const extraAnnualCost of [0, 2_500, 5_000]) {
     `       extra BV cost ${extraAnnualCost}: BV wins from ${from} up to ${to} ` +
       `(peak +${range.peakAdvantage.toFixed(0)} at ${range.peakProfit.toLocaleString("nl-NL")})`,
   );
-  if (range.from !== null && range.from < 100_000) {
-    failures++;
-    console.log("[FAIL] break-even below 100,000 looks wrong for two statutory salaries");
-  }
 }
 
-console.log("\n--- Profit sweep (2 partners, 50/50, 2,500 extra BV cost) ---");
+console.log("\n--- Profit sweep holding-style (retain after VPB) ---");
 for (const profit of [
   80_000, 120_000, 160_000, 180_000, 200_000, 250_000, 300_000, 400_000, 500_000,
   600_000, 800_000, 1_000_000,
 ]) {
   const perPartner = partnerIncomeTax(profit / 2, { urencriterium: true });
   const vofNet = (profit / 2 - perPartner.totalDue) * 2;
-  const bvScenario = bvTax(profit, { partners: 2, extraAnnualCost: 2_500 });
-  const delta = bvScenario.totalNet - vofNet;
+  const bvScenario = bvTax(profit, {
+    partners: 2,
+    extraAnnualCost: 2_500,
+    payout: "salary_only",
+  });
+  const delta = bvScenario.economicNet - vofNet;
   console.log(
-    `       profit ${String(profit).padStart(7)}: VOF net ${vofNet.toFixed(0).padStart(7)}, ` +
-      `BV net ${bvScenario.totalNet.toFixed(0).padStart(7)}, ` +
+    `       profit ${String(profit).padStart(7)}: VOF ${vofNet.toFixed(0).padStart(7)}, ` +
+      `BV wealth ${bvScenario.economicNet.toFixed(0).padStart(7)} ` +
+      `(cash ${bvScenario.totalNet.toFixed(0)} + retained ${bvScenario.retainedInBv.toFixed(0)}), ` +
       `diff ${delta >= 0 ? "+" : ""}${delta.toFixed(0)}`,
   );
 }

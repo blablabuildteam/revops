@@ -38,9 +38,21 @@ function ChartTooltip({
           <span className="font-mono text-[#e8ff47]">{formatCurrency(point.vofNet)}</span>
         </div>
         <div className="flex items-center justify-between gap-6">
-          <span className="text-neutral-400">BV net</span>
+          <span className="text-neutral-400">BV total</span>
           <span className="font-mono text-violet-400">{formatCurrency(point.bvNet)}</span>
         </div>
+        {point.bvRetained > 0 && (
+          <>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-neutral-500">· cash (salary)</span>
+              <span className="font-mono text-neutral-400">{formatCurrency(point.bvCash)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <span className="text-neutral-500">· left in BV</span>
+              <span className="font-mono text-neutral-400">{formatCurrency(point.bvRetained)}</span>
+            </div>
+          </>
+        )}
       </div>
       <div className="mt-2 pt-2 border-t border-neutral-800 flex items-center justify-between gap-6">
         <span className="text-neutral-500">{bvWins ? "BV ahead" : "VOF ahead"}</span>

@@ -87,7 +87,7 @@ export function BvCheckPanel({
   settings: TaxSettings;
   onSettingsChange: (patch: Partial<TaxSettings>) => void;
 }) {
-  const [retainProfit, setRetainProfit] = useState(false);
+  const [retainProfit, setRetainProfit] = useState(true);
   const year = new Date().getFullYear();
   const partners = TASK_ASSIGNEES.length;
 
@@ -120,8 +120,10 @@ export function BvCheckPanel({
       startersaftrek: settings.tax_startersaftrek,
       dgaSalary: settings.bv_dga_salary,
       extraAnnualCost: settings.bv_extra_annual_cost,
+      // Holding-style by default: salary out, rest stays in the BV after VPB.
+      payout: (retainProfit ? "salary_only" : "full") as "salary_only" | "full",
     }),
-    [partners, settings],
+    [partners, settings, retainProfit],
   );
 
   const series = useMemo(
@@ -162,18 +164,6 @@ export function BvCheckPanel({
     [profit, partners, settings, retainProfit],
   );
 
-  // The headline cards always compare the full-payout scenario, so that the
-  // BV column stays comparable to the VOF one even while the toggle is on.
-  const bvFullPayout = useMemo(
-    () =>
-      bvTax(profit, {
-        partners,
-        dgaSalary: settings.bv_dga_salary,
-        extraAnnualCost: settings.bv_extra_annual_cost,
-      }),
-    [profit, partners, settings],
-  );
-
   const favoursBv = current.difference > 0;
   const inBand =
     range.from !== null &&
@@ -182,18 +172,22 @@ export function BvCheckPanel({
   const toBreakEven = range.from !== null ? range.from - profit : null;
 
   const headline = favoursBv
-    ? `A BV would net you about ${formatCurrency(current.difference)} more per year`
+    ? retainProfit
+      ? `A BV would leave you about ${formatCurrency(current.difference)} richer per year`
+      : `A BV would net you about ${formatCurrency(current.difference)} more cash per year`
     : range.from === null
       ? "A BV does not pay off at any profit level for you"
-      : `Stay a VOF — a BV would cost you about ${formatCurrency(-current.difference)} per year`;
+      : `Stay a VOF — a BV would leave you about ${formatCurrency(-current.difference)} worse off`;
 
   const body = favoursBv
-    ? `At ${formatCurrency(profit)} profit the lower corporate rate outweighs the two statutory salaries and the extra running costs. Worth discussing with your accountant, including the transfer itself.`
+    ? retainProfit
+      ? `At ${formatCurrency(profit)} profit you take two statutory salaries and leave the rest in the BV after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — you just have not paid box 2 on it yet. This is how a holding structure usually works.`
+      : `At ${formatCurrency(profit)} profit, even after paying box 2 on a full dividend, the BV still beats the VOF.`
     : range.from === null
-      ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current settings. Raising the profit split or lowering the extra BV costs may change that."
+      ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current settings."
       : toBreakEven !== null && toBreakEven > 0
         ? `You would need roughly ${formatCurrency(toBreakEven)} more yearly profit before it flips. Below that, two salaries of ${formatCurrency(settings.bv_dga_salary)} plus ${formatCurrency(settings.bv_extra_annual_cost)} of extra costs eat the rate advantage.`
-        : `Your profit sits above the band where a BV wins. The 12.7% mkb-winstvrijstelling has no ceiling, so at high profits the VOF pulls ahead again.`;
+        : `Your profit sits above the band where a BV wins under these assumptions.`;
 
   return (
     <div className="space-y-6">
@@ -207,17 +201,29 @@ export function BvCheckPanel({
         <StatCard
           label="As a VOF"
           value={formatCurrency(current.vofNet)}
-          sub={`Net for both partners · ${formatPercent(vof.effectiveRate)} tax`}
+          sub={`Net cash for both partners · ${formatPercent(vof.effectiveRate)} tax`}
         />
         <StatCard
           label="As a BV"
           value={formatCurrency(current.bvNet)}
-          sub={`Salary + dividend · ${formatPercent(bvFullPayout.effectiveRate)} tax`}
+          sub={
+            retainProfit
+              ? `Salary in hand + ${formatCurrency(current.bvRetained)} left in BV`
+              : `Salary + dividend after box 2 · ${formatPercent(bv.effectiveRate)} tax`
+          }
         />
         <StatCard
           label="Difference"
           value={`${favoursBv ? "+" : "−"}${formatCurrency(Math.abs(current.difference))}`}
-          sub={favoursBv ? "In favour of a BV" : "In favour of the VOF"}
+          sub={
+            retainProfit
+              ? favoursBv
+                ? "Richer with a BV (incl. retained equity)"
+                : "VOF still ahead on total wealth"
+              : favoursBv
+                ? "In favour of a BV (cash)"
+                : "In favour of the VOF (cash)"
+          }
           tone={favoursBv ? "positive" : "warning"}
         />
       </div>
@@ -228,28 +234,33 @@ export function BvCheckPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              Net income by legal form
+              {retainProfit ? "Wealth by legal form" : "Cash by legal form"}
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              What both partners keep together, across yearly profit levels
+              {retainProfit
+                ? "VOF = cash after tax. BV = net salary + equity left in the company after VPB (box 2 deferred)."
+                : "Both sides paid out privately this year, including box 2 on BV dividends."}
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs">
+          <ToggleChip active={retainProfit} onClick={() => setRetainProfit((v) => !v)}>
+            Keep profit in the BV
+          </ToggleChip>
+        </div>
+        <div className="flex items-center gap-4 text-xs -mt-1">
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 h-0.5 bg-[#e8ff47]" />
+            <span className="text-neutral-400">VOF</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 h-0.5 bg-violet-400" />
+            <span className="text-neutral-400">BV</span>
+          </span>
+          {range.from !== null && (
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-0.5 bg-[#e8ff47]" />
-              <span className="text-neutral-400">VOF</span>
+              <span className="w-4 h-2.5 rounded-sm bg-violet-400/15 border border-violet-400/30" />
+              <span className="text-neutral-400">BV ahead</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-0.5 bg-violet-400" />
-              <span className="text-neutral-400">BV</span>
-            </span>
-            {range.from !== null && (
-              <span className="flex items-center gap-1.5">
-                <span className="w-4 h-2.5 rounded-sm bg-violet-400/15 border border-violet-400/30" />
-                <span className="text-neutral-400">BV ahead</span>
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
         <BvComparisonChart
@@ -319,9 +330,9 @@ export function BvCheckPanel({
         <div className={`${CARD} space-y-3`}>
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-medium text-neutral-300">BV scenario</h2>
-            <ToggleChip active={retainProfit} onClick={() => setRetainProfit((v) => !v)}>
-              Keep profit in the BV
-            </ToggleChip>
+            <span className="text-xs text-neutral-500">
+              {retainProfit ? "Holding-style (retain)" : "Full dividend payout"}
+            </span>
           </div>
           <AmountRow label="Profit before salaries" value={profit} />
           <AmountRow
@@ -419,15 +430,17 @@ export function BvCheckPanel({
         <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
         <div className="space-y-1.5 leading-relaxed">
           <p>
-            Tax is only part of the decision. A BV also limits personal liability,
-            makes it easier to bring in a shareholder or sell the business, and lets
-            you park profit at {formatPercent(VPB_LOW_RATE, 0)} instead of paying box 1
-            rates on it straight away.
+            Default view matches how most BV setups actually run: each director takes
+            the statutory salary, the company pays {formatPercent(VPB_LOW_RATE, 0)} VPB
+            on the rest, and that equity stays in the BV (or a holding) until you take a
+            private dividend — which is when box 2 is due. Turn off “Keep profit in the
+            BV” to force a full payout comparison instead.
           </p>
           <p>
-            Against that: annual accounts, payroll administration, a mandatory salary
-            even in a bad year, and the conversion itself. A tax-neutral conversion via
-            a holding structure carries a continuation requirement of several years.
+            Still not modelled: separate holding + work BV entities, management fees
+            between them, fiscal unity, or employee insurance beyond Zvw. Tax is also
+            only part of the decision — liability, selling the business, and the
+            conversion itself matter too.
           </p>
           <Disclaimer>
             An indication based on {new Date().getFullYear()} rates, not tax advice. Run

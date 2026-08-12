@@ -291,6 +291,13 @@ export type BvTaxResult = {
   retainedInBv: number;
   /** Box 2 that would still be due on the retained profit. */
   deferredBox2: number;
+  /**
+   * Cash this year + equity left in the BV after VPB.
+   * This is the holding-style picture: you have not paid box 2 yet on
+   * retained profit, so the firm is wealthier even if your private
+   * account is not.
+   */
+  economicNet: number;
   effectiveRate: number;
 };
 
@@ -330,6 +337,7 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
 
   if (payout === "salary_only") {
     const deferredBox2 = box2Tax(distributable / partners) * partners;
+    const economicNet = netSalaryTotal + distributable;
     return {
       totalProfit: profit,
       dgaSalaryTotal,
@@ -344,6 +352,8 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
       totalNet: netSalaryTotal,
       retainedInBv: distributable,
       deferredBox2,
+      economicNet,
+      // Tax paid this year only — deferred box 2 is not counted yet.
       effectiveRate: profit > 0 ? (salaryTaxTotal + vpb + employerZvw) / profit : 0,
     };
   }
@@ -366,6 +376,7 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
     totalNet,
     retainedInBv: 0,
     deferredBox2: 0,
+    economicNet: totalNet,
     effectiveRate: profit > 0 ? (profit - totalNet) / profit : 0,
   };
 }
@@ -377,9 +388,14 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
 export type ComparisonPoint = {
   profit: number;
   vofNet: number;
+  /** BV figure used for the comparison (cash, or cash + retained equity). */
   bvNet: number;
-  /** Positive means the BV leaves more money in your pocket. */
+  /** Positive means the BV leaves more money/wealth than the VOF. */
   difference: number;
+  /** Cash in partners' pockets under the BV scenario. */
+  bvCash: number;
+  /** Equity left in the BV after VPB (0 when everything is paid out). */
+  bvRetained: number;
 };
 
 export type ComparisonOptions = PartnerTaxOptions &
@@ -388,19 +404,31 @@ export type ComparisonOptions = PartnerTaxOptions &
     profitShares?: number[];
   };
 
+/**
+ * Compare VOF vs BV at one profit level.
+ *
+ * Default payout is `salary_only` (holding-style): partners take the
+ * statutory salary and leave the rest in the BV after VPB. The BV side of
+ * the comparison then counts that retained equity as wealth — which is how
+ * a holding structure actually works until you take a private dividend.
+ * Pass `payout: "full"` to force an immediate box 2 hit on everything.
+ */
 export function compareAtProfit(
   profit: number,
   options: ComparisonOptions = {},
 ): ComparisonPoint {
   const partners = options.partners ?? options.profitShares?.length ?? 2;
   const shares = options.profitShares ?? Array(partners).fill(1);
+  const payout = options.payout ?? "salary_only";
   const vof = vofTax(splitProfit(profit, shares), options);
-  const bv = bvTax(profit, { ...options, partners });
+  const bv = bvTax(profit, { ...options, partners, payout });
   return {
     profit,
     vofNet: vof.totalNet,
-    bvNet: bv.totalNet,
-    difference: bv.totalNet - vof.totalNet,
+    bvNet: bv.economicNet,
+    difference: bv.economicNet - vof.totalNet,
+    bvCash: bv.totalNet,
+    bvRetained: bv.retainedInBv,
   };
 }
 

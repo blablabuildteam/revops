@@ -5,11 +5,12 @@ export const dynamic = "force-dynamic";
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useProjects, useAllocations, useOpportunities, useUsers } from "@/hooks/use-api-data";
+import { useProjects, useAllocations, useOpportunities, useUsers, useFinanceDeals } from "@/hooks/use-api-data";
 import { saveAllocations, type AllocationEntry } from "@/lib/api";
 import { UserAvatar } from "@/components/user-avatar";
 import { avatarForName } from "@/components/assignee-select";
 import { useSession } from "@/components/session-provider";
+import { DealLoadPanel } from "./deal-load-panel";
 import {
   TASK_ASSIGNEES,
   ALLOCATION_GENERIC_ID,
@@ -28,6 +29,7 @@ import {
   type Stage,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { TARGET_HOURLY_RATE } from "@/lib/deal-capacity";
 
 /** Default unit for the whole page is based on who is logged in. */
 function defaultUnitForViewer(viewerName: string): AllocationUnit {
@@ -121,7 +123,9 @@ export default function AllocationPage() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
   const { data: allocations = [], isLoading: allocationsLoading } = useAllocations();
+  const { data: deals = [] } = useFinanceDeals();
   const { data: users = [] } = useUsers();
+  const [tab, setTab] = useState<"weeks" | "load">("weeks");
 
   const orderedAssignees = useMemo(() => {
     const list = [...TASK_ASSIGNEES];
@@ -447,7 +451,7 @@ export default function AllocationPage() {
 
   return (
     <div className="p-6 max-w-full">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <Users className="w-6 h-6 text-[#e8ff47]" />
           <h1 className="text-xl font-semibold text-neutral-100">Allocation</h1>
@@ -457,84 +461,121 @@ export default function AllocationPage() {
             {openOpportunities.length} opportunit{openOpportunities.length !== 1 ? "ies" : "y"}
           </span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setWeekOffset((p) => p - VISIBLE_WEEKS)}
-            className="text-neutral-400 hover:text-neutral-200"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setWeekOffset(0)}
-            className="text-xs text-neutral-400 hover:text-neutral-200 px-3"
-          >
-            Today
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setWeekOffset((p) => p + VISIBLE_WEEKS)}
-            className="text-neutral-400 hover:text-neutral-200"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-        </div>
+        {tab === "weeks" && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setWeekOffset((p) => p - VISIBLE_WEEKS)}
+              className="text-neutral-400 hover:text-neutral-200"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setWeekOffset(0)}
+              className="text-xs text-neutral-400 hover:text-neutral-200 px-3"
+            >
+              Today
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setWeekOffset((p) => p + VISIBLE_WEEKS)}
+              className="text-neutral-400 hover:text-neutral-200"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
-      <p className="text-xs text-neutral-600 mb-4">
-        Click a cell to set allocation, or drag horizontally to fill consecutive weeks.
-        Hours use a {ALLOCATION_WEEKLY_HOURS}h week (= 100%).
-      </p>
-
-      <div className="space-y-6">
-        {orderedAssignees.map((person) => {
-          const canEdit = Boolean(viewerName && person === viewerName);
-          return (
-            <PersonAllocation
-              key={person}
-              person={person}
-              viewerName={viewerName}
-              canEdit={canEdit}
-              avatarUrl={avatarForName(users, person)}
-              projects={activeProjects}
-              opportunities={openOpportunities}
-              weeks={weeks}
-              getValue={getValue}
-              getWeekTotal={getWeekTotal}
-              onPick={(targetType, targetId, week, pct) => {
-                if (!canEdit) return;
-                applyValue(person, targetType, targetId, week, pct);
-                setActivePicker(null);
-              }}
-              activePicker={
-                activePicker?.person === person
-                  ? {
-                      targetType: activePicker.targetType,
-                      targetId: activePicker.targetId,
-                      week: activePicker.week,
-                    }
-                  : null
-              }
-              onOpenPicker={(targetType, targetId, week) => {
-                if (!canEdit) return;
-                setActivePicker({ person, targetType, targetId, week });
-              }}
-              onClosePicker={() => setActivePicker(null)}
-              isCurrentWeek={isCurrentWeek}
-              onDragFillStart={(targetType, targetId, weekIdx, pct) =>
-                beginDragFill(person, targetType, targetId, weekIdx, pct)
-              }
-              dragHighlight={
-                dragHighlight?.person === person ? dragHighlight : null
-              }
-            />
-          );
-        })}
+      <div className="flex items-center gap-1 border-b border-neutral-800 mb-5">
+        {(
+          [
+            { id: "weeks" as const, label: "Week grid" },
+            { id: "load" as const, label: `Deal load · €${TARGET_HOURLY_RATE}/h` },
+          ] as const
+        ).map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setTab(entry.id)}
+            aria-current={tab === entry.id ? "page" : undefined}
+            className={cn(
+              "relative px-3 py-2 text-sm transition-colors -mb-px border-b-2",
+              tab === entry.id
+                ? "text-[#e8ff47] border-[#e8ff47]"
+                : "text-neutral-500 border-transparent hover:text-neutral-200",
+            )}
+          >
+            {entry.label}
+          </button>
+        ))}
       </div>
+
+      {tab === "load" ? (
+        <DealLoadPanel
+          deals={deals}
+          projects={projects}
+          opportunities={opportunities}
+          allocations={allocations}
+        />
+      ) : (
+        <>
+          <p className="text-xs text-neutral-600 mb-4">
+            Click a cell to set allocation, or drag horizontally to fill consecutive weeks.
+            Hours use a {ALLOCATION_WEEKLY_HOURS}h week (= 100%).
+          </p>
+
+          <div className="space-y-6">
+            {orderedAssignees.map((person) => {
+              const canEdit = Boolean(viewerName && person === viewerName);
+              return (
+                <PersonAllocation
+                  key={person}
+                  person={person}
+                  viewerName={viewerName}
+                  canEdit={canEdit}
+                  avatarUrl={avatarForName(users, person)}
+                  projects={activeProjects}
+                  opportunities={openOpportunities}
+                  weeks={weeks}
+                  getValue={getValue}
+                  getWeekTotal={getWeekTotal}
+                  onPick={(targetType, targetId, week, pct) => {
+                    if (!canEdit) return;
+                    applyValue(person, targetType, targetId, week, pct);
+                    setActivePicker(null);
+                  }}
+                  activePicker={
+                    activePicker?.person === person
+                      ? {
+                          targetType: activePicker.targetType,
+                          targetId: activePicker.targetId,
+                          week: activePicker.week,
+                        }
+                      : null
+                  }
+                  onOpenPicker={(targetType, targetId, week) => {
+                    if (!canEdit) return;
+                    setActivePicker({ person, targetType, targetId, week });
+                  }}
+                  onClosePicker={() => setActivePicker(null)}
+                  isCurrentWeek={isCurrentWeek}
+                  onDragFillStart={(targetType, targetId, weekIdx, pct) =>
+                    beginDragFill(person, targetType, targetId, weekIdx, pct)
+                  }
+                  dragHighlight={
+                    dragHighlight?.person === person ? dragHighlight : null
+                  }
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
