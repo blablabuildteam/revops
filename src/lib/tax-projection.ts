@@ -32,8 +32,11 @@ function monthKey(year: number, monthIndex: number) {
 
 /**
  * Revenue picture for one calendar year, split into what has landed and what
- * is still expected. Deal amounts are stored including VAT, so everything is
- * converted to a net figure here — VAT is never part of the profit.
+ * is still expected.
+ *
+ * Finance deals + payments are stored **incl. VAT**; opportunities are **excl.
+ * VAT** (pipeline forecast adds VAT so it compares to deal cash, then we strip
+ * everything here). VAT is never part of the profit.
  *
  * Confirmed path  = realised payments + unpaid schedule on finance deals.
  * Pipeline path   = same + probability-weighted open opportunities.

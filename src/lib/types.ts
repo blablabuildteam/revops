@@ -1,4 +1,4 @@
-import { addVat } from "@/lib/vat";
+import { addVat, removeVat } from "@/lib/vat";
 import { parseLocalDate, toMonthInputValue } from "@/lib/format";
 
 export type Stage =
@@ -512,8 +512,10 @@ export function actualRevenueForMonth(deals: FinanceDeal[], month: string): numb
 export function monthlyInsights(deals: FinanceDeal[], month: string) {
   const expected = expectedRevenueForMonth(deals, month);
   const actual = actualRevenueForMonth(deals, month);
-  const actualIncomeTax = actual * INCOME_TAX_PCT;
-  const availableSalary = actual - actualIncomeTax - SALARY_MONTHLY;
+  // Deal payments are stored incl. VAT; tax is due on the excl. portion.
+  const actualNet = removeVat(actual);
+  const actualIncomeTax = actualNet * INCOME_TAX_PCT;
+  const availableSalary = actualNet - actualIncomeTax - SALARY_MONTHLY;
   return { expected, actual, actualIncomeTax, availableSalary, salaryTarget: SALARY_MONTHLY };
 }
 
@@ -621,7 +623,14 @@ export function buildInsightSeries(
     const expected = expectedRevenueForMonth(deals, m);
     const actual = actualRevenueForMonth(deals, m);
     const forecast = forecastRevenueForMonth(opportunities, m);
-    series.push({ month: m, expected, actual, forecast, netAfterSalary: expected - SALARY_MONTHLY });
+    // Chart revenue is incl. VAT; "net after salary" uses excl. VAT as the profit base.
+    series.push({
+      month: m,
+      expected,
+      actual,
+      forecast,
+      netAfterSalary: removeVat(expected) - SALARY_MONTHLY,
+    });
   }
   return series;
 }

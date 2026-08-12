@@ -186,7 +186,7 @@ export function FinanceOutlookChart({
     <div className="lg:col-span-3 border border-neutral-800 rounded-lg p-5 bg-neutral-900/40">
       <h2 className="text-sm font-medium text-neutral-300 mb-1">12-month revenue outlook</h2>
       <p className="text-xs text-neutral-600 mb-4">
-        Expected vs actual revenue (incl. VAT) and net after €9k salary
+        Expected vs actual revenue (incl. VAT); net after salary uses excl. VAT
       </p>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>

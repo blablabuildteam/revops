@@ -1,3 +1,14 @@
+/**
+ * VAT convention in this app:
+ *
+ * - Opportunities (`expected_value`): stored **excl. VAT** (deal order).
+ * - Finance deals (`total_deal_value`, `monthly_fee`, `monthly_revshare`) and
+ *   deal payments / Bunq amounts: stored **incl. VAT** so they match the bank.
+ * - Capacity (€175/h) and tax profit: always work on **excl. VAT**
+ *   (strip VAT from finance deals; opportunities are already net).
+ * - Pipeline revenue charts that sit next to cash: add VAT to opportunities
+ *   so they line up with deal amounts, then strip again for tax.
+ */
 export const VAT_RATE = 0.21;
 export const VAT_MULTIPLIER = 1.21;
 
