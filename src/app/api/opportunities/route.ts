@@ -39,20 +39,24 @@ export async function POST(req: NextRequest) {
     const {
       name, description, company_id, type, stage, probability,
       expected_value, actual_value, currency, sentiment,
-      proposal_status, proposal_url, owner, close_date, start_date, end_date, notes, tags,
+      proposal_status, proposal_url, owner, close_date, start_date, end_date, delivery_weeks, notes, tags,
     } = body;
+
+    const deliveryWeeksValue =
+      delivery_weeks == null || delivery_weeks === "" ? null : Number(delivery_weeks);
 
     const { rows } = await sql`
       INSERT INTO opportunities (
         name, description, company_id, type, stage, probability,
         expected_value, actual_value, currency, sentiment,
-        proposal_status, proposal_url, owner, close_date, start_date, end_date, notes, tags
+        proposal_status, proposal_url, owner, close_date, start_date, end_date, delivery_weeks, notes, tags
       ) VALUES (
         ${name}, ${asNull(description)}, ${asNull(company_id)},
         ${type}, ${stage}, ${probability},
         ${expected_value}, ${actual_value}, ${currency}, ${sentiment},
         ${asNull(proposal_status)}, ${asNull(proposal_url)}, ${asNull(owner)},
-        ${asNull(close_date)}, ${asNull(start_date)}, ${asNull(end_date)}, ${asNull(notes)}, ${tags ?? null}
+        ${asNull(close_date)}, ${asNull(start_date)}, ${asNull(end_date)}, ${deliveryWeeksValue},
+        ${asNull(notes)}, ${tags ?? null}
       )
       RETURNING *,
         expected_value * probability / 100 AS weighted_value

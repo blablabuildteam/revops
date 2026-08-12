@@ -71,6 +71,15 @@ export async function PUT(
         close_date = ${dateAsNull(has("close_date") ? body.close_date : current.close_date)},
         start_date = ${dateAsNull(has("start_date") ? body.start_date : current.start_date)},
         end_date = ${dateAsNull(has("end_date") ? body.end_date : current.end_date)},
+        delivery_weeks = ${
+          has("delivery_weeks")
+            ? body.delivery_weeks == null || body.delivery_weeks === ""
+              ? null
+              : Number(body.delivery_weeks)
+            : current.delivery_weeks == null
+              ? null
+              : Number(current.delivery_weeks)
+        },
         notes = ${val("notes", current.notes)},
         tags = ${val("tags", current.tags)},
         updated_at = now()

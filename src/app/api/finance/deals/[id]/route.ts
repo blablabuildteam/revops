@@ -49,6 +49,7 @@ export async function PUT(
       total_deal_value,
       start_date,
       end_date,
+      delivery_weeks,
       payment_schedule,
       monthly_fee,
       monthly_revshare,
@@ -61,6 +62,14 @@ export async function PUT(
     const endDateValue = has("end_date")
       ? normalizeDateParam(end_date)
       : normalizeDateParam(current.end_date as string | Date | null);
+
+    const deliveryWeeksValue = has("delivery_weeks")
+      ? delivery_weeks == null || delivery_weeks === ""
+        ? null
+        : Number(delivery_weeks)
+      : current.delivery_weeks == null
+        ? null
+        : Number(current.delivery_weeks);
 
     const normalizedPayments = has("payments")
       ? normalizeDealPayments(payments)
@@ -79,6 +88,7 @@ export async function PUT(
         total_deal_value = COALESCE(${total_deal_value ?? null}, total_deal_value),
         start_date = ${startDateValue},
         end_date = ${endDateValue},
+        delivery_weeks = ${deliveryWeeksValue},
         payment_schedule = ${JSON.stringify(normalizedSchedule)},
         monthly_fee = COALESCE(${monthly_fee ?? null}, monthly_fee),
         monthly_revshare = COALESCE(${monthly_revshare ?? null}, monthly_revshare),

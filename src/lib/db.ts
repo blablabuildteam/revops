@@ -127,6 +127,8 @@ async function runSchemaMigrations() {
   await sql`UPDATE todos SET priority = 'low' WHERE priority != 'low'`;
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS payments JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+  await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
   await ensureTaskCreatedByConstraint();
   await sql`
@@ -172,6 +174,7 @@ async function runSchemaMigrations() {
       total_deal_value NUMERIC(12,2) DEFAULT 0,
       start_date DATE,
       end_date DATE,
+      delivery_weeks NUMERIC(6,1),
       payment_schedule JSONB DEFAULT '[]',
       monthly_fee NUMERIC(12,2) DEFAULT 0,
       monthly_revshare NUMERIC(12,2) DEFAULT 0,
@@ -349,7 +352,10 @@ async function _init() {
       WHERE table_schema = 'public' AND table_name = 'users'
     `;
     if (Number(rows[0].c) > 0) {
-      // Fast path: skip all DDL/backfill unless explicitly requested.
+      // Cheap, idempotent column adds needed by capacity planning.
+      await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
         await runSchemaMigrations();
@@ -409,6 +415,7 @@ async function _init() {
       close_date DATE,
       start_date DATE,
       end_date DATE,
+      delivery_weeks NUMERIC(6,1),
       notes TEXT,
       tags TEXT[],
       created_at TIMESTAMPTZ DEFAULT now(),
@@ -585,6 +592,7 @@ async function _init() {
       total_deal_value NUMERIC(12,2) DEFAULT 0,
       start_date DATE,
       end_date DATE,
+      delivery_weeks NUMERIC(6,1),
       payment_schedule JSONB DEFAULT '[]',
       monthly_fee NUMERIC(12,2) DEFAULT 0,
       monthly_revshare NUMERIC(12,2) DEFAULT 0,

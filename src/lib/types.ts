@@ -75,6 +75,8 @@ export interface Opportunity {
   close_date?: string;
   start_date?: string;
   end_date?: string;
+  /** Manual delivery stretch in weeks (capacity planning). */
+  delivery_weeks?: number | null;
   notes?: string;
   tags?: string[];
   created_at: string;
@@ -355,6 +357,8 @@ export interface FinanceDeal {
   total_deal_value: number;
   start_date?: string;
   end_date?: string;
+  /** Manual delivery stretch in weeks (capacity planning at €175/h). */
+  delivery_weeks?: number | null;
   payment_schedule: PaymentScheduleEntry[];
   payments: DealPaymentEntry[];
   monthly_fee: number;
@@ -367,10 +371,11 @@ export interface FinanceDeal {
 export type NewFinanceDeal = Omit<FinanceDeal, "id" | "created_at" | "updated_at">;
 
 export type UpdateFinanceDeal = Partial<
-  Omit<NewFinanceDeal, "start_date" | "end_date">
+  Omit<NewFinanceDeal, "start_date" | "end_date" | "delivery_weeks">
 > & {
   start_date?: string | null;
   end_date?: string | null;
+  delivery_weeks?: number | null;
   payments?: DealPaymentEntry[];
 };
 

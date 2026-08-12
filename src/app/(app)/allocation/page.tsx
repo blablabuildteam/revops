@@ -120,12 +120,18 @@ type DragState = {
 export default function AllocationPage() {
   const { user } = useSession();
   const viewerName = user?.name ?? "";
-  const { data: projects = [], isLoading: projectsLoading } = useProjects();
-  const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
+  const { data: projects = [], isLoading: projectsLoading, mutate: mutateProjects } = useProjects();
+  const { data: opportunities = [], isLoading: oppsLoading, mutate: mutateOpps } = useOpportunities();
   const { data: allocations = [], isLoading: allocationsLoading } = useAllocations();
-  const { data: deals = [] } = useFinanceDeals();
+  const { data: deals = [], mutate: mutateDeals } = useFinanceDeals();
   const { data: users = [] } = useUsers();
   const [tab, setTab] = useState<"weeks" | "load">("load");
+
+  const refreshCapacity = useCallback(() => {
+    void mutateDeals();
+    void mutateOpps();
+    void mutateProjects();
+  }, [mutateDeals, mutateOpps, mutateProjects]);
 
   const orderedAssignees = useMemo(() => {
     const list = [...TASK_ASSIGNEES];
@@ -527,7 +533,7 @@ export default function AllocationPage() {
           deals={deals}
           projects={projects}
           opportunities={opportunities}
-          allocations={allocations}
+          onRefresh={refreshCapacity}
         />
       ) : (
         <>

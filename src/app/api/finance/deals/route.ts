@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       total_deal_value,
       start_date,
       end_date,
+      delivery_weeks,
       payment_schedule,
       monthly_fee,
       monthly_revshare,
@@ -67,11 +68,13 @@ export async function POST(req: NextRequest) {
 
     const normalizedPayments = normalizeDealPayments(payments);
     const amountPaid = sumPayments(normalizedPayments);
+    const deliveryWeeksValue =
+      delivery_weeks == null || delivery_weeks === "" ? null : Number(delivery_weeks);
 
     const { rows } = await sql`
       INSERT INTO finance_deals (
         opportunity_id, project_id, company_id, company_name, project_name,
-        deal_type, total_deal_value, start_date, end_date,
+        deal_type, total_deal_value, start_date, end_date, delivery_weeks,
         payment_schedule, monthly_fee, monthly_revshare, amount_paid, payments
       ) VALUES (
         ${opportunity_id ?? null}, ${project_id ?? null}, ${company_id ?? null},
@@ -79,6 +82,7 @@ export async function POST(req: NextRequest) {
         ${total_deal_value ?? 0},
         ${normalizeDateParam(start_date)},
         ${normalizeDateParam(end_date)},
+        ${deliveryWeeksValue},
         ${JSON.stringify(normalizePaymentSchedule(payment_schedule))},
         ${monthly_fee ?? 0}, ${monthly_revshare ?? 0}, ${amountPaid},
         ${JSON.stringify(normalizedPayments)}

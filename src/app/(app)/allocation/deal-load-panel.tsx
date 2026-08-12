@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle, ArrowUpRight, CheckCircle2, CalendarClock } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { updateFinanceDeal, updateOpportunity } from "@/lib/api";
 import {
   DEAL_LOAD_STATUS_LABELS,
   TARGET_HOURLY_RATE,
@@ -12,17 +13,14 @@ import {
   type DealLoadStatus,
 } from "@/lib/deal-capacity";
 import { ALLOCATION_WEEKLY_HOURS, TASK_ASSIGNEES } from "@/lib/types";
-import type { Allocation, FinanceDeal, Opportunity, Project } from "@/lib/types";
+import type { FinanceDeal, Opportunity, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function statusTone(status: DealLoadStatus) {
   switch (status) {
     case "ok":
       return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
-    case "tight":
-      return "text-orange-300 bg-orange-500/10 border-orange-500/20";
     case "overloaded":
-    case "over_planned":
       return "text-red-400 bg-red-500/10 border-red-500/20";
     default:
       return "text-neutral-400 bg-neutral-800 border-neutral-700";
@@ -31,7 +29,7 @@ function statusTone(status: DealLoadStatus) {
 
 function StatusIcon({ status }: { status: DealLoadStatus }) {
   if (status === "ok") return <CheckCircle2 className="w-3.5 h-3.5" />;
-  if (status === "missing_dates" || status === "missing_value") {
+  if (status === "missing_weeks" || status === "missing_value") {
     return <CalendarClock className="w-3.5 h-3.5" />;
   }
   return <AlertTriangle className="w-3.5 h-3.5" />;
@@ -44,16 +42,6 @@ function formatHours(h: number) {
 
 function formatPct(pct: number) {
   return `${Math.round(pct * 100)}%`;
-}
-
-function formatDateRange(start: string | null, end: string | null) {
-  if (!start && !end) return "No dates";
-  const fmt = (d: string) =>
-    new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(
-      new Date(d + "T12:00:00"),
-    );
-  if (start && end) return `${fmt(start)} → ${fmt(end)}`;
-  return start ? `From ${fmt(start)}` : `Until ${fmt(end!)}`;
 }
 
 function SummaryCard({
@@ -109,26 +97,108 @@ function RowLink({ row }: { row: DealLoadRow }) {
   return <span className="text-neutral-200">{row.name}</span>;
 }
 
+function WeeksInput({
+  row,
+  onSaved,
+}: {
+  row: DealLoadRow;
+  onSaved: () => void;
+}) {
+  const initial =
+    row.weeks > 0 ? String(row.weeks) : "";
+  const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function commit() {
+    const trimmed = value.trim().replace(",", ".");
+    const next =
+      trimmed === "" ? null : Math.round(Number(trimmed) * 10) / 10;
+    if (next !== null && (!Number.isFinite(next) || next <= 0)) {
+      setError("Enter weeks > 0");
+      setValue(initial);
+      return;
+    }
+
+    const shown = row.weeks > 0 ? row.weeks : null;
+    // Unchanged from what's on screen — don't write (avoids locking date hints on blur).
+    if (next === shown) {
+      setError(null);
+      return;
+    }
+    // Clearing a date hint: restore display, don't wipe.
+    if (next === null && row.weeksFromDates) {
+      setValue(initial);
+      setError(null);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      if (row.source === "deal" && row.dealId) {
+        await updateFinanceDeal(row.dealId, { delivery_weeks: next });
+      } else if (row.source === "opportunity" && row.opportunityId) {
+        await updateOpportunity(row.opportunityId, { delivery_weeks: next });
+      }
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setValue(initial);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0.5}
+          step={0.5}
+          inputMode="decimal"
+          placeholder="—"
+          value={value}
+          disabled={saving}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => void commit()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-16 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-right font-mono text-sm text-neutral-100 tabular-nums focus:border-[#d4e052]/40 focus:outline-none disabled:opacity-50"
+        />
+        <span className="text-[11px] text-neutral-500">wk</span>
+      </div>
+      {row.weeksFromDates && (
+        <span className="text-[10px] text-neutral-600">from dates · edit to lock</span>
+      )}
+      {error && <span className="text-[10px] text-red-400">{error}</span>}
+    </div>
+  );
+}
+
 export function DealLoadPanel({
   deals,
   projects,
   opportunities,
-  allocations,
+  onRefresh,
 }: {
   deals: FinanceDeal[];
   projects: Project[];
   opportunities: Opportunity[];
-  allocations: Allocation[];
+  onRefresh?: () => void;
 }) {
   const rows = useMemo(
-    () => buildDealLoadRows({ deals, projects, opportunities, allocations }),
-    [deals, projects, opportunities, allocations],
+    () => buildDealLoadRows({ deals, projects, opportunities }),
+    [deals, projects, opportunities],
   );
 
   const firmWeekly = TASK_ASSIGNEES.length * ALLOCATION_WEEKLY_HOURS;
-  const flagged = rows.filter((r) => r.status === "overloaded" || r.status === "tight");
   const overloaded = rows.filter((r) => r.status === "overloaded").length;
-  const tight = rows.filter((r) => r.status === "tight").length;
+  const needsWeeks = rows.filter((r) => r.status === "missing_weeks").length;
   const totalBudgetHours = rows.reduce((sum, r) => sum + r.budgetHours, 0);
   const peakLoad = rows.reduce((max, r) => Math.max(max, r.teamLoadPct), 0);
 
@@ -137,49 +207,42 @@ export function DealLoadPanel({
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <SummaryCard
           label="Planning rate"
-          value={`€${TARGET_HOURLY_RATE}`}
+          value={`€${TARGET_HOURLY_RATE}/h`}
           sub="Fee excl. VAT ÷ hours"
           tone="accent"
         />
         <SummaryCard
           label="Hour budget"
           value={formatHours(totalBudgetHours)}
-          sub={`${rows.length} jobs · ${TASK_ASSIGNEES.length}×${ALLOCATION_WEEKLY_HOURS}h/wk team`}
+          sub={`${rows.length} jobs · fee ÷ €${TARGET_HOURLY_RATE}`}
         />
         <SummaryCard
           label="Heaviest job"
           value={peakLoad > 0 ? formatPct(peakLoad) : "—"}
-          sub="Of weekly team capacity"
+          sub={`Of ${firmWeekly}h team week`}
           tone={peakLoad > 1 ? "bad" : peakLoad > 0.7 ? "warn" : "default"}
         />
         <SummaryCard
-          label="Won’t fit"
-          value={String(overloaded + tight)}
+          label="Needs attention"
+          value={String(overloaded + needsWeeks)}
           sub={
-            overloaded + tight > 0
-              ? `${overloaded} overloaded · ${tight} calendar full`
+            overloaded + needsWeeks > 0
+              ? `${overloaded} overloaded · ${needsWeeks} no stretch`
               : "All jobs fit at €175/h"
           }
-          tone={overloaded + tight > 0 ? "warn" : "default"}
+          tone={overloaded + needsWeeks > 0 ? "warn" : "default"}
         />
       </div>
 
       <div className="border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/40">
-        <div className="px-5 py-3.5 border-b border-neutral-800 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-neutral-300">
-              Capacity at €{TARGET_HOURLY_RATE}/h
-            </h2>
-            <p className="text-xs text-neutral-500 mt-0.5">
-              No timesheets — only fee + delivery window. You may work faster (higher effective
-              rate) or slower; this is the planning floor.
-            </p>
-          </div>
-          {flagged.length > 0 && (
-            <span className="text-xs text-orange-300 shrink-0">
-              {flagged.length} need a longer window or less scope
-            </span>
-          )}
+        <div className="px-5 py-3.5 border-b border-neutral-800">
+          <h2 className="text-sm font-medium text-neutral-300">
+            Capacity at €{TARGET_HOURLY_RATE}/h
+          </h2>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Budget hours = project fee excl. VAT ÷ €{TARGET_HOURLY_RATE}. Fill in weekstretch
+            yourself — that spreads the budget into h/week. No timesheets.
+          </p>
         </div>
 
         <div className="overflow-x-auto">
@@ -188,19 +251,18 @@ export function DealLoadPanel({
               <tr className="text-left text-xs text-neutral-500 border-b border-neutral-800">
                 <th className="px-5 py-2.5 font-medium">Job</th>
                 <th className="px-4 py-2.5 font-medium">Fee excl. VAT</th>
-                <th className="px-4 py-2.5 font-medium">Deliver</th>
-                <th className="px-4 py-2.5 font-medium text-right">Budget</th>
+                <th className="px-4 py-2.5 font-medium">Weekstretch</th>
+                <th className="px-4 py-2.5 font-medium text-right">Budget hours</th>
                 <th className="px-4 py-2.5 font-medium text-right">h / week</th>
                 <th className="px-4 py-2.5 font-medium text-right">Team load</th>
-                <th className="px-4 py-2.5 font-medium text-right">Room left</th>
                 <th className="px-5 py-2.5 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-neutral-500">
-                    Add a fee and start/end dates on deals or opportunities to see capacity.
+                  <td colSpan={7} className="px-5 py-10 text-center text-neutral-500">
+                    Add a fee on deals or opportunities to see capacity.
                   </td>
                 </tr>
               ) : (
@@ -221,14 +283,20 @@ export function DealLoadPanel({
                     <td className="px-4 py-3 font-mono text-neutral-200 whitespace-nowrap">
                       {formatCurrency(row.valueExVat)}
                     </td>
-                    <td className="px-4 py-3 text-xs text-neutral-400 whitespace-nowrap">
-                      <div>{formatDateRange(row.startDate, row.endDate)}</div>
-                      {row.weeks > 0 && (
-                        <div className="text-neutral-600 mt-0.5">{row.weeks} wk</div>
-                      )}
+                    <td className="px-4 py-3">
+                      <WeeksInput
+                        key={`${row.key}-${row.weeks}-${row.weeksFromDates}`}
+                        row={row}
+                        onSaved={() => onRefresh?.()}
+                      />
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-neutral-200">
                       {formatHours(row.budgetHours)}
+                      {row.budgetHours > 0 && (
+                        <span className="block text-[10px] text-neutral-600 font-sans mt-0.5">
+                          @ €{TARGET_HOURLY_RATE}/h
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[#d4e052]">
                       {formatHours(row.hoursPerWeekNeeded)}
@@ -250,9 +318,6 @@ export function DealLoadPanel({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-right text-neutral-400">
-                      {formatHours(row.freeHours)}
-                    </td>
                     <td className="px-5 py-3">
                       <span
                         className={cn(
@@ -273,10 +338,10 @@ export function DealLoadPanel({
       </div>
 
       <p className="text-[11px] leading-relaxed text-neutral-600 border-l-2 border-neutral-800 pl-3">
-        Budget = fee excl. VAT ÷ €{TARGET_HOURLY_RATE}. Spread over the delivery weeks → h/week.
-        Jobs are stacked on the same calendar against a {TASK_ASSIGNEES.length}-person ×{" "}
-        {ALLOCATION_WEEKLY_HOURS}h week. Finishing in fewer hours than budget = effective rate above
-        €{TARGET_HOURLY_RATE}; the model only warns when the calendar cannot absorb the budget.
+        Example: €17.500 excl. VAT ÷ €{TARGET_HOURLY_RATE} = 100h budget. Over 10 weeks → 10h/week.
+        Shorter stretch = higher weekly claim against the {TASK_ASSIGNEES.length}-person ×{" "}
+        {ALLOCATION_WEEKLY_HOURS}h team. Finishing under budget hours = effective rate above €
+        {TARGET_HOURLY_RATE}.
       </p>
     </div>
   );

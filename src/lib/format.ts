@@ -122,6 +122,10 @@ export function formatFinanceDealRow(row: Record<string, unknown>) {
     monthly_fee: Number(row.monthly_fee),
     monthly_revshare: Number(row.monthly_revshare),
     amount_paid: amountPaid,
+    delivery_weeks:
+      row.delivery_weeks == null || String(row.delivery_weeks) === ""
+        ? null
+        : Number(row.delivery_weeks),
     start_date: row.start_date ? toDateInputValue(row.start_date as string | Date) : undefined,
     end_date: row.end_date ? toDateInputValue(row.end_date as string | Date) : undefined,
     payment_schedule: normalizePaymentSchedule(row.payment_schedule),
@@ -139,6 +143,10 @@ export function formatOpportunityRow(row: Record<string, unknown>) {
     actual_value: Number(row.actual_value),
     probability: Number(row.probability),
     weighted_value: Number(row.weighted_value),
+    delivery_weeks:
+      row.delivery_weeks == null || String(row.delivery_weeks) === ""
+        ? null
+        : Number(row.delivery_weeks),
     start_date: row.start_date ? toDateInputValue(row.start_date as string | Date) : undefined,
     end_date: row.end_date ? toDateInputValue(row.end_date as string | Date) : undefined,
     close_date: row.close_date ? toDateInputValue(row.close_date as string | Date) : undefined,
