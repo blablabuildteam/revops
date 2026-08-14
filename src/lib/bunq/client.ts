@@ -40,6 +40,8 @@ export type BunqPayment = {
   counterparty_alias?: BunqAlias;
 };
 
+export type BunqAccountKind = "bank" | "joint" | "light" | "savings";
+
 export type BunqMonetaryAccount = {
   id: number;
   description?: string;
@@ -47,6 +49,18 @@ export type BunqMonetaryAccount = {
   status?: string;
   iban?: string;
   displayName?: string;
+  kind?: BunqAccountKind;
+};
+
+export type BunqAccountBalance = {
+  id: number;
+  name: string;
+  iban: string | null;
+  balance: number;
+  currency: string;
+  kind: BunqAccountKind;
+  /** Recognised pots: ib (income tax), btw, salaris, other. */
+  pot: "ib" | "btw" | "salaris" | "other";
 };
 
 type BunqContextRow = {
@@ -473,6 +487,13 @@ function parseAccount(entry: Record<string, unknown>): BunqMonetaryAccount | nul
   if (!account?.id) return null;
 
   const ibanAlias = (account.alias || []).find((a) => a.type === "IBAN");
+  const kind: BunqAccountKind = savings
+    ? "savings"
+    : joint
+      ? "joint"
+      : light
+        ? "light"
+        : "bank";
   return {
     id: account.id,
     description: account.description,
@@ -480,6 +501,7 @@ function parseAccount(entry: Record<string, unknown>): BunqMonetaryAccount | nul
     status: account.status,
     iban: ibanAlias?.value,
     displayName: ibanAlias?.name || ibanAlias?.display_name || account.description,
+    kind,
   };
 }
 
@@ -496,6 +518,41 @@ export async function listMonetaryAccounts(): Promise<BunqMonetaryAccount[]> {
     }
   }
   return accounts;
+}
+
+function classifyPot(name: string): BunqAccountBalance["pot"] {
+  const n = name.toLowerCase().trim();
+  if (n === "ib" || n.startsWith("ib ") || /\bincome\s*tax\b/.test(n) || /\bbelasting\b/.test(n)) {
+    return "ib";
+  }
+  if (n === "btw" || n.startsWith("btw ") || /\bvat\b/.test(n)) return "btw";
+  if (n === "salaris" || n.startsWith("salaris ") || /\bsalary\b/.test(n)) return "salaris";
+  return "other";
+}
+
+/** Live balances for all active Bunq monetary accounts (incl. savings pots). */
+export async function listBunqAccountBalances(): Promise<BunqAccountBalance[]> {
+  const accounts = await listMonetaryAccounts();
+  return accounts.map((account) => {
+    const name = (account.description || account.displayName || `Account ${account.id}`).trim();
+    return {
+      id: account.id,
+      name,
+      iban: account.iban ?? null,
+      balance: Number(account.balance?.value) || 0,
+      currency: account.balance?.currency || "EUR",
+      kind: account.kind ?? "bank",
+      pot: classifyPot(name),
+    };
+  });
+}
+
+/** Income-tax savings pot on the business Bunq account (description usually "IB"). */
+export async function getBunqIncomeTaxSavings(): Promise<BunqAccountBalance | null> {
+  const accounts = await listBunqAccountBalances();
+  const exact = accounts.find((a) => a.name.toLowerCase().trim() === "ib");
+  if (exact) return exact;
+  return accounts.find((a) => a.pot === "ib") ?? null;
 }
 
 async function listPaymentsPage(

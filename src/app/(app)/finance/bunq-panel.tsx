@@ -160,6 +160,7 @@ export function BunqPanel() {
       );
       invalidateCache(cacheKeys.financeDeals());
       invalidateCache(cacheKeys.bunqTotals);
+      invalidateCache(cacheKeys.bunqAccounts);
       invalidateCachePrefix("finance-summary:");
       await load();
     } catch (err) {
@@ -182,6 +183,7 @@ export function BunqPanel() {
       if (!res.ok) throw new Error(json.error ?? "Link failed");
       invalidateCache(cacheKeys.financeDeals());
       invalidateCache(cacheKeys.bunqTotals);
+      invalidateCache(cacheKeys.bunqAccounts);
       invalidateCachePrefix("finance-summary:");
       setLastResult(
         dealId

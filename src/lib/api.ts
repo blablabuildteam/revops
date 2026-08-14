@@ -26,6 +26,7 @@ function invalidateFinanceCaches() {
   invalidateCache(cacheKeys.financeDeals());
   invalidateCachePrefix("finance-summary:");
   invalidateCache(cacheKeys.bunqTotals);
+  invalidateCache(cacheKeys.bunqAccounts);
 }
 
 const base = "/api";
@@ -381,11 +382,31 @@ export type BunqPaymentTotals = {
   lastSync: string | null;
 };
 
+export type BunqIncomeTaxSavings = {
+  id: number;
+  name: string;
+  iban: string | null;
+  balance: number;
+  currency: string;
+  kind: string;
+  pot: string;
+};
+
 /** Client revenue totals from synced Bunq payments (excl. internal moves). */
 export function getBunqTotals(): Promise<BunqPaymentTotals> {
   return cachedFetch(cacheKeys.bunqTotals, async () => {
     const data = await req<{ totals: BunqPaymentTotals }>("/bunq/payments?revenue=1");
     return data.totals;
+  });
+}
+
+/** Live Bunq IB / income-tax savings pot balance. */
+export function getBunqIncomeTaxSavings(): Promise<BunqIncomeTaxSavings | null> {
+  return cachedFetch(cacheKeys.bunqAccounts, async () => {
+    const data = await req<{
+      incomeTaxSavings: BunqIncomeTaxSavings | null;
+    }>("/bunq/accounts");
+    return data.incomeTaxSavings;
   });
 }
 

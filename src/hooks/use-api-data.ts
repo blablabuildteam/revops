@@ -4,6 +4,7 @@ import { useCallback, useRef } from "react";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import {
   getAllocations,
+  getBunqIncomeTaxSavings,
   getBunqTotals,
   getCompanies,
   getFinanceDeals,
@@ -13,6 +14,7 @@ import {
   getTaxSettings,
   getUsers,
   type ApiUser,
+  type BunqIncomeTaxSavings,
   type BunqPaymentTotals,
   type ProjectWithStats,
 } from "@/lib/api";
@@ -69,4 +71,11 @@ export function useTaxSettings() {
 
 export function useBunqTotals() {
   return useCachedQuery<BunqPaymentTotals>(cacheKeys.bunqTotals, getBunqTotals);
+}
+
+export function useBunqIncomeTaxSavings() {
+  return useCachedQuery<BunqIncomeTaxSavings | null>(
+    cacheKeys.bunqAccounts,
+    getBunqIncomeTaxSavings,
+  );
 }

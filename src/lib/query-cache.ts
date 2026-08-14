@@ -151,4 +151,5 @@ export const cacheKeys = {
   financeSummary: (month: string) => `finance-summary:${month}`,
   taxSettings: "tax-settings",
   bunqTotals: "bunq-totals",
+  bunqAccounts: "bunq-accounts",
 } as const;

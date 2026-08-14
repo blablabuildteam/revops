@@ -44,6 +44,7 @@ export function TaxReservePanel({
   settings,
   onSettingsChange,
   bunqYearTotalInclVat = null,
+  incomeTaxSavingsBalance = null,
 }: {
   deals: FinanceDeal[];
   opportunities: Opportunity[];
@@ -51,6 +52,8 @@ export function TaxReservePanel({
   onSettingsChange: (patch: Partial<TaxSettings>) => void;
   /** Bunq client revenue YTD incl. VAT; when set, drives realised / nu-reserveren. */
   bunqYearTotalInclVat?: number | null;
+  /** Live balance on the Bunq IB / income-tax savings pot. */
+  incomeTaxSavingsBalance?: number | null;
 }) {
   const [includePipeline, setIncludePipeline] = useState(false);
   const year = new Date().getFullYear();
@@ -80,9 +83,13 @@ export function TaxReservePanel({
   );
 
   // Platte 40%-regel blijft alleen tegen VOF-belasting aanleggen.
+  // revenue.realised is al excl. btw (Bunq/deals komen incl. binnen).
   const vofReserveToDate = reserve.profitToDate * reserve.effectiveRate;
   const flatReserve = revenue.realised * FLAT_RESERVE_PCT;
   const flatDifference = flatReserve - vofReserveToDate;
+  const ibPot = incomeTaxSavingsBalance ?? null;
+  const ibGap =
+    ibPot != null ? reserve.reserveToDate - ibPot : null;
 
   function updatePartner(index: number, patch: Partial<PartnerPersonalSettings>) {
     onSettingsChange({ tax_personal: patchPersonal(personal, index, patch) });
@@ -98,19 +105,35 @@ export function TaxReservePanel({
           tone="accent"
         />
         <StatCard
+          label="Op IB-spaarrekening"
+          value={ibPot != null ? formatCurrency(ibPot) : "—"}
+          sub={
+            ibPot != null
+              ? "Live saldo Bunq-pot “IB”"
+              : "Bunq IB-rekening niet gevonden"
+          }
+          tone={ibPot != null && ibPot > 0 ? "positive" : "default"}
+        />
+        <StatCard
+          label={ibGap != null && ibGap > 0 ? "Nog te storten op IB" : "IB-dekking"}
+          value={
+            ibGap != null
+              ? formatCurrency(Math.abs(ibGap))
+              : formatCurrency(reserve.reserveToDate)
+          }
+          sub={
+            ibGap == null
+              ? "Zodra IB-saldo bekend is"
+              : ibGap > 0
+                ? "Te reserveren − wat er al op IB staat"
+                : "IB staat hoger dan nodig tot nu toe"
+          }
+          tone={ibGap != null && ibGap > 0 ? "warning" : "positive"}
+        />
+        <StatCard
           label={`Nog te reserveren ${year}`}
           value={formatCurrency(reserve.reserveFullYear)}
           sub={`${formatCurrency(reserve.totalTaxDue)} verschuldigd − ${formatCurrency(reserve.totalCreditsAgainstTax)} al gedekt`}
-        />
-        <StatCard
-          label="Totale belasting"
-          value={formatCurrency(reserve.totalTaxDue)}
-          sub="IB + Zvw over VOF + salaris + WW"
-        />
-        <StatCard
-          label="Per maand"
-          value={formatCurrency(reserve.monthlyReserve)}
-          sub="Om op jaarbasis bij te blijven"
         />
       </div>
 
@@ -250,7 +273,12 @@ export function TaxReservePanel({
             Versus de platte 40%-regel
           </h2>
           <div>
-            <AmountRow label="40% van ontvangen omzet" value={flatReserve} tone="muted" />
+            <AmountRow
+              label="40% van ontvangen omzet (excl. btw)"
+              value={flatReserve}
+              hint="Bunq-bedragen zijn incl. btw — die 21% is er eerst afgehaald"
+              tone="muted"
+            />
             <AmountRow
               label="VOF-belasting op winst tot nu"
               value={vofReserveToDate}
@@ -270,8 +298,8 @@ export function TaxReservePanel({
               : `De platte regel laat je ${formatCurrency(-flatDifference)} tekortkomen op alleen VOF-belasting.`}
           </p>
           <Disclaimer>
-            De 40% gaat over omzet incl. btw, terwijl belasting over winst excl. btw
-            gaat. Die twee lijnen alleen per toeval op.
+            Bunq-inkomsten komen incl. btw binnen; de 40%-regel en de
+            belastingberekening werken allebei op omzet/winst excl. btw.
           </Disclaimer>
         </div>
       </div>

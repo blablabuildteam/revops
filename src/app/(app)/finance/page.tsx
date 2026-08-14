@@ -27,6 +27,7 @@ import { removeVat } from "@/lib/vat";
 import { updateFinanceDeal, updateTaxSettings } from "@/lib/api";
 import { useUndoToast } from "@/components/mutation-provider";
 import {
+  useBunqIncomeTaxSavings,
   useBunqTotals,
   useFinanceDeals,
   useFinanceSummary,
@@ -255,6 +256,7 @@ export default function FinancePage() {
   const { data: deals = [], isLoading: dealsLoading, mutate: mutateDeals } = useFinanceDeals();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
   const { data: bunqTotals } = useBunqTotals();
+  const { data: incomeTaxSavings } = useBunqIncomeTaxSavings();
   const loading =
     (summaryLoading && !summary) ||
     (dealsLoading && deals.length === 0) ||
@@ -468,8 +470,13 @@ export default function FinancePage() {
       receivedFromBunq: bunqTotals != null,
       taxSetAside: reserve.reserveToDate,
       taxFullYear: reserve.reserveFullYear,
+      ibPot: incomeTaxSavings?.balance ?? null,
+      ibGap:
+        incomeTaxSavings != null
+          ? reserve.reserveToDate - (Number(incomeTaxSavings.balance) || 0)
+          : null,
     };
-  }, [deals, opportunities, taxSettings, bunqTotals]);
+  }, [deals, opportunities, taxSettings, bunqTotals, incomeTaxSavings]);
 
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -519,6 +526,7 @@ export default function FinancePage() {
           settings={taxSettings}
           onSettingsChange={handleTaxSettingsChange}
           bunqYearTotalInclVat={bunqTotals?.yearTotal ?? null}
+          incomeTaxSavingsBalance={incomeTaxSavings?.balance ?? null}
         />
       )}
 
@@ -570,19 +578,29 @@ export default function FinancePage() {
               <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Belasting tot nu − loonheffing − VA</p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nog te reserveren (jaar)</p>
-              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-neutral-100">
-                {formatCurrency(cashPosition.taxFullYear)}
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                {cashPosition.ibGap != null && cashPosition.ibGap > 0
+                  ? "Nog te storten op IB"
+                  : "Op IB-spaarrekening"}
+              </p>
+              <p
+                className={cn(
+                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
+                  cashPosition.ibGap != null && cashPosition.ibGap > 0
+                    ? "text-orange-300"
+                    : "text-emerald-400",
+                )}
+              >
+                {cashPosition.ibGap != null && cashPosition.ibGap > 0
+                  ? formatCurrency(cashPosition.ibGap)
+                  : cashPosition.ibPot != null
+                    ? formatCurrency(cashPosition.ibPot)
+                    : "—"}
               </p>
               <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                Detail in{" "}
-                <button
-                  type="button"
-                  className="text-[#d4e052] hover:underline"
-                  onClick={() => setTab("tax")}
-                >
-                  Belastingreserve
-                </button>
+                {cashPosition.ibPot != null
+                  ? `IB-saldo ${formatCurrency(cashPosition.ibPot)} · Bunq`
+                  : "Bunq IB-rekening niet gevonden"}
               </p>
             </div>
           </div>
