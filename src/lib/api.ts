@@ -392,6 +392,12 @@ export type BunqIncomeTaxSavings = {
   pot: string;
 };
 
+export type BunqPots = {
+  incomeTax: BunqIncomeTaxSavings | null;
+  salary: BunqIncomeTaxSavings | null;
+  vat: BunqIncomeTaxSavings | null;
+};
+
 /** Client revenue totals from synced Bunq payments (excl. internal moves). */
 export function getBunqTotals(): Promise<BunqPaymentTotals> {
   return cachedFetch(cacheKeys.bunqTotals, async () => {
@@ -400,14 +406,25 @@ export function getBunqTotals(): Promise<BunqPaymentTotals> {
   });
 }
 
-/** Live Bunq IB / income-tax savings pot balance. */
-export function getBunqIncomeTaxSavings(): Promise<BunqIncomeTaxSavings | null> {
+/** Live Bunq pot balances (IB / Salaris / BTW). */
+export function getBunqPots(): Promise<BunqPots> {
   return cachedFetch(cacheKeys.bunqAccounts, async () => {
     const data = await req<{
       incomeTaxSavings: BunqIncomeTaxSavings | null;
+      salarySavings: BunqIncomeTaxSavings | null;
+      vatSavings: BunqIncomeTaxSavings | null;
     }>("/bunq/accounts");
-    return data.incomeTaxSavings;
+    return {
+      incomeTax: data.incomeTaxSavings,
+      salary: data.salarySavings,
+      vat: data.vatSavings,
+    };
   });
+}
+
+/** @deprecated use getBunqPots().incomeTax */
+export function getBunqIncomeTaxSavings(): Promise<BunqIncomeTaxSavings | null> {
+  return getBunqPots().then((p) => p.incomeTax);
 }
 
 /** Optimistically patch a cached opportunities list after local edits. */

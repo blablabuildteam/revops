@@ -270,13 +270,13 @@ export function TaxReservePanel({
 
         <div className={`${CARD} space-y-4`}>
           <h2 className="text-sm font-medium text-neutral-300">
-            Versus de platte 40%-regel
+            Versus jullie IB-regel (40%)
           </h2>
           <div>
             <AmountRow
               label="40% van ontvangen omzet (excl. btw)"
               value={flatReserve}
-              hint="Bunq-bedragen zijn incl. btw — die 21% is er eerst afgehaald"
+              hint="Jullie cash-split: 50% salaris · 40% IB · 10% bedrijf"
               tone="muted"
             />
             <AmountRow
@@ -286,16 +286,28 @@ export function TaxReservePanel({
               tone="accent"
             />
             <AmountRow
-              label={flatDifference >= 0 ? "Te veel gereserveerd" : "Tekort"}
+              label={flatDifference >= 0 ? "IB-regel vs VOF-belasting" : "Tekort t.o.v. VOF"}
               value={Math.abs(flatDifference)}
               emphasis
               tone={flatDifference >= 0 ? "positive" : "negative"}
             />
+            {ibPot != null && (
+              <AmountRow
+                label="Op IB-spaarrekening (Bunq)"
+                value={ibPot}
+                hint={
+                  ibGap != null && ibGap > 0
+                    ? `${formatCurrency(ibGap)} tekort t.o.v. berekende reserve`
+                    : "Live saldo"
+                }
+                tone="positive"
+              />
+            )}
           </div>
           <p className="text-xs leading-relaxed text-neutral-500">
             {flatDifference >= 0
-              ? `De platte regel houdt ${formatCurrency(flatDifference)} meer vast dan alleen VOF-belasting. Salaris/WW staat in de partnerkaarten hieronder.`
-              : `De platte regel laat je ${formatCurrency(-flatDifference)} tekortkomen op alleen VOF-belasting.`}
+              ? `De 40%-regel houdt ${formatCurrency(flatDifference)} meer vast dan alleen VOF-belasting. Persoonlijke IB (salaris/WW) staat in de partnerkaarten.`
+              : `De 40%-regel laat je ${formatCurrency(-flatDifference)} tekortkomen op alleen VOF-belasting.`}
           </p>
           <Disclaimer>
             Bunq-inkomsten komen incl. btw binnen; de 40%-regel en de

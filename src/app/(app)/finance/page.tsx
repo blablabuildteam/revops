@@ -27,7 +27,7 @@ import { removeVat } from "@/lib/vat";
 import { updateFinanceDeal, updateTaxSettings } from "@/lib/api";
 import { useUndoToast } from "@/components/mutation-provider";
 import {
-  useBunqIncomeTaxSavings,
+  useBunqPots,
   useBunqTotals,
   useFinanceDeals,
   useFinanceSummary,
@@ -97,11 +97,16 @@ const BunqPanel = dynamicImport(
 );
 
 const TABS = [
-  { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
-  { id: "bunq", label: "Bunq", sub: "Bank revenue from Jan 2026 → link to deals" },
-  { id: "tax", label: "Belastingreserve", sub: "VOF + salaris/WW → wat je nog apart moet zetten" },
-  { id: "bv", label: "BV check", sub: "Holding + personal holdings vs staying a VOF" },
+  { id: "overview", label: "Overview", sub: "Omzet, salarispot (50%) en wat nog openstaat" },
+  { id: "bunq", label: "Bunq", sub: "Bankinkomsten vanaf jan 2026 → koppelen aan deals" },
+  { id: "tax", label: "Belastingreserve", sub: "IB-pot, VOF + salaris/WW → wat je nog moet reserveren" },
+  { id: "bv", label: "BV check", sub: "Holding + personal holdings vs VOF blijven" },
 ] as const;
+
+/** Operational cash split on received revenue excl. VAT. */
+const SALARY_SPLIT = 0.5;
+const IB_SPLIT = 0.4;
+const COMPANY_SPLIT = 0.1;
 
 type TabId = (typeof TABS)[number]["id"];
 
@@ -256,7 +261,7 @@ export default function FinancePage() {
   const { data: deals = [], isLoading: dealsLoading, mutate: mutateDeals } = useFinanceDeals();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
   const { data: bunqTotals } = useBunqTotals();
-  const { data: incomeTaxSavings } = useBunqIncomeTaxSavings();
+  const { data: bunqPots } = useBunqPots();
   const loading =
     (summaryLoading && !summary) ||
     (dealsLoading && deals.length === 0) ||
@@ -449,11 +454,18 @@ export default function FinancePage() {
         }, 0)
       );
     }, 0);
-    // Prefer Bunq client revenue once synced — unmatched payments still count.
-    const receivedYtd =
+    // Prefer Bunq attributable revenue once synced (incl. VAT).
+    const receivedIncl =
       bunqTotals != null ? Number(bunqTotals.yearTotal) || 0 : dealPaymentsYtd;
+    const receivedExcl = removeVat(receivedIncl);
+    const salaryTarget = receivedExcl * SALARY_SPLIT;
+    const ibRuleTarget = receivedExcl * IB_SPLIT;
+    const companyTarget = receivedExcl * COMPANY_SPLIT;
+    const salaryPotBalance = bunqPots?.salary?.balance ?? null;
+    const ibPotBalance = bunqPots?.incomeTax?.balance ?? null;
+
     const revenue = buildYearRevenue(deals, opportunities, year, {
-      realisedGrossInclVat: bunqTotals != null ? receivedYtd : null,
+      realisedGrossInclVat: bunqTotals != null ? receivedIncl : null,
     });
     const reserve = buildTaxReserve(revenue, {
       annualCosts: taxSettings.tax_annual_costs,
@@ -464,19 +476,28 @@ export default function FinancePage() {
       startersaftrek: taxSettings.tax_startersaftrek,
       personal: taxSettings.tax_personal,
     });
+
     return {
       outstanding,
-      receivedYtd,
+      receivedIncl,
+      receivedExcl,
       receivedFromBunq: bunqTotals != null,
+      salaryTarget,
+      ibRuleTarget,
+      companyTarget,
+      salaryPot: salaryPotBalance,
+      salaryGap:
+        salaryPotBalance != null ? salaryTarget - salaryPotBalance : null,
+      // Tax tab numbers (kept for tax panel wiring, not overview KPIs).
       taxSetAside: reserve.reserveToDate,
       taxFullYear: reserve.reserveFullYear,
-      ibPot: incomeTaxSavings?.balance ?? null,
+      ibPot: ibPotBalance,
       ibGap:
-        incomeTaxSavings != null
-          ? reserve.reserveToDate - (Number(incomeTaxSavings.balance) || 0)
+        ibPotBalance != null
+          ? reserve.reserveToDate - ibPotBalance
           : null,
     };
-  }, [deals, opportunities, taxSettings, bunqTotals, incomeTaxSavings]);
+  }, [deals, opportunities, taxSettings, bunqTotals, bunqPots]);
 
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -526,7 +547,7 @@ export default function FinancePage() {
           settings={taxSettings}
           onSettingsChange={handleTaxSettingsChange}
           bunqYearTotalInclVat={bunqTotals?.yearTotal ?? null}
-          incomeTaxSavingsBalance={incomeTaxSavings?.balance ?? null}
+          incomeTaxSavingsBalance={bunqPots?.incomeTax?.balance ?? null}
         />
       )}
 
@@ -546,18 +567,64 @@ export default function FinancePage() {
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Ontvangen YTD</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                Ontvangen YTD
+              </p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
-                {formatCurrency(cashPosition.receivedYtd)}
+                {formatCurrency(cashPosition.receivedExcl)}
               </p>
               <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                {cashPosition.receivedFromBunq
-                  ? "Bunq gekoppeld aan deal/bedrijf (incl. btw)"
-                  : "Dealbetalingen dit jaar (incl. btw)"}
+                Excl. btw
+                {cashPosition.receivedFromBunq ? " · Bunq gekoppeld" : ""}
+                {" · "}
+                {formatCurrency(cashPosition.receivedIncl)} incl.
               </p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nog open (vast)</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                Salarispot (50%)
+              </p>
+              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
+                {formatCurrency(cashPosition.salaryTarget)}
+              </p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                {cashPosition.salaryPot != null
+                  ? `Op Salaris ${formatCurrency(cashPosition.salaryPot)} · Bunq`
+                  : "50% van ontvangen excl. btw"}
+              </p>
+            </div>
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                {cashPosition.salaryGap != null && cashPosition.salaryGap > 0
+                  ? "Nog naar Salaris"
+                  : cashPosition.salaryPot != null
+                    ? "Salaris-dekking"
+                    : "Bedrijfspot (10%)"}
+              </p>
+              <p
+                className={cn(
+                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
+                  cashPosition.salaryGap != null && cashPosition.salaryGap > 0
+                    ? "text-orange-300"
+                    : "text-neutral-100",
+                )}
+              >
+                {cashPosition.salaryGap != null
+                  ? formatCurrency(Math.abs(cashPosition.salaryGap))
+                  : formatCurrency(cashPosition.companyTarget)}
+              </p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                {cashPosition.salaryGap != null
+                  ? cashPosition.salaryGap > 0
+                    ? "50%-doel − saldo Salaris-rekening"
+                    : "Salaris staat hoger dan de 50%-regel"
+                  : "Rest na 50% salaris + 40% IB"}
+              </p>
+            </div>
+            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                Nog open (vast)
+              </p>
               <p
                 className={cn(
                   "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
@@ -567,40 +634,14 @@ export default function FinancePage() {
                 {formatCurrency(cashPosition.outstanding)}
               </p>
               <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                Zonder commissie (Escort e.d.)
-              </p>
-            </div>
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nu nog te reserveren</p>
-              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
-                {formatCurrency(cashPosition.taxSetAside)}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Belasting tot nu − loonheffing − VA</p>
-            </div>
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                {cashPosition.ibGap != null && cashPosition.ibGap > 0
-                  ? "Nog te storten op IB"
-                  : "Op IB-spaarrekening"}
-              </p>
-              <p
-                className={cn(
-                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
-                  cashPosition.ibGap != null && cashPosition.ibGap > 0
-                    ? "text-orange-300"
-                    : "text-emerald-400",
-                )}
-              >
-                {cashPosition.ibGap != null && cashPosition.ibGap > 0
-                  ? formatCurrency(cashPosition.ibGap)
-                  : cashPosition.ibPot != null
-                    ? formatCurrency(cashPosition.ibPot)
-                    : "—"}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                {cashPosition.ibPot != null
-                  ? `IB-saldo ${formatCurrency(cashPosition.ibPot)} · Bunq`
-                  : "Bunq IB-rekening niet gevonden"}
+                Zonder commissie ·{" "}
+                <button
+                  type="button"
+                  className="text-[#d4e052] hover:underline"
+                  onClick={() => setTab("tax")}
+                >
+                  IB / belasting →
+                </button>
               </p>
             </div>
           </div>

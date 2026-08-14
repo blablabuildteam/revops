@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import { resolveSessionUser } from "@/lib/auth";
 import {
   bunqConfigStatus,
-  getBunqIncomeTaxSavings,
   listBunqAccountBalances,
+  type BunqAccountBalance,
 } from "@/lib/bunq/client";
 
 export const dynamic = "force-dynamic";
+
+function pickPot(
+  accounts: BunqAccountBalance[],
+  pot: BunqAccountBalance["pot"],
+  exactNames: string[],
+): BunqAccountBalance | null {
+  const exact = accounts.find((a) =>
+    exactNames.includes(a.name.toLowerCase().trim()),
+  );
+  if (exact) return exact;
+  return accounts.find((a) => a.pot === pot) ?? null;
+}
 
 export async function GET() {
   const user = await resolveSessionUser();
@@ -19,21 +31,27 @@ export async function GET() {
     return NextResponse.json({
       accounts: [],
       incomeTaxSavings: null,
+      salarySavings: null,
+      vatSavings: null,
       error: "Bunq not configured",
     });
   }
 
   try {
-    const [accounts, incomeTaxSavings] = await Promise.all([
-      listBunqAccountBalances(),
-      getBunqIncomeTaxSavings(),
-    ]);
-    return NextResponse.json({ accounts, incomeTaxSavings });
+    const accounts = await listBunqAccountBalances();
+    return NextResponse.json({
+      accounts,
+      incomeTaxSavings: pickPot(accounts, "ib", ["ib"]),
+      salarySavings: pickPot(accounts, "salaris", ["salaris"]),
+      vatSavings: pickPot(accounts, "btw", ["btw"]),
+    });
   } catch (err) {
     return NextResponse.json(
       {
         accounts: [],
         incomeTaxSavings: null,
+        salarySavings: null,
+        vatSavings: null,
         error: err instanceof Error ? err.message : "Failed to load Bunq accounts",
       },
       { status: 502 },
