@@ -17,7 +17,6 @@ import {
   CARD,
   Disclaimer,
   NumberField,
-  StatCard,
   ToggleChip,
   formatPercent,
 } from "./tax-shared";
@@ -82,14 +81,15 @@ export function TaxReservePanel({
     [revenue, settings, includePipeline, partnerNames.length, personal],
   );
 
-  // Platte 40%-regel blijft alleen tegen VOF-belasting aanleggen.
-  // revenue.realised is al excl. btw (Bunq/deals komen incl. binnen).
-  const vofReserveToDate = reserve.profitToDate * reserve.effectiveRate;
+  // revenue.realised is al excl. btw (Bunq komt incl. binnen).
   const flatReserve = revenue.realised * FLAT_RESERVE_PCT;
-  const flatDifference = flatReserve - vofReserveToDate;
   const ibPot = incomeTaxSavingsBalance ?? null;
-  const ibGap =
-    ibPot != null ? reserve.reserveToDate - ibPot : null;
+  /** Cash-regel: hoeveel hoort er op IB t.o.v. jullie 40%? */
+  const cashRuleGap = ibPot != null ? flatReserve - ibPot : null;
+  /** Geschatte echte restantbelasting na loonheffing/VA (beide partners, YTD). */
+  const estimatedTaxLeft = reserve.reserveToDate;
+  const taxCoveredByIb =
+    ibPot != null ? ibPot - estimatedTaxLeft : null;
 
   function updatePartner(index: number, patch: Partial<PartnerPersonalSettings>) {
     onSettingsChange({ tax_personal: patchPersonal(personal, index, patch) });
@@ -97,55 +97,129 @@ export function TaxReservePanel({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          label="Nu nog te reserveren"
-          value={formatCurrency(reserve.reserveToDate)}
-          sub="Op echt ontvangen + salaris/WW − loonheffing − VA"
-          tone="accent"
-        />
-        <StatCard
-          label="Op IB-spaarrekening"
-          value={ibPot != null ? formatCurrency(ibPot) : "—"}
-          sub={
-            ibPot != null
-              ? "Live saldo Bunq-pot “IB”"
-              : "Bunq IB-rekening niet gevonden"
-          }
-          tone={ibPot != null && ibPot > 0 ? "positive" : "default"}
-        />
-        <StatCard
-          label={ibGap != null && ibGap > 0 ? "Nog te storten op IB" : "IB-dekking"}
-          value={
-            ibGap != null
-              ? formatCurrency(Math.abs(ibGap))
-              : formatCurrency(reserve.reserveToDate)
-          }
-          sub={
-            ibGap == null
-              ? "Zodra IB-saldo bekend is"
-              : ibGap > 0
-                ? "Te reserveren − wat er al op IB staat"
-                : "IB staat hoger dan nodig tot nu toe"
-          }
-          tone={ibGap != null && ibGap > 0 ? "warning" : "positive"}
-        />
-        <StatCard
-          label={`Nog te reserveren ${year}`}
-          value={formatCurrency(reserve.reserveFullYear)}
-          sub={`${formatCurrency(reserve.totalTaxDue)} verschuldigd − ${formatCurrency(reserve.totalCreditsAgainstTax)} al gedekt`}
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* 1. Jullie praktische cash-regel */}
+        <div className={`${CARD} space-y-3`}>
+          <div>
+            <h2 className="text-sm font-medium text-neutral-200">
+              Jullie IB-spaarregel (40%)
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Van elke euro omzet excl. btw zetten jullie 40% op de IB-rekening.
+              Dit is jullie eenvoudige cash-regel — geen aangifte.
+            </p>
+          </div>
+          <AmountRow
+            label="Ontvangen tot nu (excl. btw)"
+            value={revenue.realised}
+            hint={
+              revenue.realisedFromBunq
+                ? "Bunq-klantinkomsten, 21% btw eraf"
+                : "Som van dealbetalingen, excl. btw"
+            }
+            tone="positive"
+          />
+          <AmountRow
+            label="Daarvan 40% → hoort op IB"
+            value={flatReserve}
+            hint="50% salaris · 40% IB · 10% bedrijf"
+            emphasis
+            tone="accent"
+          />
+          <AmountRow
+            label="Staat nu op Bunq IB"
+            value={ibPot ?? 0}
+            hint={ibPot == null ? "IB-rekening niet gevonden" : "Live saldo"}
+            tone={ibPot != null ? "positive" : "muted"}
+          />
+          {cashRuleGap != null && (
+            <AmountRow
+              label={
+                cashRuleGap > 0
+                  ? "Tekort t.o.v. 40%-regel"
+                  : "Meer dan de 40%-regel"
+              }
+              value={Math.abs(cashRuleGap)}
+              hint={
+                cashRuleGap > 0
+                  ? "Nog zoveel bijstorten om op 40% te zitten"
+                  : "IB staat hoger dan de cash-regel vraagt"
+              }
+              emphasis
+              tone={cashRuleGap > 0 ? "negative" : "positive"}
+            />
+          )}
+        </div>
+
+        {/* 2. Geschatte echte belasting */}
+        <div className={`${CARD} space-y-3`}>
+          <div>
+            <h2 className="text-sm font-medium text-neutral-200">
+              Geschatte restantbelasting
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Wat Kevin + Xennith samen nog moeten afdragen over VOF + salaris +
+              WW, nadat loonheffing en voorlopige aanslag eraf zijn.
+            </p>
+          </div>
+          <AmountRow
+            label="Geschatte IB + Zvw tot nu"
+            value={
+              reserve.personalYtd.reduce((s, p) => s + p.totalDue, 0)
+            }
+            hint="Box 1 over VOF-winst + salaris + WW"
+            tone="muted"
+          />
+          <AmountRow
+            label="Al ingehouden / betaald"
+            value={reserve.personalYtd.reduce(
+              (s, p) => s + p.withheld + p.provisionalPaid,
+              0,
+            )}
+            hint="Loonheffing + voorlopige aanslag (vul in bij partners)"
+            tone="positive"
+            negative
+          />
+          <AmountRow
+            label="Nog open volgens schatting"
+            value={estimatedTaxLeft}
+            hint="Dit is géén 40% van omzet — dit is de berekende restant"
+            emphasis
+            tone="accent"
+          />
+          {taxCoveredByIb != null && (
+            <AmountRow
+              label={
+                taxCoveredByIb >= 0
+                  ? "IB-rekening dekt dit + extra"
+                  : "IB-rekening tekort t.o.v. schatting"
+              }
+              value={Math.abs(taxCoveredByIb)}
+              hint={
+                taxCoveredByIb >= 0
+                  ? `${formatCurrency(ibPot!)} op IB minus ${formatCurrency(estimatedTaxLeft)} open`
+                  : "Stort bij of check loonheffing/VA-invoer"
+              }
+              emphasis
+              tone={taxCoveredByIb >= 0 ? "positive" : "negative"}
+            />
+          )}
+          <Disclaimer>
+            Vul hieronder per partner salaris, WW en loonheffing in — anders is
+            “nog open” te laag of te hoog. Detail per persoon staat verderop.
+          </Disclaimer>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className={`${CARD} lg:col-span-2 space-y-4`}>
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              Van omzet naar belastbare winst
+              Omzet die in de schatting zit
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              “Nu reserveren” hangt aan echt ontvangen geld. Commissiepartners
-              (Escort, Comfortzone, Heatnest) tellen pas mee als ze op Bunq staan.
+              Alle bedragen hier excl. btw. Commissie (Escort, Comfortzone,
+              Heatnest) telt pas mee als het op Bunq binnen is.
             </p>
           </div>
 
@@ -155,21 +229,21 @@ export function TaxReservePanel({
               value={revenue.realised}
               hint={
                 revenue.realisedFromBunq
-                  ? `${revenue.monthsElapsed} van 12 maanden, excl. btw · Bunq-klantinkomsten`
-                  : `${revenue.monthsElapsed} van 12 maanden, excl. btw · dealbetalingen`
+                  ? `${revenue.monthsElapsed} van 12 maanden · Bunq-klantinkomsten`
+                  : `${revenue.monthsElapsed} van 12 maanden · dealbetalingen`
               }
               tone="positive"
             />
             <AmountRow
               label="Nog open op vaste deals"
               value={revenue.contractedRemaining}
-              hint="Betalingsschema + vaste retainers nog niet betaald (excl. commissie)"
+              hint="Betalingsschema + vaste retainers (excl. commissie)"
             />
             {revenue.variableRemaining > 0 && (
               <AmountRow
                 label="Commissie / variabel (niet zeker)"
                 value={revenue.variableRemaining}
-                hint="Escort, Comfortzone, Heatnest e.d. — niet meegenomen in de zekere pot"
+                hint="Escort, Comfortzone, Heatnest e.d. — niet in zekere pot"
                 tone="muted"
               />
             )}
@@ -269,63 +343,45 @@ export function TaxReservePanel({
         </div>
 
         <div className={`${CARD} space-y-4`}>
-          <h2 className="text-sm font-medium text-neutral-300">
-            Versus jullie IB-regel (40%)
-          </h2>
           <div>
-            <AmountRow
-              label="40% van ontvangen omzet (excl. btw)"
-              value={flatReserve}
-              hint="Jullie cash-split: 50% salaris · 40% IB · 10% bedrijf"
-              tone="muted"
-            />
-            <AmountRow
-              label="VOF-belasting op winst tot nu"
-              value={vofReserveToDate}
-              hint="Zonder salaris / WW — alleen firmapot"
-              tone="accent"
-            />
-            <AmountRow
-              label={flatDifference >= 0 ? "IB-regel vs VOF-belasting" : "Tekort t.o.v. VOF"}
-              value={Math.abs(flatDifference)}
-              emphasis
-              tone={flatDifference >= 0 ? "positive" : "negative"}
-            />
-            {ibPot != null && (
-              <AmountRow
-                label="Op IB-spaarrekening (Bunq)"
-                value={ibPot}
-                hint={
-                  ibGap != null && ibGap > 0
-                    ? `${formatCurrency(ibGap)} tekort t.o.v. berekende reserve`
-                    : "Live saldo"
-                }
-                tone="positive"
-              />
-            )}
+            <h2 className="text-sm font-medium text-neutral-300">
+              Heel {year} (schatting)
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Inclusief rest van het jaar + persoonlijk inkomen. Detail per
+              partner hieronder.
+            </p>
           </div>
-          <p className="text-xs leading-relaxed text-neutral-500">
-            {flatDifference >= 0
-              ? `De 40%-regel houdt ${formatCurrency(flatDifference)} meer vast dan alleen VOF-belasting. Persoonlijke IB (salaris/WW) staat in de partnerkaarten.`
-              : `De 40%-regel laat je ${formatCurrency(-flatDifference)} tekortkomen op alleen VOF-belasting.`}
-          </p>
+          <AmountRow
+            label={`Nog te reserveren ${year}`}
+            value={reserve.reserveFullYear}
+            hint={`${formatCurrency(reserve.totalTaxDue)} geschat − ${formatCurrency(reserve.totalCreditsAgainstTax)} al gedekt`}
+            emphasis
+            tone="accent"
+          />
+          <AmountRow
+            label="Per maand (gemiddeld)"
+            value={reserve.monthlyReserve}
+            hint="Om op jaarbasis bij te blijven"
+            tone="muted"
+          />
           <Disclaimer>
-            Bunq-inkomsten komen incl. btw binnen; de 40%-regel en de
-            belastingberekening werken allebei op omzet/winst excl. btw.
+            Twee dingen naast elkaar: linksboven jullie 40%-cashregel, rechtsboven
+            de berekende restantbelasting. Die zijn niet hetzelfde getal — de
+            cashregel is ruimer en simpeler.
           </Disclaimer>
         </div>
       </div>
 
       <div className={`${CARD} space-y-5`}>
         <div>
-          <h2 className="text-sm font-medium text-neutral-300">
-            Per partner — belastingpot heel jaar
-          </h2>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            VOF-aandeel + salaris + WW + overig box 1. Nog te reserveren = totale IB/Zvw −
-            loonheffing − voorlopige aanslag. WW telt niet mee voor arbeidskorting;
-            Zvw zelfstandigen alleen over het VOF-deel.
-          </p>
+            <h2 className="text-sm font-medium text-neutral-300">
+              Per partner — invoer & detail
+            </h2>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Vul salaris, WW, loonheffing en VA in. “Nog te reserveren” per
+              persoon = geschatte IB/Zvw − wat al is ingehouden.
+            </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -354,13 +410,13 @@ export function TaxReservePanel({
 
                 <div className="rounded-md border border-[#d4e052]/20 bg-[#d4e052]/5 px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">
-                    Nog te reserveren ({year})
+                    Geschatte restant ({year})
                   </p>
                   <p className="text-xl font-mono font-semibold tabular-nums text-[#d4e052]">
                     {formatCurrency(partner.stillToReserve)}
                   </p>
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Pot tot nu toe: {formatCurrency(ytd?.stillToReserve ?? 0)}
+                    Tot nu toe: {formatCurrency(ytd?.stillToReserve ?? 0)}
                   </p>
                 </div>
 
@@ -554,7 +610,7 @@ export function TaxReservePanel({
           <div className="space-y-1.5 leading-relaxed">
             <p>
               Cijfers gebruiken tarieven {TAX_YEAR} (onder AOW-leeftijd). Ontvangen
-              omzet komt uit Bunq-betalingen die aan een deal of bedrijf hangen.
+              omzet komt uit Bunq-klantinkomsten (incl. btw → hier excl.).
               Vul salaris, WW en loonheffing in vanuit je loonstroken / UWV. Dit is
               een reserveringsinschatting, geen aangifte.
             </p>
