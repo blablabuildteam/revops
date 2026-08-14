@@ -215,81 +215,53 @@ export function TaxReservePanel({
         <div className={`${CARD} lg:col-span-2 space-y-4`}>
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              Omzet die in de schatting zit
+              Omzet → winst (excl. btw)
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Alle bedragen hier excl. btw. Commissie (Escort, Comfortzone,
-              Heatnest) telt pas mee als het op Bunq binnen is.
+              Alleen wat binnen is + wat nog uit vaste deals/facturen komt.
+              Commissie-retainers staan hier bewust niet bij.
             </p>
           </div>
 
           <div>
             <AmountRow
-              label="Al ontvangen"
+              label="Binnen tot nu"
               value={revenue.realised}
               hint={
                 revenue.realisedFromBunq
-                  ? `${revenue.monthsElapsed} van 12 maanden · Bunq-klantinkomsten`
-                  : `${revenue.monthsElapsed} van 12 maanden · dealbetalingen`
+                  ? "Bunq-klantinkomsten, btw eraf"
+                  : "Dealbetalingen, btw eraf"
               }
               tone="positive"
             />
             <AmountRow
-              label="Nog open op vaste deals"
+              label="Nog te ontvangen (deals / facturen)"
               value={revenue.contractedRemaining}
-              hint="Betalingsschema + vaste retainers (excl. commissie)"
+              hint="Openstaand op projecten en vaste fee-deals"
             />
-            {revenue.variableRemaining > 0 && (
-              <AmountRow
-                label="Commissie / variabel (niet zeker)"
-                value={revenue.variableRemaining}
-                hint="Escort, Comfortzone, Heatnest e.d. — niet in zekere pot"
-                tone="muted"
-              />
-            )}
             <AmountRow
-              label="Bevestigde omzet"
+              label="Totaal (binnen + nog te ontvangen)"
               value={revenue.realised + revenue.contractedRemaining}
-              hint="Ontvangen + openstaand op vaste deals"
               emphasis
             />
             <AmountRow
-              label="Gewogen kansen"
-              value={revenue.pipelineRemaining}
-              hint="Open kansen × winkans, rest van het jaar"
-              tone={includePipeline ? "default" : "muted"}
-            />
-            <AmountRow
-              label={
-                includePipeline
-                  ? `Verwachte omzet ${year} (deals + kansen)`
-                  : `Verwachte omzet ${year} (bevestigde deals)`
-              }
-              value={reserve.projectedRevenue}
-              emphasis
-              tone="accent"
-            />
-            <AmountRow
-              label="Geschatte bedrijfskosten"
+              label="Bedrijfskosten (schatting jaar)"
               value={settings.tax_annual_costs}
-              hint="Tools, verzekering, kantoor, accountant — excl. btw"
+              hint="Pas hieronder aan"
               tone="negative"
               negative
             />
             <AmountRow
-              label={includePipeline ? "Winst (met kansen)" : "Winst (bevestigde deals)"}
+              label="Winstbasis voor belasting"
               value={reserve.projectedProfit}
+              hint={
+                includePipeline
+                  ? "Inclusief gewogen kansen"
+                  : "Zonder pipeline-kansen"
+              }
               emphasis
               tone="accent"
             />
-            {!includePipeline && revenue.pipelineRemaining > 0 && (
-              <AmountRow
-                label="Winst als kansen ook landen"
-                value={reserve.projectedProfitWithPipeline}
-                hint={`${formatCurrency(revenue.pipelineRemaining)} gewogen kansen erbij`}
-                tone="muted"
-              />
-            )}
           </div>
 
           <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-neutral-800">
@@ -321,7 +293,7 @@ export function TaxReservePanel({
               active={includePipeline}
               onClick={() => setIncludePipeline((v) => !v)}
             >
-              Inclusief kansen
+              + kansen ({formatCurrency(revenue.pipelineRemaining)})
             </ToggleChip>
             <ToggleChip
               active={settings.tax_urencriterium}
@@ -345,30 +317,38 @@ export function TaxReservePanel({
         <div className={`${CARD} space-y-4`}>
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              Heel {year} (schatting)
+              Effect op IB-pot
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Inclusief rest van het jaar + persoonlijk inkomen. Detail per
-              partner hieronder.
+              Wat de 40%-regel zegt over cash die al binnen is, plus wat erbij
+              komt als openstaande deals landen.
             </p>
           </div>
           <AmountRow
-            label={`Nog te reserveren ${year}`}
-            value={reserve.reserveFullYear}
-            hint={`${formatCurrency(reserve.totalTaxDue)} geschat − ${formatCurrency(reserve.totalCreditsAgainstTax)} al gedekt`}
-            emphasis
+            label="40% van wat al binnen is"
+            value={flatReserve}
             tone="accent"
           />
           <AmountRow
-            label="Per maand (gemiddeld)"
-            value={reserve.monthlyReserve}
-            hint="Om op jaarbasis bij te blijven"
+            label="Extra 40% als open deals binnenkomen"
+            value={revenue.contractedRemaining * FLAT_RESERVE_PCT}
+            hint={`${formatCurrency(revenue.contractedRemaining)} nog te ontvangen × 40%`}
             tone="muted"
           />
+          <AmountRow
+            label="40%-doel als alles vaste openstaat landt"
+            value={flatReserve + revenue.contractedRemaining * FLAT_RESERVE_PCT}
+            emphasis
+          />
+          <AmountRow
+            label={`Geschatte restantbelasting ${year}`}
+            value={reserve.reserveFullYear}
+            hint="Na loonheffing/VA — zie partners hieronder"
+            tone="accent"
+          />
           <Disclaimer>
-            Twee dingen naast elkaar: linksboven jullie 40%-cashregel, rechtsboven
-            de berekende restantbelasting. Die zijn niet hetzelfde getal — de
-            cashregel is ruimer en simpeler.
+            Escort / Comfortzone / Heatnest zitten niet in “nog te ontvangen”.
+            Die tellen pas mee als het geld op Bunq staat.
           </Disclaimer>
         </div>
       </div>
@@ -410,13 +390,15 @@ export function TaxReservePanel({
 
                 <div className="rounded-md border border-[#d4e052]/20 bg-[#d4e052]/5 px-3 py-2.5">
                   <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-0.5">
-                    Geschatte restant ({year})
+                    Geschatte restantbelasting {year}
                   </p>
                   <p className="text-xl font-mono font-semibold tabular-nums text-[#d4e052]">
                     {formatCurrency(partner.stillToReserve)}
                   </p>
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Tot nu toe: {formatCurrency(ytd?.stillToReserve ?? 0)}
+                    Tot nu (YTD): {formatCurrency(ytd?.stillToReserve ?? 0)} — dit is
+                    berekende belasting, niet je Bunq IB-saldo
+                    {ibPot != null ? ` (${formatCurrency(ibPot)})` : ""}
                   </p>
                 </div>
 
