@@ -359,8 +359,8 @@ export function TaxReservePanel({
               Per partner — invoer & detail
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Vul salaris, WW, loonheffing en VA in. “Nog te reserveren” per
-              persoon = geschatte IB/Zvw − wat al is ingehouden.
+              Vul salaris, WW, loonheffing en VA in. “Geschatte restant” per
+              persoon = IB/Zvw − wat al is ingehouden.
             </p>
         </div>
 
@@ -571,7 +571,7 @@ export function TaxReservePanel({
                     negative
                   />
                   <AmountRow
-                    label="Nog te reserveren"
+                    label="Geschatte restant"
                     value={partner.stillToReserve}
                     emphasis
                     tone="accent"
