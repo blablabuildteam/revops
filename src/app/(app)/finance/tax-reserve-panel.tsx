@@ -110,12 +110,12 @@ export function TaxReservePanel({
             </p>
           </div>
           <AmountRow
-            label="Ontvangen tot nu (excl. btw)"
+            label="Ontvangen tot nu"
             value={revenue.realised}
             hint={
               revenue.realisedFromBunq
-                ? "Bunq-klantinkomsten, 21% btw eraf"
-                : "Som van dealbetalingen, excl. btw"
+                ? "Bunq-klantinkomsten, btw eraf"
+                : "Dealbetalingen, btw eraf"
             }
             tone="positive"
           />
@@ -235,12 +235,12 @@ export function TaxReservePanel({
               tone="positive"
             />
             <AmountRow
-              label="Nog te ontvangen (deals / facturen)"
+              label="Nog te ontvangen (confirmed)"
               value={revenue.contractedRemaining}
-              hint="Openstaand op projecten en vaste fee-deals"
+              hint="Lopende opdrachten / openstaande facturen"
             />
             <AmountRow
-              label="Totaal (binnen + nog te ontvangen)"
+              label="Totaal confirmed"
               value={revenue.realised + revenue.contractedRemaining}
               emphasis
             />

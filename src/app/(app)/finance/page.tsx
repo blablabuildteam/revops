@@ -443,7 +443,8 @@ export default function FinancePage() {
 
   const cashPosition = useMemo(() => {
     const year = new Date().getFullYear();
-    const outstanding = deals.reduce((sum, d) => sum + dealFixedOutstanding(d), 0);
+    const outstandingIncl = deals.reduce((sum, d) => sum + dealFixedOutstanding(d), 0);
+    const outstandingExcl = removeVat(outstandingIncl);
     const dealPaymentsYtd = deals.reduce((sum, d) => {
       const payments = Array.isArray(d.payments) ? d.payments : [];
       return (
@@ -480,7 +481,8 @@ export default function FinancePage() {
     });
 
     return {
-      outstanding,
+      outstanding: outstandingExcl,
+      outstandingIncl,
       receivedIncl,
       receivedExcl,
       linkedIncl,
@@ -575,13 +577,13 @@ export default function FinancePage() {
                   Ontvangen dit jaar
                 </p>
                 <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
-                  {formatCurrency(cashPosition.receivedIncl)}
+                  {formatCurrency(cashPosition.receivedExcl)}
                 </p>
                 <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                  Incl. btw · zelfde cijfer als Bunq “Received”
+                  Excl. btw · basis voor 50/40/10
                 </p>
                 <p className="text-[11px] sm:text-xs text-neutral-600 mt-0.5">
-                  = {formatCurrency(cashPosition.receivedExcl)} excl. btw
+                  Bunq {formatCurrency(cashPosition.receivedIncl)} incl.
                   {cashPosition.unmatchedIncl > 0 && (
                     <>
                       {" · "}
@@ -590,7 +592,7 @@ export default function FinancePage() {
                         className="text-orange-300 hover:underline"
                         onClick={() => setTab("bunq")}
                       >
-                        {formatCurrency(cashPosition.unmatchedIncl)} nog te koppelen
+                        {formatCurrency(cashPosition.unmatchedIncl)} te koppelen
                       </button>
                     </>
                   )}
@@ -598,7 +600,7 @@ export default function FinancePage() {
               </div>
               <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
                 <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                  Nog open op vaste deals
+                  Nog open (confirmed)
                 </p>
                 <p
                   className={cn(
@@ -609,10 +611,10 @@ export default function FinancePage() {
                   {formatCurrency(cashPosition.outstanding)}
                 </p>
                 <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                  Incl. btw · projecten + vaste retainers
+                  Excl. btw · lopende opdrachten / facturen
                 </p>
                 <p className="text-[11px] sm:text-xs text-neutral-600 mt-0.5">
-                  Commissie (Escort e.d.) telt hier niet mee
+                  Zonder commissie (Escort e.d.)
                 </p>
               </div>
             </div>
