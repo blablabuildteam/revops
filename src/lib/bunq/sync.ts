@@ -367,7 +367,6 @@ export async function getBunqPaymentTotals() {
   const year = new Date().getFullYear();
   const yearStart = `${year}-01-01`;
   const yearEnd = `${year + 1}-01-01`;
-  // yearTotal = linked to a finance deal and/or recognised company only.
   const { rows } = await sql`
     SELECT
       COUNT(*)::int AS count,
@@ -377,8 +376,12 @@ export async function getBunqPaymentTotals() {
       COALESCE(SUM(amount) FILTER (
         WHERE created_at >= ${yearStart}::timestamptz
           AND created_at < ${yearEnd}::timestamptz
-          AND (finance_deal_id IS NOT NULL OR company_id IS NOT NULL)
       ), 0) AS year_total,
+      COALESCE(SUM(amount) FILTER (
+        WHERE created_at >= ${yearStart}::timestamptz
+          AND created_at < ${yearEnd}::timestamptz
+          AND (finance_deal_id IS NOT NULL OR company_id IS NOT NULL)
+      ), 0) AS linked_year_total,
       COUNT(*) FILTER (
         WHERE created_at >= ${yearStart}::timestamptz
           AND created_at < ${yearEnd}::timestamptz
@@ -401,12 +404,12 @@ export async function getBunqPaymentTotals() {
   const row = rows[0];
   return {
     count: Number(row?.count) || 0,
+    /** All client revenue since workspace start (incl. VAT) — same as Bunq “Received”. */
     total: Number(row?.total) || 0,
-    /**
-     * Client revenue this calendar year that we can attribute to a deal or
-     * company (incl. VAT). Unmatched Bunq rows are excluded.
-     */
+    /** All client revenue this calendar year (incl. VAT), linked or not. */
     yearTotal: Number(row?.year_total) || 0,
+    /** Subset of yearTotal attributed to a deal or company. */
+    linkedYearTotal: Number(row?.linked_year_total) || 0,
     unmatchedYearCount: Number(row?.unmatched_year_count) || 0,
     unmatchedYearTotal: Number(row?.unmatched_year_total) || 0,
     year,

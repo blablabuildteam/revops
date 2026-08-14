@@ -374,6 +374,7 @@ export type BunqPaymentTotals = {
   count: number;
   total: number;
   yearTotal: number;
+  linkedYearTotal?: number;
   unmatchedYearCount?: number;
   unmatchedYearTotal?: number;
   year: number;

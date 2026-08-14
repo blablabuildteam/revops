@@ -155,7 +155,7 @@ export function TaxReservePanel({
               value={revenue.realised}
               hint={
                 revenue.realisedFromBunq
-                  ? `${revenue.monthsElapsed} van 12 maanden, excl. btw · Bunq gekoppeld aan deal/bedrijf`
+                  ? `${revenue.monthsElapsed} van 12 maanden, excl. btw · Bunq-klantinkomsten`
                   : `${revenue.monthsElapsed} van 12 maanden, excl. btw · dealbetalingen`
               }
               tone="positive"

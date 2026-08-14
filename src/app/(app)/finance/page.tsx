@@ -97,7 +97,7 @@ const BunqPanel = dynamicImport(
 );
 
 const TABS = [
-  { id: "overview", label: "Overview", sub: "Omzet, salarispot (50%) en wat nog openstaat" },
+  { id: "overview", label: "Overview", sub: "Wat binnenkwam, wat openstaat, hoe je het verdeelt" },
   { id: "bunq", label: "Bunq", sub: "Bankinkomsten vanaf jan 2026 → koppelen aan deals" },
   { id: "tax", label: "Belastingreserve", sub: "IB-pot, VOF + salaris/WW → wat je nog moet reserveren" },
   { id: "bv", label: "BV check", sub: "Holding + personal holdings vs VOF blijven" },
@@ -454,10 +454,12 @@ export default function FinancePage() {
         }, 0)
       );
     }, 0);
-    // Prefer Bunq attributable revenue once synced (incl. VAT).
+    // Same universe as Bunq tab “Received” (all client revenue, incl. VAT).
     const receivedIncl =
       bunqTotals != null ? Number(bunqTotals.yearTotal) || 0 : dealPaymentsYtd;
     const receivedExcl = removeVat(receivedIncl);
+    const linkedIncl = Number(bunqTotals?.linkedYearTotal) || 0;
+    const unmatchedIncl = Number(bunqTotals?.unmatchedYearTotal) || 0;
     const salaryTarget = receivedExcl * SALARY_SPLIT;
     const ibRuleTarget = receivedExcl * IB_SPLIT;
     const companyTarget = receivedExcl * COMPANY_SPLIT;
@@ -481,6 +483,8 @@ export default function FinancePage() {
       outstanding,
       receivedIncl,
       receivedExcl,
+      linkedIncl,
+      unmatchedIncl,
       receivedFromBunq: bunqTotals != null,
       salaryTarget,
       ibRuleTarget,
@@ -488,7 +492,6 @@ export default function FinancePage() {
       salaryPot: salaryPotBalance,
       salaryGap:
         salaryPotBalance != null ? salaryTarget - salaryPotBalance : null,
-      // Tax tab numbers (kept for tax panel wiring, not overview KPIs).
       taxSetAside: reserve.reserveToDate,
       taxFullYear: reserve.reserveFullYear,
       ibPot: ibPotBalance,
@@ -565,84 +568,138 @@ export default function FinancePage() {
         <div className="h-64 bg-neutral-900 rounded-lg animate-pulse border border-neutral-800" />
       ) : summary && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                Ontvangen YTD
-              </p>
-              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
-                {formatCurrency(cashPosition.receivedExcl)}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                Excl. btw
-                {cashPosition.receivedFromBunq ? " · Bunq gekoppeld" : ""}
-                {" · "}
-                {formatCurrency(cashPosition.receivedIncl)} incl.
-              </p>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+                <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                  Ontvangen dit jaar
+                </p>
+                <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
+                  {formatCurrency(cashPosition.receivedIncl)}
+                </p>
+                <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                  Incl. btw · zelfde cijfer als Bunq “Received”
+                </p>
+                <p className="text-[11px] sm:text-xs text-neutral-600 mt-0.5">
+                  = {formatCurrency(cashPosition.receivedExcl)} excl. btw
+                  {cashPosition.unmatchedIncl > 0 && (
+                    <>
+                      {" · "}
+                      <button
+                        type="button"
+                        className="text-orange-300 hover:underline"
+                        onClick={() => setTab("bunq")}
+                      >
+                        {formatCurrency(cashPosition.unmatchedIncl)} nog te koppelen
+                      </button>
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
+                <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
+                  Nog open op vaste deals
+                </p>
+                <p
+                  className={cn(
+                    "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
+                    cashPosition.outstanding > 0 ? "text-orange-300" : "text-emerald-400",
+                  )}
+                >
+                  {formatCurrency(cashPosition.outstanding)}
+                </p>
+                <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                  Incl. btw · projecten + vaste retainers
+                </p>
+                <p className="text-[11px] sm:text-xs text-neutral-600 mt-0.5">
+                  Commissie (Escort e.d.) telt hier niet mee
+                </p>
+              </div>
             </div>
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                Salarispot (50%)
-              </p>
-              <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
-                {formatCurrency(cashPosition.salaryTarget)}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                {cashPosition.salaryPot != null
-                  ? `Op Salaris ${formatCurrency(cashPosition.salaryPot)} · Bunq`
-                  : "50% van ontvangen excl. btw"}
-              </p>
-            </div>
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                {cashPosition.salaryGap != null && cashPosition.salaryGap > 0
-                  ? "Nog naar Salaris"
-                  : cashPosition.salaryPot != null
-                    ? "Salaris-dekking"
-                    : "Bedrijfspot (10%)"}
-              </p>
-              <p
-                className={cn(
-                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
-                  cashPosition.salaryGap != null && cashPosition.salaryGap > 0
-                    ? "text-orange-300"
-                    : "text-neutral-100",
-                )}
-              >
-                {cashPosition.salaryGap != null
-                  ? formatCurrency(Math.abs(cashPosition.salaryGap))
-                  : formatCurrency(cashPosition.companyTarget)}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                {cashPosition.salaryGap != null
-                  ? cashPosition.salaryGap > 0
-                    ? "50%-doel − saldo Salaris-rekening"
-                    : "Salaris staat hoger dan de 50%-regel"
-                  : "Rest na 50% salaris + 40% IB"}
-              </p>
-            </div>
-            <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">
-                Nog open (vast)
-              </p>
-              <p
-                className={cn(
-                  "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
-                  cashPosition.outstanding > 0 ? "text-orange-300" : "text-emerald-400",
-                )}
-              >
-                {formatCurrency(cashPosition.outstanding)}
-              </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
-                Zonder commissie ·{" "}
+
+            <div className="border border-neutral-800 rounded-lg px-4 py-4 sm:px-5 sm:py-5 bg-neutral-900/40 space-y-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-medium text-neutral-200">
+                    Verdeling van ontvangen (excl. btw)
+                  </h2>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    Jullie regel over {formatCurrency(cashPosition.receivedExcl)}: 50%
+                    salaris · 40% IB · 10% bedrijf
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="text-[#d4e052] hover:underline"
+                  className="text-xs text-[#d4e052] hover:underline self-start sm:self-auto"
                   onClick={() => setTab("tax")}
                 >
-                  IB / belasting →
+                  IB / belastingreserve →
                 </button>
-              </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-md border border-neutral-800 bg-neutral-950/50 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-1">
+                    Salaris 50%
+                  </p>
+                  <p className="text-lg font-mono font-semibold tabular-nums text-[#d4e052]">
+                    {formatCurrency(cashPosition.salaryTarget)}
+                  </p>
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    {cashPosition.salaryPot != null ? (
+                      <>
+                        Op Bunq Salaris: {formatCurrency(cashPosition.salaryPot)}
+                        {cashPosition.salaryGap != null && cashPosition.salaryGap > 0 && (
+                          <span className="text-orange-300">
+                            {" "}
+                            · nog {formatCurrency(cashPosition.salaryGap)}
+                          </span>
+                        )}
+                        {cashPosition.salaryGap != null && cashPosition.salaryGap <= 0 && (
+                          <span className="text-emerald-400"> · op peil</span>
+                        )}
+                      </>
+                    ) : (
+                      "Doel op basis van ontvangen excl. btw"
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-md border border-neutral-800 bg-neutral-950/50 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-1">
+                    IB-pot 40%
+                  </p>
+                  <p className="text-lg font-mono font-semibold tabular-nums text-neutral-100">
+                    {formatCurrency(cashPosition.ibRuleTarget)}
+                  </p>
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    {cashPosition.ibPot != null ? (
+                      <>
+                        Op Bunq IB: {formatCurrency(cashPosition.ibPot)}
+                        {" · "}
+                        <button
+                          type="button"
+                          className="text-[#d4e052] hover:underline"
+                          onClick={() => setTab("tax")}
+                        >
+                          echte belasting →
+                        </button>
+                      </>
+                    ) : (
+                      "Cash-regel; detail op Belastingreserve"
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-md border border-neutral-800 bg-neutral-950/50 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-widest text-neutral-500 mb-1">
+                    Bedrijf 10%
+                  </p>
+                  <p className="text-lg font-mono font-semibold tabular-nums text-neutral-100">
+                    {formatCurrency(cashPosition.companyTarget)}
+                  </p>
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    Buffer / kosten na 50% + 40%
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
