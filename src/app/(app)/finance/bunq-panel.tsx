@@ -32,6 +32,10 @@ type Payment = {
 type Totals = {
   count: number;
   total: number;
+  yearTotal?: number;
+  unmatchedYearCount?: number;
+  unmatchedYearTotal?: number;
+  year?: number;
   matchedDeals: number;
   matchedCompanies: number;
   lastSync: string | null;
@@ -154,6 +158,9 @@ export function BunqPanel() {
       setLastResult(
         `Synced ${json.upserted ?? 0} payments · ${formatCurrency(json.totalIncoming ?? 0)} client revenue · ${json.matchedDeals ?? 0} linked to deals · ${json.updatedDeals ?? 0} deal ledgers updated`,
       );
+      invalidateCache(cacheKeys.financeDeals());
+      invalidateCache(cacheKeys.bunqTotals);
+      invalidateCachePrefix("finance-summary:");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync failed");
@@ -174,6 +181,7 @@ export function BunqPanel() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Link failed");
       invalidateCache(cacheKeys.financeDeals());
+      invalidateCache(cacheKeys.bunqTotals);
       invalidateCachePrefix("finance-summary:");
       setLastResult(
         dealId

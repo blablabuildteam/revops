@@ -22,7 +22,7 @@ import {
   formatPercent,
 } from "./tax-shared";
 
-/** The flat percentage the salary pot model reserves for tax. */
+/** Het platte percentage waarmee de salarispottax voorheen werd gereserveerd. */
 const FLAT_RESERVE_PCT = 0.4;
 const DEFAULT_PERSONAL = TASK_ASSIGNEES.map(() => defaultPartnerPersonal());
 
@@ -43,11 +43,14 @@ export function TaxReservePanel({
   opportunities,
   settings,
   onSettingsChange,
+  bunqYearTotalInclVat = null,
 }: {
   deals: FinanceDeal[];
   opportunities: Opportunity[];
   settings: TaxSettings;
   onSettingsChange: (patch: Partial<TaxSettings>) => void;
+  /** Bunq client revenue YTD incl. VAT; when set, drives realised / nu-reserveren. */
+  bunqYearTotalInclVat?: number | null;
 }) {
   const [includePipeline, setIncludePipeline] = useState(false);
   const year = new Date().getFullYear();
@@ -55,8 +58,11 @@ export function TaxReservePanel({
   const personal = settings.tax_personal ?? DEFAULT_PERSONAL;
 
   const revenue = useMemo(
-    () => buildYearRevenue(deals, opportunities, year),
-    [deals, opportunities, year],
+    () =>
+      buildYearRevenue(deals, opportunities, year, {
+        realisedGrossInclVat: bunqYearTotalInclVat,
+      }),
+    [deals, opportunities, year, bunqYearTotalInclVat],
   );
 
   const reserve = useMemo(
@@ -73,7 +79,7 @@ export function TaxReservePanel({
     [revenue, settings, includePipeline, partnerNames.length, personal],
   );
 
-  // Flat 40% rule still compares against VOF profit tax only.
+  // Platte 40%-regel blijft alleen tegen VOF-belasting aanleggen.
   const vofReserveToDate = reserve.profitToDate * reserve.effectiveRate;
   const flatReserve = revenue.realised * FLAT_RESERVE_PCT;
   const flatDifference = flatReserve - vofReserveToDate;
@@ -86,25 +92,25 @@ export function TaxReservePanel({
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          label="Still to reserve now"
+          label="Nu nog te reserveren"
           value={formatCurrency(reserve.reserveToDate)}
-          sub={`YTD tax − withheld − VA · both partners`}
+          sub="Op echt ontvangen + salaris/WW − loonheffing − VA"
           tone="accent"
         />
         <StatCard
-          label={`Still to reserve ${year}`}
+          label={`Nog te reserveren ${year}`}
           value={formatCurrency(reserve.reserveFullYear)}
-          sub={`${formatCurrency(reserve.totalTaxDue)} due − ${formatCurrency(reserve.totalCreditsAgainstTax)} already covered`}
+          sub={`${formatCurrency(reserve.totalTaxDue)} verschuldigd − ${formatCurrency(reserve.totalCreditsAgainstTax)} al gedekt`}
         />
         <StatCard
-          label="Total tax due"
+          label="Totale belasting"
           value={formatCurrency(reserve.totalTaxDue)}
-          sub="IB + Zvw on VOF + salary + WW"
+          sub="IB + Zvw over VOF + salaris + WW"
         />
         <StatCard
-          label="Per month"
+          label="Per maand"
           value={formatCurrency(reserve.monthlyReserve)}
-          sub="To stay on track for the year"
+          sub="Om op jaarbasis bij te blijven"
         />
       </div>
 
@@ -112,65 +118,78 @@ export function TaxReservePanel({
         <div className={`${CARD} lg:col-span-2 space-y-4`}>
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              From revenue to taxable profit
+              Van omzet naar belastbare winst
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Deal amounts include VAT, so 21% is stripped first — VAT is never profit.
+              “Nu reserveren” hangt aan echt ontvangen geld. Commissiepartners
+              (Escort, Comfortzone, Heatnest) tellen pas mee als ze op Bunq staan.
             </p>
           </div>
 
           <div>
             <AmountRow
-              label="Received so far"
+              label="Al ontvangen"
               value={revenue.realised}
-              hint={`${revenue.monthsElapsed} of 12 months, excl. VAT · from Bunq / deal payments`}
+              hint={
+                revenue.realisedFromBunq
+                  ? `${revenue.monthsElapsed} van 12 maanden, excl. btw · Bunq gekoppeld aan deal/bedrijf`
+                  : `${revenue.monthsElapsed} van 12 maanden, excl. btw · dealbetalingen`
+              }
               tone="positive"
             />
             <AmountRow
-              label="Still due on confirmed deals"
+              label="Nog open op vaste deals"
               value={revenue.contractedRemaining}
-              hint="Payment schedule + retainers not yet paid (incl. overdue)"
+              hint="Betalingsschema + vaste retainers nog niet betaald (excl. commissie)"
             />
+            {revenue.variableRemaining > 0 && (
+              <AmountRow
+                label="Commissie / variabel (niet zeker)"
+                value={revenue.variableRemaining}
+                hint="Escort, Comfortzone, Heatnest e.d. — niet meegenomen in de zekere pot"
+                tone="muted"
+              />
+            )}
             <AmountRow
-              label="Confirmed revenue"
+              label="Bevestigde omzet"
               value={revenue.realised + revenue.contractedRemaining}
-              hint="Received + outstanding on signed deals"
+              hint="Ontvangen + openstaand op vaste deals"
               emphasis
             />
             <AmountRow
-              label="Weighted kansen (pipeline)"
+              label="Gewogen kansen"
               value={revenue.pipelineRemaining}
-              hint="Open opportunities × win probability, rest of year"
+              hint="Open kansen × winkans, rest van het jaar"
               tone={includePipeline ? "default" : "muted"}
             />
             <AmountRow
               label={
                 includePipeline
-                  ? `Projected ${year} revenue (deals + kansen)`
-                  : `Projected ${year} revenue (confirmed deals)`
+                  ? `Verwachte omzet ${year} (deals + kansen)`
+                  : `Verwachte omzet ${year} (bevestigde deals)`
               }
               value={reserve.projectedRevenue}
               emphasis
               tone="accent"
             />
             <AmountRow
-              label="Estimated business costs"
+              label="Geschatte bedrijfskosten"
               value={settings.tax_annual_costs}
-              hint="Tools, insurance, office, accountant — excl. VAT"
+              hint="Tools, verzekering, kantoor, accountant — excl. btw"
               tone="negative"
               negative
             />
             <AmountRow
-              label={includePipeline ? "Profit (with kansen)" : "Profit (confirmed deals)"}
+              label={includePipeline ? "Winst (met kansen)" : "Winst (bevestigde deals)"}
               value={reserve.projectedProfit}
               emphasis
               tone="accent"
             />
             {!includePipeline && revenue.pipelineRemaining > 0 && (
               <AmountRow
-                label="Profit if pipeline also lands"
+                label="Winst als kansen ook landen"
                 value={reserve.projectedProfitWithPipeline}
-                hint={`${formatCurrency(revenue.pipelineRemaining)} weighted kansen on top`}
+                hint={`${formatCurrency(revenue.pipelineRemaining)} gewogen kansen erbij`}
                 tone="muted"
               />
             )}
@@ -179,7 +198,7 @@ export function TaxReservePanel({
           <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-neutral-800">
             <div className="w-44">
               <NumberField
-                label="Yearly costs"
+                label="Jaarlijkse kosten"
                 prefix="€"
                 step={500}
                 value={settings.tax_annual_costs}
@@ -188,7 +207,7 @@ export function TaxReservePanel({
             </div>
             <div className="w-40">
               <NumberField
-                label={`${partnerNames[0]}'s share`}
+                label={`Aandeel ${partnerNames[0]}`}
                 suffix="%"
                 step={5}
                 min={0}
@@ -205,7 +224,7 @@ export function TaxReservePanel({
               active={includePipeline}
               onClick={() => setIncludePipeline((v) => !v)}
             >
-              Include kansen
+              Inclusief kansen
             </ToggleChip>
             <ToggleChip
               active={settings.tax_urencriterium}
@@ -213,7 +232,7 @@ export function TaxReservePanel({
                 onSettingsChange({ tax_urencriterium: !settings.tax_urencriterium })
               }
             >
-              {URENCRITERIUM_HOURS}+ hours
+              {URENCRITERIUM_HOURS}+ uren
             </ToggleChip>
             <ToggleChip
               active={settings.tax_startersaftrek}
@@ -228,18 +247,18 @@ export function TaxReservePanel({
 
         <div className={`${CARD} space-y-4`}>
           <h2 className="text-sm font-medium text-neutral-300">
-            Versus the flat 40% rule
+            Versus de platte 40%-regel
           </h2>
           <div>
-            <AmountRow label="40% of revenue received" value={flatReserve} tone="muted" />
+            <AmountRow label="40% van ontvangen omzet" value={flatReserve} tone="muted" />
             <AmountRow
-              label="VOF tax on profit so far"
+              label="VOF-belasting op winst tot nu"
               value={vofReserveToDate}
-              hint="Ignores salary / WW — firm pot only"
+              hint="Zonder salaris / WW — alleen firmapot"
               tone="accent"
             />
             <AmountRow
-              label={flatDifference >= 0 ? "Over-reserved" : "Short"}
+              label={flatDifference >= 0 ? "Te veel gereserveerd" : "Tekort"}
               value={Math.abs(flatDifference)}
               emphasis
               tone={flatDifference >= 0 ? "positive" : "negative"}
@@ -247,12 +266,12 @@ export function TaxReservePanel({
           </div>
           <p className="text-xs leading-relaxed text-neutral-500">
             {flatDifference >= 0
-              ? `The flat rule holds back ${formatCurrency(flatDifference)} more than VOF tax alone. Personal salary/WW is handled in the partner cards below.`
-              : `The flat rule leaves you ${formatCurrency(-flatDifference)} short on VOF tax alone.`}
+              ? `De platte regel houdt ${formatCurrency(flatDifference)} meer vast dan alleen VOF-belasting. Salaris/WW staat in de partnerkaarten hieronder.`
+              : `De platte regel laat je ${formatCurrency(-flatDifference)} tekortkomen op alleen VOF-belasting.`}
           </p>
           <Disclaimer>
-            The 40% is applied to revenue including VAT, while tax is due on profit
-            excluding VAT. The two only line up by coincidence.
+            De 40% gaat over omzet incl. btw, terwijl belasting over winst excl. btw
+            gaat. Die twee lijnen alleen per toeval op.
           </Disclaimer>
         </div>
       </div>
@@ -260,12 +279,12 @@ export function TaxReservePanel({
       <div className={`${CARD} space-y-5`}>
         <div>
           <h2 className="text-sm font-medium text-neutral-300">
-            Per partner — whole-year tax pot
+            Per partner — belastingpot heel jaar
           </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            VOF share + salary + WW + other box 1. Still to reserve = total IB/Zvw −
-            loonheffing − voorlopige aanslag. WW does not count for arbeidskorting;
-            Zvw zelfstandigen only on the VOF slice.
+            VOF-aandeel + salaris + WW + overig box 1. Nog te reserveren = totale IB/Zvw −
+            loonheffing − voorlopige aanslag. WW telt niet mee voor arbeidskorting;
+            Zvw zelfstandigen alleen over het VOF-deel.
           </p>
         </div>
 
@@ -289,7 +308,7 @@ export function TaxReservePanel({
                         : 0,
                       0,
                     )}{" "}
-                    of VOF profit
+                    van VOF-winst
                   </span>
                 </div>
 
@@ -301,53 +320,53 @@ export function TaxReservePanel({
                     {formatCurrency(partner.stillToReserve)}
                   </p>
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    YTD pot: {formatCurrency(ytd?.stillToReserve ?? 0)}
+                    Pot tot nu toe: {formatCurrency(ytd?.stillToReserve ?? 0)}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-neutral-600 mb-2">
-                    Income ({year})
+                    Inkomen ({year})
                   </p>
-                  <AmountRow label="VOF profit share" value={partner.profitShare} />
-                  <AmountRow label="Salary (gross)" value={partner.salary} tone="muted" />
-                  <AmountRow label="WW (gross)" value={partner.ww} tone="muted" />
+                  <AmountRow label="VOF-winstaandeel" value={partner.profitShare} />
+                  <AmountRow label="Salaris (bruto)" value={partner.salary} tone="muted" />
+                  <AmountRow label="WW (bruto)" value={partner.ww} tone="muted" />
                   {partner.other > 0 && (
-                    <AmountRow label="Other box 1" value={partner.other} tone="muted" />
+                    <AmountRow label="Overig box 1" value={partner.other} tone="muted" />
                   )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <NumberField
-                    label="Salary YTD"
+                    label="Salaris tot nu"
                     prefix="€"
                     step={100}
                     value={p.salary_ytd}
                     onChange={(v) => updatePartner(index, { salary_ytd: v })}
                   />
                   <NumberField
-                    label="Salary rest of year"
+                    label="Salaris rest jaar"
                     prefix="€"
                     step={100}
                     value={p.salary_rest}
                     onChange={(v) => updatePartner(index, { salary_rest: v })}
                   />
                   <NumberField
-                    label="WW YTD"
+                    label="WW tot nu"
                     prefix="€"
                     step={100}
                     value={p.ww_ytd}
                     onChange={(v) => updatePartner(index, { ww_ytd: v })}
                   />
                   <NumberField
-                    label="WW € / month"
+                    label="WW € / maand"
                     prefix="€"
                     step={50}
                     value={p.ww_monthly}
                     onChange={(v) => updatePartner(index, { ww_monthly: v })}
                   />
                   <NumberField
-                    label="WW months left"
+                    label="WW maanden resterend"
                     step={1}
                     min={0}
                     max={12}
@@ -359,21 +378,21 @@ export function TaxReservePanel({
                     }
                   />
                   <NumberField
-                    label="Other YTD (VSO e.d.)"
+                    label="Overig tot nu (VSO e.d.)"
                     prefix="€"
                     step={100}
                     value={p.other_ytd}
                     onChange={(v) => updatePartner(index, { other_ytd: v })}
                   />
                   <NumberField
-                    label="Other rest"
+                    label="Overig rest jaar"
                     prefix="€"
                     step={100}
                     value={p.other_rest}
                     onChange={(v) => updatePartner(index, { other_rest: v })}
                   />
                   <NumberField
-                    label="Loonheffing YTD"
+                    label="Loonheffing tot nu"
                     prefix="€"
                     step={50}
                     value={p.withheld_ytd}
@@ -388,7 +407,7 @@ export function TaxReservePanel({
                     onChange={(v) => updatePartner(index, { withheld_rest: v })}
                   />
                   <NumberField
-                    label="Voorlopige aanslag paid"
+                    label="Voorlopige aanslag betaald"
                     prefix="€"
                     step={100}
                     value={p.provisional_paid}
@@ -398,7 +417,7 @@ export function TaxReservePanel({
 
                 <div className="border-t border-neutral-800 pt-3">
                   <p className="text-[10px] uppercase tracking-widest text-neutral-600 mb-2">
-                    Tax breakdown
+                    Belastingopbouw
                   </p>
                   {partner.zelfstandigenaftrek > 0 && (
                     <AmountRow
@@ -423,54 +442,58 @@ export function TaxReservePanel({
                     negative
                   />
                   <AmountRow
-                    label="Taxable box 1"
+                    label="Belastbaar box 1"
                     value={partner.taxableBox1}
-                    hint="Salary + WW + other + VOF after deductions"
+                    hint="Salaris + WW + overig + VOF na aftrek"
                     emphasis
                   />
-                  <AmountRow label="Box 1 before credits" value={partner.grossTax} tone="muted" />
+                  <AmountRow
+                    label="Box 1 vóór kortingen"
+                    value={partner.grossTax}
+                    tone="muted"
+                  />
                   {partner.deductionRateAdjustment > 0 && (
                     <AmountRow
-                      label="Deduction rate cap"
+                      label="Tariefbeperking aftrek"
                       value={partner.deductionRateAdjustment}
-                      hint="Deductions only count at 37.56%, not at the 49.5% top rate"
+                      hint="Aftrek telt tegen 37,56%, niet tegen het toptarief 49,5%"
                       tone="muted"
                     />
                   )}
                   <AmountRow
-                    label="Tax credits"
+                    label="Heffingskortingen"
                     value={partner.totalCredits}
-                    hint="AHK on total box 1 · arbeidskorting on salary + VOF (not WW)"
+                    hint="AHK over heel box 1 · arbeidskorting over salaris + VOF (niet WW)"
                     tone="positive"
                     negative
                   />
-                  <AmountRow label="Income tax" value={partner.incomeTax} tone="negative" />
+                  <AmountRow label="Inkomstenbelasting" value={partner.incomeTax} tone="negative" />
                   <AmountRow
                     label="Zvw (zelfstandigen)"
                     value={partner.zvw}
-                    hint="4.85% of VOF taxable profit only"
+                    hint="4,85% alleen over belastbare VOF-winst"
                     tone="negative"
                   />
                   <AmountRow
-                    label="Total tax due"
+                    label="Totale belasting"
                     value={partner.totalDue}
                     emphasis
                     tone="accent"
                   />
                   <AmountRow
-                    label="Already withheld"
+                    label="Al ingehouden"
                     value={partner.withheld}
                     tone="positive"
                     negative
                   />
                   <AmountRow
-                    label="VA already paid"
+                    label="VA al betaald"
                     value={partner.provisionalPaid}
                     tone="positive"
                     negative
                   />
                   <AmountRow
-                    label="Still to reserve"
+                    label="Nog te reserveren"
                     value={partner.stillToReserve}
                     emphasis
                     tone="accent"
@@ -478,8 +501,8 @@ export function TaxReservePanel({
                 </div>
 
                 <div className="flex items-center justify-between pt-1 text-xs text-neutral-500">
-                  <span>Effective {formatPercent(partner.effectiveRate)}</span>
-                  <span>Next VOF euro @ {formatPercent(partner.marginalRate)}</span>
+                  <span>Effectief {formatPercent(partner.effectiveRate)}</span>
+                  <span>Volgende VOF-euro @ {formatPercent(partner.marginalRate)}</span>
                 </div>
               </div>
             );
@@ -490,13 +513,14 @@ export function TaxReservePanel({
           <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
           <div className="space-y-1.5 leading-relaxed">
             <p>
-              Figures use {TAX_YEAR} rates below AOW age. Fill salary, WW and
-              loonheffing from your payslips / UWV statements — the VOF profit comes
-              from deals automatically. This is a reserve estimate, not a tax return.
+              Cijfers gebruiken tarieven {TAX_YEAR} (onder AOW-leeftijd). Ontvangen
+              omzet komt uit Bunq-betalingen die aan een deal of bedrijf hangen.
+              Vul salaris, WW en loonheffing in vanuit je loonstroken / UWV. Dit is
+              een reserveringsinschatting, geen aangifte.
             </p>
             <p>
-              WW height vs urencriterium is out of scope here; this module only
-              answers how much tax is due and how much is still left to set aside.
+              Variabele commissie telt pas mee zodra het binnenkomt. De hoogte van
+              je WW versus het urencriterium valt buiten deze module.
             </p>
           </div>
         </div>

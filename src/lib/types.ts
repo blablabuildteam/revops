@@ -412,6 +412,56 @@ export function dealOutstanding(deal: Pick<FinanceDeal, "deal_type" | "total_dea
   return Math.max(0, dealContractValue(deal) - (Number(deal.amount_paid) || 0));
 }
 
+/** Known commission / partner names: cash is variable, not a fixed receivable. */
+const VARIABLE_REVENUE_NAME_RE = /escort|comfortz+one|heatnest/i;
+
+/**
+ * Variable / commission revenue: only counts when money actually lands (Bunq).
+ * Fixed retainers and project schedules stay in "confirmed remaining".
+ */
+export function isVariableRevenueDeal(
+  deal: Pick<
+    FinanceDeal,
+    | "deal_type"
+    | "company_name"
+    | "project_name"
+    | "monthly_hours"
+    | "monthly_fee"
+    | "monthly_revshare"
+  >,
+): boolean {
+  if (deal.deal_type !== "retainer") return false;
+  if (deal.monthly_hours != null && Number(deal.monthly_hours) > 0) return true;
+  if (VARIABLE_REVENUE_NAME_RE.test(`${deal.company_name} ${deal.project_name}`)) {
+    return true;
+  }
+  // Pure revshare, no fixed monthly fee.
+  if ((Number(deal.monthly_revshare) || 0) > 0 && (Number(deal.monthly_fee) || 0) === 0) {
+    return true;
+  }
+  return false;
+}
+
+/** Contracted open amount only for deals we treat as certain cash. */
+export function dealFixedOutstanding(
+  deal: Pick<
+    FinanceDeal,
+    | "deal_type"
+    | "company_name"
+    | "project_name"
+    | "monthly_hours"
+    | "monthly_fee"
+    | "monthly_revshare"
+    | "total_deal_value"
+    | "start_date"
+    | "end_date"
+    | "amount_paid"
+  >,
+): number {
+  if (isVariableRevenueDeal(deal)) return 0;
+  return dealOutstanding(deal);
+}
+
 const SALARY_MONTHLY = 9000;
 const INCOME_TAX_PCT = 0.4;
 
@@ -426,10 +476,14 @@ export interface RevenueBreakdownItem {
 export function expectedRevenueBreakdownForMonth(
   deals: FinanceDeal[],
   month: string,
+  opts?: { includeVariable?: boolean },
 ): RevenueBreakdownItem[] {
+  const includeVariable = opts?.includeVariable ?? true;
   const items: RevenueBreakdownItem[] = [];
 
   for (const deal of deals) {
+    if (!includeVariable && isVariableRevenueDeal(deal)) continue;
+
     if (deal.deal_type === "project") {
       for (const entry of deal.payment_schedule ?? []) {
         if (entry.month !== month) continue;
@@ -456,7 +510,7 @@ export function expectedRevenueBreakdownForMonth(
         projectName: deal.project_name,
         companyName: deal.company_name,
         amount,
-        label: "Monthly retainer",
+        label: isVariableRevenueDeal(deal) ? "Variable commission" : "Monthly retainer",
       });
     }
   }
@@ -464,8 +518,15 @@ export function expectedRevenueBreakdownForMonth(
   return items.sort((a, b) => b.amount - a.amount);
 }
 
-export function expectedRevenueForMonth(deals: FinanceDeal[], month: string): number {
-  return expectedRevenueBreakdownForMonth(deals, month).reduce((sum, item) => sum + item.amount, 0);
+export function expectedRevenueForMonth(
+  deals: FinanceDeal[],
+  month: string,
+  opts?: { includeVariable?: boolean },
+): number {
+  return expectedRevenueBreakdownForMonth(deals, month, opts).reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
 }
 
 function actualPaymentLabel(payments: DealPaymentEntry[], month: string): string {

@@ -27,6 +27,7 @@ import { removeVat } from "@/lib/vat";
 import { updateFinanceDeal, updateTaxSettings } from "@/lib/api";
 import { useUndoToast } from "@/components/mutation-provider";
 import {
+  useBunqTotals,
   useFinanceDeals,
   useFinanceSummary,
   useOpportunities,
@@ -42,6 +43,7 @@ import {
   PaymentScheduleEntry,
   TASK_ASSIGNEES,
   dealContractValue,
+  dealFixedOutstanding,
   dealOutstanding,
   sumDealPayments,
   monthlyInsights,
@@ -96,7 +98,7 @@ const BunqPanel = dynamicImport(
 const TABS = [
   { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
   { id: "bunq", label: "Bunq", sub: "Bank revenue from Jan 2026 → link to deals" },
-  { id: "tax", label: "Tax reserve", sub: "VOF + salary/WW → what you still need to set aside" },
+  { id: "tax", label: "Belastingreserve", sub: "VOF + salaris/WW → wat je nog apart moet zetten" },
   { id: "bv", label: "BV check", sub: "Holding + personal holdings vs staying a VOF" },
 ] as const;
 
@@ -252,6 +254,7 @@ export default function FinancePage() {
     useFinanceSummary<Summary>(month);
   const { data: deals = [], isLoading: dealsLoading, mutate: mutateDeals } = useFinanceDeals();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
+  const { data: bunqTotals } = useBunqTotals();
   const loading =
     (summaryLoading && !summary) ||
     (dealsLoading && deals.length === 0) ||
@@ -433,8 +436,8 @@ export default function FinancePage() {
 
   const cashPosition = useMemo(() => {
     const year = new Date().getFullYear();
-    const outstanding = deals.reduce((sum, d) => sum + dealOutstanding(d), 0);
-    const receivedYtd = deals.reduce((sum, d) => {
+    const outstanding = deals.reduce((sum, d) => sum + dealFixedOutstanding(d), 0);
+    const dealPaymentsYtd = deals.reduce((sum, d) => {
       const payments = Array.isArray(d.payments) ? d.payments : [];
       return (
         sum +
@@ -444,7 +447,12 @@ export default function FinancePage() {
         }, 0)
       );
     }, 0);
-    const revenue = buildYearRevenue(deals, opportunities, year);
+    // Prefer Bunq client revenue once synced — unmatched payments still count.
+    const receivedYtd =
+      bunqTotals != null ? Number(bunqTotals.yearTotal) || 0 : dealPaymentsYtd;
+    const revenue = buildYearRevenue(deals, opportunities, year, {
+      realisedGrossInclVat: bunqTotals != null ? receivedYtd : null,
+    });
     const reserve = buildTaxReserve(revenue, {
       annualCosts: taxSettings.tax_annual_costs,
       firstPartnerSharePct: taxSettings.tax_profit_split,
@@ -457,10 +465,11 @@ export default function FinancePage() {
     return {
       outstanding,
       receivedYtd,
+      receivedFromBunq: bunqTotals != null,
       taxSetAside: reserve.reserveToDate,
       taxFullYear: reserve.reserveFullYear,
     };
-  }, [deals, opportunities, taxSettings]);
+  }, [deals, opportunities, taxSettings, bunqTotals]);
 
   const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0];
 
@@ -509,6 +518,7 @@ export default function FinancePage() {
           opportunities={opportunities}
           settings={taxSettings}
           onSettingsChange={handleTaxSettingsChange}
+          bunqYearTotalInclVat={bunqTotals?.yearTotal ?? null}
         />
       )}
 
@@ -518,6 +528,7 @@ export default function FinancePage() {
           opportunities={opportunities}
           settings={taxSettings}
           onSettingsChange={handleTaxSettingsChange}
+          bunqYearTotalInclVat={bunqTotals?.yearTotal ?? null}
         />
       )}
 
@@ -527,14 +538,18 @@ export default function FinancePage() {
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Received YTD</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Ontvangen YTD</p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-emerald-400">
                 {formatCurrency(cashPosition.receivedYtd)}
               </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">On deals this year (incl. VAT)</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                {cashPosition.receivedFromBunq
+                  ? "Bunq gekoppeld aan deal/bedrijf (incl. btw)"
+                  : "Dealbetalingen dit jaar (incl. btw)"}
+              </p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still outstanding</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nog open (vast)</p>
               <p
                 className={cn(
                   "text-xl sm:text-2xl font-mono font-semibold tabular-nums",
@@ -543,17 +558,19 @@ export default function FinancePage() {
               >
                 {formatCurrency(cashPosition.outstanding)}
               </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Contracted minus paid</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">
+                Zonder commissie (Escort e.d.)
+              </p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still to reserve now</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nu nog te reserveren</p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
                 {formatCurrency(cashPosition.taxSetAside)}
               </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">YTD tax − withheld − VA</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Belasting tot nu − loonheffing − VA</p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still to reserve (year)</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Nog te reserveren (jaar)</p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-neutral-100">
                 {formatCurrency(cashPosition.taxFullYear)}
               </p>
@@ -564,7 +581,7 @@ export default function FinancePage() {
                   className="text-[#d4e052] hover:underline"
                   onClick={() => setTab("tax")}
                 >
-                  Tax reserve
+                  Belastingreserve
                 </button>
               </p>
             </div>

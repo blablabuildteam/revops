@@ -364,12 +364,33 @@ export async function listBunqPayments(opts?: {
 export async function getBunqPaymentTotals() {
   await ensureTables();
   await ensureBunqPaymentsTable();
+  const year = new Date().getFullYear();
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year + 1}-01-01`;
+  // yearTotal = linked to a finance deal and/or recognised company only.
   const { rows } = await sql`
     SELECT
       COUNT(*)::int AS count,
       COALESCE(SUM(amount), 0) AS total,
       COUNT(*) FILTER (WHERE finance_deal_id IS NOT NULL)::int AS matched_deals,
-      COUNT(*) FILTER (WHERE company_id IS NOT NULL)::int AS matched_companies
+      COUNT(*) FILTER (WHERE company_id IS NOT NULL)::int AS matched_companies,
+      COALESCE(SUM(amount) FILTER (
+        WHERE created_at >= ${yearStart}::timestamptz
+          AND created_at < ${yearEnd}::timestamptz
+          AND (finance_deal_id IS NOT NULL OR company_id IS NOT NULL)
+      ), 0) AS year_total,
+      COUNT(*) FILTER (
+        WHERE created_at >= ${yearStart}::timestamptz
+          AND created_at < ${yearEnd}::timestamptz
+          AND finance_deal_id IS NULL
+          AND company_id IS NULL
+      )::int AS unmatched_year_count,
+      COALESCE(SUM(amount) FILTER (
+        WHERE created_at >= ${yearStart}::timestamptz
+          AND created_at < ${yearEnd}::timestamptz
+          AND finance_deal_id IS NULL
+          AND company_id IS NULL
+      ), 0) AS unmatched_year_total
     FROM bunq_payments
     WHERE COALESCE(matched_confidence, '') <> 'internal'
       AND created_at >= ${BUNQ_FROM_DATE}::timestamptz
@@ -381,6 +402,14 @@ export async function getBunqPaymentTotals() {
   return {
     count: Number(row?.count) || 0,
     total: Number(row?.total) || 0,
+    /**
+     * Client revenue this calendar year that we can attribute to a deal or
+     * company (incl. VAT). Unmatched Bunq rows are excluded.
+     */
+    yearTotal: Number(row?.year_total) || 0,
+    unmatchedYearCount: Number(row?.unmatched_year_count) || 0,
+    unmatchedYearTotal: Number(row?.unmatched_year_total) || 0,
+    year,
     matchedDeals: Number(row?.matched_deals) || 0,
     matchedCompanies: Number(row?.matched_companies) || 0,
     lastSync: syncRows[0]?.value ? String(syncRows[0].value) : null,

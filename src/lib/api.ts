@@ -25,6 +25,7 @@ import {
 function invalidateFinanceCaches() {
   invalidateCache(cacheKeys.financeDeals());
   invalidateCachePrefix("finance-summary:");
+  invalidateCache(cacheKeys.bunqTotals);
 }
 
 const base = "/api";
@@ -365,6 +366,26 @@ export function updateTaxSettings(data: Partial<TaxSettings>): Promise<TaxSettin
   }).then((saved) => {
     setCached(cacheKeys.taxSettings, saved);
     return saved;
+  });
+}
+
+export type BunqPaymentTotals = {
+  count: number;
+  total: number;
+  yearTotal: number;
+  unmatchedYearCount?: number;
+  unmatchedYearTotal?: number;
+  year: number;
+  matchedDeals: number;
+  matchedCompanies: number;
+  lastSync: string | null;
+};
+
+/** Client revenue totals from synced Bunq payments (excl. internal moves). */
+export function getBunqTotals(): Promise<BunqPaymentTotals> {
+  return cachedFetch(cacheKeys.bunqTotals, async () => {
+    const data = await req<{ totals: BunqPaymentTotals }>("/bunq/payments?revenue=1");
+    return data.totals;
   });
 }
 

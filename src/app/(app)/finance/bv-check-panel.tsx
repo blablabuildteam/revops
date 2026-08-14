@@ -81,19 +81,24 @@ export function BvCheckPanel({
   opportunities,
   settings,
   onSettingsChange,
+  bunqYearTotalInclVat = null,
 }: {
   deals: FinanceDeal[];
   opportunities: Opportunity[];
   settings: TaxSettings;
   onSettingsChange: (patch: Partial<TaxSettings>) => void;
+  bunqYearTotalInclVat?: number | null;
 }) {
   const [retainProfit, setRetainProfit] = useState(true);
   const year = new Date().getFullYear();
   const partners = TASK_ASSIGNEES.length;
 
   const revenue = useMemo(
-    () => buildYearRevenue(deals, opportunities, year),
-    [deals, opportunities, year],
+    () =>
+      buildYearRevenue(deals, opportunities, year, {
+        realisedGrossInclVat: bunqYearTotalInclVat,
+      }),
+    [deals, opportunities, year, bunqYearTotalInclVat],
   );
 
   const reserveBase = useMemo(

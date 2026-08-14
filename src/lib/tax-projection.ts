@@ -2,6 +2,7 @@ import {
   actualRevenueForMonth,
   expectedRevenueForMonth,
   forecastRevenueForMonth,
+  isVariableRevenueDeal,
   type FinanceDeal,
   type Opportunity,
 } from "@/lib/types";
@@ -29,10 +30,23 @@ export type YearRevenue = {
   monthsElapsed: number;
   /** Payments actually received so far, excluding VAT. */
   realised: number;
-  /** Signed deals still to be invoiced this year, excluding VAT. */
+  /** Fixed signed deals still due this year, excluding VAT (no commission). */
   contractedRemaining: number;
+  /** Soft schedule on variable/commission deals, excluding VAT — not confirmed. */
+  variableRemaining: number;
   /** Probability-weighted pipeline for the remaining months, excluding VAT. */
   pipelineRemaining: number;
+  /** True when realised came from Bunq client revenue, not deal ledgers. */
+  realisedFromBunq: boolean;
+};
+
+export type BuildYearRevenueOptions = {
+  today?: Date;
+  /**
+   * Gross client revenue already received (incl. VAT), typically from Bunq.
+   * When set, this replaces deal.payments as the realised total.
+   */
+  realisedGrossInclVat?: number | null;
 };
 
 function monthKey(year: number, monthIndex: number) {
@@ -43,19 +57,29 @@ function monthKey(year: number, monthIndex: number) {
  * Revenue picture for one calendar year, split into what has landed and what
  * is still expected.
  *
- * Finance deals + payments are stored **incl. VAT**; opportunities are **excl.
- * VAT** (pipeline forecast adds VAT so it compares to deal cash, then we strip
- * everything here). VAT is never part of the profit.
+ * Finance deals + payments / Bunq are stored **incl. VAT**; opportunities are
+ * **excl. VAT** (pipeline forecast adds VAT so it compares to deal cash, then
+ * we strip everything here). VAT is never part of the profit.
  *
- * Confirmed path  = realised payments + unpaid schedule on finance deals.
- * Pipeline path   = same + probability-weighted open opportunities.
+ * Confirmed path  = realised cash + unpaid schedule on *fixed* deals only.
+ * Variable commission (Escort / Comfortzone / Heatnest, …) is never treated
+ * as certain remaining — it only counts once it hits the bank.
+ * Pipeline path   = confirmed + probability-weighted open opportunities.
  */
 export function buildYearRevenue(
   deals: FinanceDeal[],
   opportunities: Opportunity[],
   year: number,
-  today = new Date(),
+  todayOrOpts: Date | BuildYearRevenueOptions = new Date(),
 ): YearRevenue {
+  const opts: BuildYearRevenueOptions =
+    todayOrOpts instanceof Date ? { today: todayOrOpts } : todayOrOpts;
+  const today = opts.today ?? new Date();
+  const bunqGross =
+    opts.realisedGrossInclVat != null && Number.isFinite(opts.realisedGrossInclVat)
+      ? Math.max(0, Number(opts.realisedGrossInclVat))
+      : null;
+
   const isCurrentYear = today.getFullYear() === year;
   const lastElapsedIndex = isCurrentYear
     ? today.getMonth()
@@ -63,18 +87,31 @@ export function buildYearRevenue(
       ? 11
       : -1;
 
+  const fixedDeals = deals.filter((d) => !isVariableRevenueDeal(d));
+  const variableDeals = deals.filter((d) => isVariableRevenueDeal(d));
+
   let realisedGross = 0;
   let contractedGross = 0;
+  let variableGross = 0;
   let pipelineGross = 0;
 
   for (let m = 0; m < 12; m++) {
     const key = monthKey(year, m);
-    const expected = expectedRevenueForMonth(deals, key);
-    const paid = actualRevenueForMonth(deals, key);
+    const expectedFixed = expectedRevenueForMonth(fixedDeals, key, {
+      includeVariable: false,
+    });
+    const paidFixed = actualRevenueForMonth(fixedDeals, key);
+    const expectedVariable = expectedRevenueForMonth(variableDeals, key);
+    const paidVariable = actualRevenueForMonth(variableDeals, key);
 
-    realisedGross += paid;
-    // Unpaid schedule on confirmed deals — including overdue months.
-    contractedGross += Math.max(0, expected - paid);
+    if (bunqGross == null) {
+      realisedGross += paidFixed + paidVariable;
+    }
+
+    // Unpaid schedule on fixed deals only — including overdue months.
+    contractedGross += Math.max(0, expectedFixed - paidFixed);
+    // Soft forecast for commission partners (never in "confirmed").
+    variableGross += Math.max(0, expectedVariable - paidVariable);
 
     // Pipeline only for the rest of the year (not rewriting the past).
     if (m > lastElapsedIndex) {
@@ -82,12 +119,18 @@ export function buildYearRevenue(
     }
   }
 
+  if (bunqGross != null) {
+    realisedGross = bunqGross;
+  }
+
   return {
     year,
     monthsElapsed: lastElapsedIndex + 1,
     realised: removeVat(realisedGross),
     contractedRemaining: removeVat(contractedGross),
+    variableRemaining: removeVat(variableGross),
     pipelineRemaining: removeVat(pipelineGross),
+    realisedFromBunq: bunqGross != null,
   };
 }
 

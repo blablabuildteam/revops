@@ -4,6 +4,7 @@ import { useCallback, useRef } from "react";
 import { useCachedQuery } from "@/hooks/use-cached-query";
 import {
   getAllocations,
+  getBunqTotals,
   getCompanies,
   getFinanceDeals,
   getFinanceSummary,
@@ -12,6 +13,7 @@ import {
   getTaxSettings,
   getUsers,
   type ApiUser,
+  type BunqPaymentTotals,
   type ProjectWithStats,
 } from "@/lib/api";
 import { cacheKeys } from "@/lib/query-cache";
@@ -63,4 +65,8 @@ export function useFinanceSummary<T = unknown>(month: string) {
 
 export function useTaxSettings() {
   return useCachedQuery<TaxSettings>(cacheKeys.taxSettings, getTaxSettings);
+}
+
+export function useBunqTotals() {
+  return useCachedQuery<BunqPaymentTotals>(cacheKeys.bunqTotals, getBunqTotals);
 }
