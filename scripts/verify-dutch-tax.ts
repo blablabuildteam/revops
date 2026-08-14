@@ -10,6 +10,7 @@ import {
   bvTax,
   findBvAdvantageRange,
   partnerIncomeTax,
+  personalPartnerTax,
   vpbTax,
   zvwSelfEmployed,
 } from "../src/lib/dutch-tax";
@@ -136,6 +137,48 @@ for (const profit of [
       `(cash ${bvScenario.totalNet.toFixed(0)} + retained ${bvScenario.retainedInBv.toFixed(0)}), ` +
       `diff ${delta >= 0 ? "+" : ""}${delta.toFixed(0)}`,
   );
+}
+
+console.log("\n--- Personal income stacks with VOF ---");
+const stacked = personalPartnerTax(
+  40_000,
+  {
+    salary: 12_000,
+    ww: 2_900 * 8,
+    other: 3_000,
+    withheld: 8_000,
+    provisionalPaid: 2_000,
+  },
+  { urencriterium: true },
+);
+console.log(
+  `       box1 ${stacked.taxableBox1.toFixed(0)}, IB ${stacked.incomeTax.toFixed(0)}, ` +
+    `Zvw ${stacked.zvw.toFixed(0)}, due ${stacked.totalDue.toFixed(0)}, ` +
+    `still to reserve ${stacked.stillToReserve.toFixed(0)}`,
+);
+if (stacked.taxableBox1 <= stacked.taxableProfit) {
+  failures++;
+  console.log("[FAIL] taxable box 1 should include salary/WW/other on top of VOF");
+} else {
+  console.log("[PASS] taxable box 1 includes personal income");
+}
+if (stacked.stillToReserve !== Math.max(0, stacked.totalDue - 8_000 - 2_000)) {
+  failures++;
+  console.log("[FAIL] stillToReserve should subtract withholdings and VA");
+} else {
+  console.log("[PASS] stillToReserve = due − withheld − VA");
+}
+// WW must not inflate arbeidskorting base beyond salary+other+VOF taxable
+const withoutWw = personalPartnerTax(
+  40_000,
+  { salary: 12_000, ww: 0, other: 3_000, withheld: 0, provisionalPaid: 0 },
+  { urencriterium: true },
+);
+if (Math.abs(stacked.arbeidskorting - withoutWw.arbeidskorting) > 1) {
+  failures++;
+  console.log("[FAIL] WW should not change arbeidskorting");
+} else {
+  console.log("[PASS] WW excluded from arbeidskorting base");
 }
 
 console.log(

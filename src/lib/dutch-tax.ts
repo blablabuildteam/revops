@@ -223,6 +223,145 @@ export function partnerIncomeTax(
 }
 
 // ---------------------------------------------------------------------------
+// Personal box 1: VOF share + salary + WW + other income
+// ---------------------------------------------------------------------------
+
+/**
+ * Other box-1 income for one partner (employment, WW, nabetalingen).
+ * Amounts are gross; loonheffing already withheld is tracked separately.
+ */
+export type PersonalIncomeInput = {
+  /** Gross employment salary (incl. vakantiegeld paid via payroll). */
+  salary: number;
+  /** Gross WW from UWV. */
+  ww: number;
+  /** Other box 1 (VSO / exit payments / one-offs). Counts as arbeidsinkomen for AK. */
+  other: number;
+  /** Loonheffing withheld by employer + UWV (YTD and/or expected). */
+  withheld: number;
+  /** Voorlopige aanslagen already paid to the Belastingdienst. */
+  provisionalPaid: number;
+};
+
+export type PersonalPartnerTaxResult = PartnerTaxResult & {
+  salary: number;
+  ww: number;
+  other: number;
+  /** Combined box 1 taxable income after entrepreneur deductions. */
+  taxableBox1: number;
+  /** Base for arbeidskorting (salary + other + taxable VOF profit; WW excluded). */
+  laborIncome: number;
+  withheld: number;
+  provisionalPaid: number;
+  /**
+   * What still needs to sit in the personal tax pot:
+   * totalDue − withheld − provisionalPaid (never negative).
+   */
+  stillToReserve: number;
+};
+
+function computePersonalPartnerTax(
+  profitShare: number,
+  personal: PersonalIncomeInput,
+  options: PartnerTaxOptions = {},
+): PersonalPartnerTaxResult {
+  const profit = Math.max(0, profitShare);
+  const { urencriterium = true, startersaftrek: starter = false } = options;
+
+  const zelfstandigen = urencriterium
+    ? starter
+      ? ZELFSTANDIGENAFTREK
+      : Math.min(ZELFSTANDIGENAFTREK, profit)
+    : 0;
+  const starters = urencriterium && starter ? STARTERSAFTREK : 0;
+
+  const afterEntrepreneurDeduction = Math.max(0, profit - zelfstandigen - starters);
+  const mkbVrijstelling = MKB_WINSTVRIJSTELLING * afterEntrepreneurDeduction;
+  const taxableProfit = afterEntrepreneurDeduction - mkbVrijstelling;
+
+  const salary = Math.max(0, personal.salary);
+  const ww = Math.max(0, personal.ww);
+  const other = Math.max(0, personal.other);
+  const withheld = Math.max(0, personal.withheld);
+  const provisionalPaid = Math.max(0, personal.provisionalPaid);
+
+  // WW is box 1 but not "arbeidsinkomen" for the employment credit.
+  const taxableBox1 = salary + ww + other + taxableProfit;
+  const laborIncome = salary + other + taxableProfit;
+
+  const grossTax = box1Tax(taxableBox1);
+
+  const deductionsInTopBracket = Math.max(
+    0,
+    profit - Math.max(TOP_BRACKET_THRESHOLD, taxableProfit),
+  );
+  const deductionRateAdjustment = (TOP_RATE - DEDUCTION_RATE_CAP) * deductionsInTopBracket;
+
+  const ahk = algemeneHeffingskorting(taxableBox1);
+  const ak = arbeidskorting(laborIncome);
+  const totalCredits = Math.min(ahk + ak, grossTax + deductionRateAdjustment);
+
+  const incomeTax = Math.max(0, grossTax + deductionRateAdjustment - totalCredits);
+  // Zvw zelfstandigen only on the entrepreneurial slice; employer/UWV cover loon/WW.
+  const zvw = zvwSelfEmployed(taxableProfit);
+  const totalDue = incomeTax + zvw;
+  const totalIncome = profit + salary + ww + other;
+  const stillToReserve = Math.max(0, totalDue - withheld - provisionalPaid);
+
+  return {
+    profitShare: profit,
+    zelfstandigenaftrek: zelfstandigen,
+    startersaftrek: starters,
+    mkbVrijstelling,
+    taxableProfit,
+    salary,
+    ww,
+    other,
+    taxableBox1,
+    laborIncome,
+    grossTax,
+    deductionRateAdjustment,
+    algemeneHeffingskorting: ahk,
+    arbeidskorting: ak,
+    totalCredits,
+    incomeTax,
+    zvw,
+    totalDue,
+    netIncome: totalIncome - totalDue,
+    effectiveRate: totalIncome > 0 ? totalDue / totalIncome : 0,
+    marginalRate: 0,
+    withheld,
+    provisionalPaid,
+    stillToReserve,
+  };
+}
+
+/** Combined personal tax for one VOF partner (VOF share + other box 1). */
+export function personalPartnerTax(
+  profitShare: number,
+  personal: PersonalIncomeInput = {
+    salary: 0,
+    ww: 0,
+    other: 0,
+    withheld: 0,
+    provisionalPaid: 0,
+  },
+  options: PartnerTaxOptions = {},
+): PersonalPartnerTaxResult {
+  const base = computePersonalPartnerTax(profitShare, personal, options);
+  const step = 1_000;
+  const bumped = computePersonalPartnerTax(profitShare + step, personal, options);
+  return {
+    ...base,
+    marginalRate: (bumped.totalDue - base.totalDue) / step,
+  };
+}
+
+export function emptyPersonalIncome(): PersonalIncomeInput {
+  return { salary: 0, ww: 0, other: 0, withheld: 0, provisionalPaid: 0 };
+}
+
+// ---------------------------------------------------------------------------
 // VOF as a whole
 // ---------------------------------------------------------------------------
 

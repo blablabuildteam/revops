@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { DEFAULT_TAX_SETTINGS, parseTaxSettings, type TaxSettings } from "@/lib/tax-settings";
+import {
+  DEFAULT_TAX_SETTINGS,
+  parseTaxSettings,
+  serializeTaxSettingValue,
+  type TaxSettings,
+} from "@/lib/tax-settings";
 
 const KEYS = Object.keys(DEFAULT_TAX_SETTINGS) as (keyof TaxSettings)[];
 
@@ -26,7 +31,11 @@ export async function PUT(req: NextRequest) {
     const updates = KEYS.filter((key) => body[key] !== undefined).map((key) =>
       sql`
         INSERT INTO finance_settings (key, value, updated_at)
-        VALUES (${key}, ${String(body[key])}, now())
+        VALUES (
+          ${key},
+          ${serializeTaxSettingValue(key, body[key] as TaxSettings[keyof TaxSettings])},
+          now()
+        )
         ON CONFLICT (key) DO UPDATE
         SET value = EXCLUDED.value, updated_at = now()
       `,

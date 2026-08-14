@@ -7,12 +7,21 @@ import {
 } from "@/lib/types";
 import { removeVat } from "@/lib/vat";
 import {
+  emptyPersonalIncome,
   partnerIncomeTax,
+  personalPartnerTax,
   splitProfit,
   vofTax,
   type PartnerTaxOptions,
+  type PersonalIncomeInput,
+  type PersonalPartnerTaxResult,
   type VofTaxResult,
 } from "@/lib/dutch-tax";
+import {
+  personalYearTotals,
+  personalYtdTotals,
+  type PartnerPersonalSettings,
+} from "@/lib/tax-settings";
 
 export type YearRevenue = {
   year: number;
@@ -90,6 +99,8 @@ export type TaxReserveOptions = PartnerTaxOptions & {
   partners: number;
   /** Count weighted pipeline towards the projected year profit. */
   includePipeline: boolean;
+  /** Optional personal income per partner (Kevin, Xennith). */
+  personal?: PartnerPersonalSettings[];
 };
 
 export type TaxReserve = {
@@ -101,18 +112,45 @@ export type TaxReserve = {
   projectedProfitWithPipeline: number;
   /** Profit earned so far, after a pro-rata share of the yearly costs. */
   profitToDate: number;
+  /** VOF-only tax (kept for BV check / flat 40% comparison). */
   projected: VofTaxResult;
   projectedWithPipeline: VofTaxResult;
+  /** Combined personal tax per partner for the full year. */
+  personalFullYear: PersonalPartnerTaxResult[];
+  /** Combined personal tax per partner on YTD incomes + VOF profit to date. */
+  personalYtd: PersonalPartnerTaxResult[];
   /** Effective tax rate of the projected year, applied to profit to date. */
   effectiveRate: number;
-  /** What should already be sitting in the tax account. */
+  /**
+   * What should already be sitting in the tax pots (sum of partners):
+   * YTD combined tax − YTD withholdings − VA paid.
+   */
   reserveToDate: number;
-  /** Total tax bill expected for the whole year. */
+  /** Total still-to-reserve for the whole year (both partners). */
   reserveFullYear: number;
   /** Monthly amount to set aside at the current run rate. */
   monthlyReserve: number;
+  /** Sum of totalDue before subtracting withholdings (full year). */
+  totalTaxDue: number;
+  /** Sum of loonheffing + VA already counted (full year). */
+  totalCreditsAgainstTax: number;
   perPartnerShares: number[];
 };
+
+function toPersonalInput(
+  p: PartnerPersonalSettings | undefined,
+  mode: "year" | "ytd",
+): PersonalIncomeInput {
+  if (!p) return emptyPersonalIncome();
+  const totals = mode === "year" ? personalYearTotals(p) : personalYtdTotals(p);
+  return {
+    salary: totals.salary,
+    ww: totals.ww,
+    other: totals.other,
+    withheld: totals.withheld,
+    provisionalPaid: totals.provisionalPaid,
+  };
+}
 
 export function buildTaxReserve(
   revenue: YearRevenue,
@@ -123,6 +161,7 @@ export function buildTaxReserve(
     firstPartnerSharePct,
     partners,
     includePipeline,
+    personal,
     ...taxOptions
   } = options;
 
@@ -147,9 +186,24 @@ export function buildTaxReserve(
 
   const elapsedShare = revenue.monthsElapsed / 12;
   const profitToDate = Math.max(0, revenue.realised - annualCosts * elapsedShare);
+  const profitToDateShares = splitProfit(profitToDate, shares);
 
-  // The bracket a euro lands in depends on the whole year, so the year's
-  // effective rate is the right multiplier for profit earned so far.
+  const personalFullYear = perPartnerShares.map((share, i) =>
+    personalPartnerTax(share, toPersonalInput(personal?.[i], "year"), taxOptions),
+  );
+  const personalYtd = profitToDateShares.map((share, i) =>
+    personalPartnerTax(share, toPersonalInput(personal?.[i], "ytd"), taxOptions),
+  );
+
+  const totalTaxDue = personalFullYear.reduce((s, p) => s + p.totalDue, 0);
+  const totalCreditsAgainstTax = personalFullYear.reduce(
+    (s, p) => s + p.withheld + p.provisionalPaid,
+    0,
+  );
+  const reserveFullYear = personalFullYear.reduce((s, p) => s + p.stillToReserve, 0);
+  const reserveToDate = personalYtd.reduce((s, p) => s + p.stillToReserve, 0);
+
+  // VOF-only effective rate kept for the "next euro of VOF profit" hint.
   const effectiveRate = projected.effectiveRate;
 
   return {
@@ -160,10 +214,14 @@ export function buildTaxReserve(
     profitToDate,
     projected,
     projectedWithPipeline,
+    personalFullYear,
+    personalYtd,
     effectiveRate,
-    reserveToDate: profitToDate * effectiveRate,
-    reserveFullYear: projected.totalDue,
-    monthlyReserve: projected.totalDue / 12,
+    reserveToDate,
+    reserveFullYear,
+    monthlyReserve: reserveFullYear / 12,
+    totalTaxDue,
+    totalCreditsAgainstTax,
     perPartnerShares,
   };
 }

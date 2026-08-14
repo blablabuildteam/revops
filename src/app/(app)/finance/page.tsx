@@ -96,7 +96,7 @@ const BunqPanel = dynamicImport(
 const TABS = [
   { id: "overview", label: "Overview", sub: "Open deals, cash in, and what still needs to come in" },
   { id: "bunq", label: "Bunq", sub: "Bank revenue from Jan 2026 → link to deals" },
-  { id: "tax", label: "Tax reserve", sub: "What to set aside for income tax (VOF)" },
+  { id: "tax", label: "Tax reserve", sub: "VOF + salary/WW → what you still need to set aside" },
   { id: "bv", label: "BV check", sub: "Holding + personal holdings vs staying a VOF" },
 ] as const;
 
@@ -452,6 +452,7 @@ export default function FinancePage() {
       includePipeline: false,
       urencriterium: taxSettings.tax_urencriterium,
       startersaftrek: taxSettings.tax_startersaftrek,
+      personal: taxSettings.tax_personal,
     });
     return {
       outstanding,
@@ -545,14 +546,14 @@ export default function FinancePage() {
               <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">Contracted minus paid</p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax set aside now</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still to reserve now</p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-[#d4e052]">
                 {formatCurrency(cashPosition.taxSetAside)}
               </p>
-              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">IB + Zvw on profit so far</p>
+              <p className="text-[11px] sm:text-xs text-neutral-500 mt-1">YTD tax − withheld − VA</p>
             </div>
             <div className="border border-neutral-800 rounded-lg px-4 py-3.5 sm:px-5 sm:py-4 bg-neutral-900/40">
-              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Tax full-year est.</p>
+              <p className="text-[10px] sm:text-xs text-neutral-500 uppercase tracking-widest mb-1">Still to reserve (year)</p>
               <p className="text-xl sm:text-2xl font-mono font-semibold tabular-nums text-neutral-100">
                 {formatCurrency(cashPosition.taxFullYear)}
               </p>
