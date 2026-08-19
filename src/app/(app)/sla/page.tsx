@@ -7,8 +7,8 @@ import {
   Plus,
   Shield,
   ExternalLink,
-  Settings2,
   Trash2,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,11 +53,6 @@ const STATUS_LABELS: Record<SlaStatus, string> = {
   ended: "Gestopt",
 };
 
-const FREQ_LABELS: Record<SlaBillingFrequency, string> = {
-  monthly: "Maandelijks",
-  quarterly: "Per kwartaal",
-};
-
 type FormState = {
   client_name: string;
   domain: string;
@@ -78,9 +73,87 @@ const blankForm: FormState = {
   notes: "",
 };
 
+type ClientGroup = {
+  key: string;
+  client_name: string;
+  rows: SlaAgreement[];
+  status: SlaStatus;
+  billing_frequency: SlaBillingFrequency;
+  monthly_total: number;
+  invoice_via: string | null;
+  notes: string | null;
+  invoiced: boolean;
+  current_period: string;
+  billable: SlaAgreement[];
+};
+
 function domainHref(domain: string) {
   if (/^https?:\/\//i.test(domain)) return domain;
   return `https://${domain}`;
+}
+
+function formatDomain(domain: string) {
+  return domain.replace(/^https?:\/\//i, "").replace(/\/$/, "");
+}
+
+function pickGroupStatus(rows: SlaAgreement[]): SlaStatus {
+  if (rows.some((r) => r.status === "active")) return "active";
+  if (rows.some((r) => r.status === "upcoming")) return "upcoming";
+  if (rows.some((r) => r.status === "paused")) return "paused";
+  return "ended";
+}
+
+function pickGroupFrequency(rows: SlaAgreement[]): SlaBillingFrequency {
+  return rows.some((r) => r.billing_frequency === "quarterly")
+    ? "quarterly"
+    : "monthly";
+}
+
+function buildGroups(items: SlaAgreement[]): ClientGroup[] {
+  const map = new Map<string, SlaAgreement[]>();
+  for (const row of items) {
+    const key = row.client_name.trim().toLowerCase();
+    const list = map.get(key) ?? [];
+    list.push(row);
+    map.set(key, list);
+  }
+
+  const groups: ClientGroup[] = [];
+  for (const [, rows] of map) {
+    const sorted = [...rows].sort((a, b) =>
+      (a.domain ?? "").localeCompare(b.domain ?? ""),
+    );
+    const billable = sorted.filter(
+      (r) => r.status === "active" && (Number(r.monthly_amount) || 0) > 0,
+    );
+    const frequency = pickGroupFrequency(sorted);
+    const periodRow =
+      billable[0] ?? sorted.find((r) => r.status === "active") ?? sorted[0];
+    groups.push({
+      key: sorted[0].client_name.trim().toLowerCase(),
+      client_name: sorted[0].client_name,
+      rows: sorted,
+      status: pickGroupStatus(sorted),
+      billing_frequency: frequency,
+      monthly_total: sorted
+        .filter((r) => r.status === "active" || r.status === "upcoming")
+        .reduce((sum, r) => sum + (Number(r.monthly_amount) || 0), 0),
+      invoice_via: sorted.find((r) => r.invoice_via)?.invoice_via ?? null,
+      notes: sorted.find((r) => r.notes)?.notes ?? null,
+      invoiced: billable.length > 0 && billable.every((r) => r.invoiced),
+      current_period: periodRow.current_period,
+      billable,
+    });
+  }
+
+  const rank = (s: SlaStatus) =>
+    s === "active" ? 0 : s === "upcoming" ? 1 : s === "paused" ? 2 : 3;
+
+  return groups.sort(
+    (a, b) =>
+      rank(a.status) - rank(b.status) ||
+      a.client_name.localeCompare(b.client_name),
+  );
 }
 
 function SlaForm({
@@ -88,11 +161,13 @@ function SlaForm({
   onClose,
   onSave,
   initial,
+  defaultClient,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: () => void;
   initial?: SlaAgreement | null;
+  defaultClient?: string;
 }) {
   const [form, setForm] = useState<FormState>(blankForm);
   const [loading, setLoading] = useState(false);
@@ -111,9 +186,12 @@ function SlaForm({
             status: initial.status,
             notes: initial.notes ?? "",
           }
-        : blankForm,
+        : {
+            ...blankForm,
+            client_name: defaultClient ?? "",
+          },
     );
-  }, [open, initial]);
+  }, [open, initial, defaultClient]);
 
   const s = (k: keyof FormState, v: string) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -279,6 +357,275 @@ function SlaForm({
   );
 }
 
+/** Edit shared client fields + pick a domain line to tweak/delete. */
+function ClientGroupDialog({
+  open,
+  group,
+  onClose,
+  onSave,
+  onEditDomain,
+  onAddDomain,
+  onDeleteDomain,
+}: {
+  open: boolean;
+  group: ClientGroup | null;
+  onClose: () => void;
+  onSave: () => void;
+  onEditDomain: (row: SlaAgreement) => void;
+  onAddDomain: (clientName: string) => void;
+  onDeleteDomain: (row: SlaAgreement) => void;
+}) {
+  const [clientName, setClientName] = useState("");
+  const [frequency, setFrequency] = useState<SlaBillingFrequency>("monthly");
+  const [invoiceVia, setInvoiceVia] = useState("");
+  const [status, setStatus] = useState<SlaStatus>("active");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const withUndo = useUndoToast();
+
+  useEffect(() => {
+    if (!open || !group) return;
+    setClientName(group.client_name);
+    setFrequency(group.billing_frequency);
+    setInvoiceVia(group.invoice_via ?? "");
+    setStatus(group.status);
+    setNotes(group.notes ?? "");
+  }, [open, group]);
+
+  if (!group) return null;
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!group) return;
+    setLoading(true);
+    const snapshots = group.rows.map((r) => ({ ...r }));
+    try {
+      await withUndo({
+        label: "Klant bijgewerkt",
+        run: async () => {
+          await Promise.all(
+            group.rows.map((row) =>
+              updateSlaAgreement(row.id, {
+                client_name: clientName.trim(),
+                billing_frequency: frequency,
+                invoice_via: invoiceVia.trim() || null,
+                status,
+                notes: notes.trim() || null,
+              }),
+            ),
+          );
+          onSave();
+          onClose();
+        },
+        undo: async () => {
+          await Promise.all(
+            snapshots.map((row) =>
+              updateSlaAgreement(row.id, {
+                client_name: row.client_name,
+                billing_frequency: row.billing_frequency,
+                invoice_via: row.invoice_via,
+                status: row.status,
+                notes: row.notes,
+              }),
+            ),
+          );
+          onSave();
+        },
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{group.client_name}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Klantnaam</Label>
+            <Input
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Facturatie</Label>
+              <Select
+                value={frequency}
+                onValueChange={(v) =>
+                  setFrequency((v ?? "monthly") as SlaBillingFrequency)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Maandelijks</SelectItem>
+                  <SelectItem value="quarterly">Per kwartaal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={status}
+                onValueChange={(v) => setStatus((v ?? "active") as SlaStatus)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(STATUS_LABELS) as SlaStatus[]).map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {STATUS_LABELS[key]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Factuur via</Label>
+            <Input
+              value={invoiceVia}
+              onChange={(e) => setInvoiceVia(e.target.value)}
+              placeholder="optioneel"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Notities</Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="optioneel"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Domeinen</Label>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onAddDomain(clientName.trim() || group.client_name);
+                }}
+                className="text-xs text-[#d4e052] hover:underline"
+              >
+                + Domein
+              </button>
+            </div>
+            <ul className="border border-neutral-800 rounded-lg divide-y divide-neutral-800">
+              {group.rows.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm"
+                >
+                  <button
+                    type="button"
+                    className="flex-1 text-left min-w-0 hover:text-neutral-100 text-neutral-300"
+                    onClick={() => {
+                      onClose();
+                      onEditDomain(row);
+                    }}
+                  >
+                    <span className="truncate block">
+                      {row.domain ? formatDomain(row.domain) : "Geen domein"}
+                    </span>
+                  </button>
+                  <span className="font-mono text-xs text-neutral-500 shrink-0">
+                    {formatCurrency(Number(row.monthly_amount) || 0)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void onDeleteDomain(row)}
+                    className="p-1 text-neutral-700 hover:text-red-400"
+                    title="Verwijderen"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Annuleren
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading || !clientName.trim()}
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950"
+            >
+              {loading ? "Opslaan…" : "Opslaan"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InvoiceCheck({
+  checked,
+  periodLabel,
+  frequency,
+  disabled,
+  onToggle,
+}: {
+  checked: boolean;
+  periodLabel: string;
+  frequency: SlaBillingFrequency;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className={cn(
+        "inline-flex items-center gap-2 text-left rounded-md border px-2.5 py-1.5 transition-colors shrink-0",
+        disabled && "opacity-40 cursor-not-allowed",
+        checked
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : "border-neutral-700 bg-neutral-950/40 text-neutral-300 hover:border-neutral-500",
+      )}
+      title={
+        checked
+          ? `Gefactureerd · ${periodLabel}`
+          : `Afvinken wanneer ${frequency === "quarterly" ? "dit kwartaal" : "deze maand"} gefactureerd is`
+      }
+    >
+      <span
+        className={cn(
+          "w-4 h-4 rounded border flex items-center justify-center shrink-0",
+          checked
+            ? "border-emerald-400 bg-emerald-500/20"
+            : "border-neutral-500",
+        )}
+      >
+        {checked && <Check className="w-3 h-3" />}
+      </span>
+      <span className="leading-tight">
+        <span className="block text-xs font-medium">
+          {frequency === "quarterly" ? "Kwartaal" : "Maand"}
+        </span>
+        <span className="block text-[11px] opacity-70">{periodLabel}</span>
+      </span>
+    </button>
+  );
+}
+
 export default function SlaPage() {
   const {
     data: items = [],
@@ -288,50 +635,61 @@ export default function SlaPage() {
   const loading = isLoading && items.length === 0;
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SlaAgreement | null>(null);
+  const [defaultClient, setDefaultClient] = useState<string | undefined>();
+  const [groupEdit, setGroupEdit] = useState<ClientGroup | null>(null);
   const withUndo = useUndoToast();
 
-  const active = useMemo(
-    () => items.filter((s) => s.status === "active"),
-    [items],
+  const groups = useMemo(() => buildGroups(items), [items]);
+  const activeGroups = useMemo(
+    () => groups.filter((g) => g.status === "active"),
+    [groups],
   );
-  const upcoming = useMemo(
-    () => items.filter((s) => s.status === "upcoming"),
-    [items],
+  const upcomingGroups = useMemo(
+    () => groups.filter((g) => g.status === "upcoming"),
+    [groups],
+  );
+  const otherGroups = useMemo(
+    () =>
+      groups.filter((g) => g.status !== "active" && g.status !== "upcoming"),
+    [groups],
   );
 
   const mrr = useMemo(
-    () => active.reduce((sum, s) => sum + (Number(s.monthly_amount) || 0), 0),
-    [active],
+    () => activeGroups.reduce((sum, g) => sum + g.monthly_total, 0),
+    [activeGroups],
   );
   const upcomingMrr = useMemo(
-    () => upcoming.reduce((sum, s) => sum + (Number(s.monthly_amount) || 0), 0),
-    [upcoming],
+    () => upcomingGroups.reduce((sum, g) => sum + g.monthly_total, 0),
+    [upcomingGroups],
   );
-  const openInvoice = useMemo(
-    () =>
-      active.filter((s) => !s.invoiced && (Number(s.monthly_amount) || 0) > 0),
-    [active],
-  );
-  const openInvoiceTotal = useMemo(
-    () =>
-      openInvoice.reduce(
-        (sum, s) =>
-          sum + slaInvoiceAmount(Number(s.monthly_amount) || 0, s.billing_frequency),
-        0,
-      ),
-    [openInvoice],
+  const openGroups = useMemo(
+    () => activeGroups.filter((g) => g.billable.length > 0 && !g.invoiced),
+    [activeGroups],
   );
 
-  async function toggleInvoiced(row: SlaAgreement) {
-    const next = !row.invoiced;
+  async function toggleGroupInvoiced(group: ClientGroup) {
+    if (group.billable.length === 0) return;
+    const next = !group.invoiced;
+    const snapshots = group.billable.map((r) => ({
+      id: r.id,
+      invoiced: r.invoiced,
+    }));
     await withUndo({
       label: next ? "Gemarkeerd als gefactureerd" : "Factuurstatus teruggezet",
       run: async () => {
-        await updateSlaAgreement(row.id, { invoiced: next });
+        await Promise.all(
+          group.billable.map((row) =>
+            updateSlaAgreement(row.id, { invoiced: next }),
+          ),
+        );
         void mutate();
       },
       undo: async () => {
-        await updateSlaAgreement(row.id, { invoiced: row.invoiced });
+        await Promise.all(
+          snapshots.map((row) =>
+            updateSlaAgreement(row.id, { invoiced: row.invoiced }),
+          ),
+        );
         void mutate();
       },
     });
@@ -343,6 +701,12 @@ export default function SlaPage() {
       run: async () => {
         await deleteSlaAgreement(row.id);
         void mutate();
+        setGroupEdit((current) => {
+          if (!current) return null;
+          const nextRows = current.rows.filter((r) => r.id !== row.id);
+          if (nextRows.length === 0) return null;
+          return buildGroups(nextRows)[0] ?? null;
+        });
       },
       undo: async () => {
         await createSlaAgreement({
@@ -361,122 +725,118 @@ export default function SlaPage() {
     });
   }
 
-  function renderRow(row: SlaAgreement) {
+  function openGroup(group: ClientGroup) {
+    if (group.rows.length === 1) {
+      setEditing(group.rows[0]);
+      setDefaultClient(undefined);
+      setFormOpen(true);
+      return;
+    }
+    setGroupEdit(group);
+  }
+
+  function renderGroup(group: ClientGroup) {
     const invoiceAmt = slaInvoiceAmount(
-      Number(row.monthly_amount) || 0,
-      row.billing_frequency,
+      group.monthly_total,
+      group.billing_frequency,
     );
+    const periodLabel = formatSlaPeriodLabel(group.current_period);
+    const domains = group.rows
+      .map((r) => (r.domain ? formatDomain(r.domain) : null))
+      .filter(Boolean) as string[];
+
     return (
-      <tr
-        key={row.id}
-        className="border-b border-neutral-800/80 hover:bg-neutral-900/40"
+      <div
+        key={group.key}
+        role="button"
+        tabIndex={0}
+        onClick={() => openGroup(group)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openGroup(group);
+          }
+        }}
+        className={cn(
+          "flex items-start gap-3 px-4 py-3.5 border-b border-neutral-800/80 cursor-pointer transition-colors",
+          "hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:bg-neutral-900/50",
+          group.status === "upcoming" && "opacity-80",
+        )}
       >
-        <td className="px-4 py-3 align-top">
-          <p className="text-sm font-medium text-neutral-200">{row.client_name}</p>
-          {row.invoice_via && (
-            <p className="text-[11px] text-neutral-500 mt-0.5">
-              via {row.invoice_via}
+        <div className="flex-1 min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-neutral-100">
+              {group.client_name}
             </p>
-          )}
-          {row.notes && (
-            <p className="text-[11px] text-neutral-600 mt-0.5 max-w-[220px]">
-              {row.notes}
-            </p>
-          )}
-        </td>
-        <td className="px-4 py-3 align-top">
-          {row.domain ? (
-            <a
-              href={domainHref(row.domain)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-neutral-400 hover:text-neutral-200 inline-flex items-center gap-1"
-            >
-              {row.domain.replace(/^https?:\/\//i, "").replace(/\/$/, "")}
-              <ExternalLink className="w-3 h-3 opacity-50" />
-            </a>
-          ) : (
-            <span className="text-sm text-neutral-700">—</span>
-          )}
-        </td>
-        <td className="px-4 py-3 align-top text-right">
-          <p className="text-sm font-mono text-neutral-200">
-            {formatCurrency(Number(row.monthly_amount) || 0)}
-          </p>
-          {row.billing_frequency === "quarterly" && (
-            <p className="text-[11px] text-neutral-500 mt-0.5">
-              {formatCurrency(invoiceAmt)} / kwartaal
-            </p>
-          )}
-        </td>
-        <td className="px-4 py-3 align-top">
-          <span
-            className={cn(
-              "text-xs px-2 py-0.5 rounded",
-              row.billing_frequency === "quarterly"
-                ? "bg-amber-500/10 text-amber-300"
-                : "bg-neutral-800 text-neutral-400",
+            {group.status !== "active" && (
+              <span
+                className={cn(
+                  "text-[11px] px-1.5 py-0.5 rounded",
+                  group.status === "upcoming" && "bg-blue-500/10 text-blue-300",
+                  group.status === "paused" && "bg-neutral-800 text-neutral-400",
+                  group.status === "ended" && "bg-neutral-900 text-neutral-600",
+                )}
+              >
+                {STATUS_LABELS[group.status]}
+              </span>
             )}
-          >
-            {FREQ_LABELS[row.billing_frequency]}
-          </span>
-        </td>
-        <td className="px-4 py-3 align-top">
-          <span
-            className={cn(
-              "text-xs px-2 py-0.5 rounded",
-              row.status === "active" && "bg-[#d4e052]/10 text-[#d4e052]",
-              row.status === "upcoming" && "bg-blue-500/10 text-blue-300",
-              row.status === "paused" && "bg-neutral-800 text-neutral-400",
-              row.status === "ended" && "bg-neutral-900 text-neutral-600",
+            {group.invoice_via && (
+              <span className="text-[11px] text-neutral-500">
+                via {group.invoice_via}
+              </span>
             )}
-          >
-            {STATUS_LABELS[row.status]}
-          </span>
-        </td>
-        <td className="px-4 py-3 align-top">
-          {row.status === "active" ? (
-            <button
-              type="button"
-              onClick={() => void toggleInvoiced(row)}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded border transition-colors",
-                row.invoiced
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20",
-              )}
-              title={formatSlaPeriodLabel(row.current_period)}
-            >
-              {row.invoiced
-                ? `✓ ${formatSlaPeriodLabel(row.current_period)}`
-                : `Open · ${formatSlaPeriodLabel(row.current_period)}`}
-            </button>
-          ) : (
-            <span className="text-xs text-neutral-700">—</span>
-          )}
-        </td>
-        <td className="px-4 py-3 align-top">
-          <div className="flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(row);
-                setFormOpen(true);
-              }}
-              className="p-1.5 text-neutral-600 hover:text-neutral-300 hover:bg-neutral-800 rounded"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleDelete(row)}
-              className="p-1.5 text-neutral-700 hover:text-red-400 hover:bg-neutral-800 rounded"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
           </div>
-        </td>
-      </tr>
+
+          {domains.length > 0 ? (
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {group.rows.map((row) =>
+                row.domain ? (
+                  <a
+                    key={row.id}
+                    href={domainHref(row.domain)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
+                  >
+                    {formatDomain(row.domain)}
+                    <span className="font-mono text-neutral-600">
+                      {formatCurrency(Number(row.monthly_amount) || 0)}
+                    </span>
+                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
+                  </a>
+                ) : null,
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-600">Geen domein</p>
+          )}
+
+          {group.notes && (
+            <p className="text-[11px] text-neutral-600">{group.notes}</p>
+          )}
+        </div>
+
+        <div className="text-right shrink-0 pt-0.5">
+          <p className="text-sm font-mono text-neutral-200">
+            {formatCurrency(group.monthly_total)}
+            <span className="text-neutral-600 text-xs">/mnd</span>
+          </p>
+          {group.billing_frequency === "quarterly" && (
+            <p className="text-[11px] text-neutral-500 mt-0.5">
+              {formatCurrency(invoiceAmt)}/kw
+            </p>
+          )}
+        </div>
+
+        <InvoiceCheck
+          checked={group.invoiced}
+          periodLabel={periodLabel}
+          frequency={group.billing_frequency}
+          disabled={group.status !== "active" || group.billable.length === 0}
+          onToggle={() => void toggleGroupInvoiced(group)}
+        />
+      </div>
     );
   }
 
@@ -488,12 +848,13 @@ export default function SlaPage() {
             SLA&apos;s
           </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            Hosting &amp; infra · facturatiestatus per periode
+            Per klant · klik om te wijzigen · vink maand/kwartaal af
           </p>
         </div>
         <Button
           onClick={() => {
             setEditing(null);
+            setDefaultClient(undefined);
             setFormOpen(true);
           }}
           className="w-full sm:w-auto bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
@@ -502,20 +863,14 @@ export default function SlaPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
           <p className="text-xs text-neutral-500 mb-1">Actieve MRR</p>
           <p className="text-lg font-mono text-[#d4e052] font-medium">
             {formatCurrency(mrr)}
           </p>
-        </div>
-        <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
-          <p className="text-xs text-neutral-500 mb-1">Nog te factureren</p>
-          <p className="text-lg font-mono text-amber-300 font-medium">
-            {formatCurrency(openInvoiceTotal)}
-          </p>
           <p className="text-[11px] text-neutral-600 mt-0.5">
-            {openInvoice.length} open deze periode
+            {activeGroups.length} klanten
           </p>
         </div>
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
@@ -523,69 +878,73 @@ export default function SlaPage() {
           <p className="text-lg font-mono text-blue-300 font-medium">
             {formatCurrency(upcomingMrr)}
           </p>
-          <p className="text-[11px] text-neutral-600 mt-0.5">
-            Solero / Thuishaven e.d.
-          </p>
         </div>
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
-          <p className="text-xs text-neutral-500 mb-1">Actieve regels</p>
+          <p className="text-xs text-neutral-500 mb-1">Nog open</p>
           <p className="text-lg font-mono text-neutral-200 font-medium">
-            {active.length}
+            {openGroups.length}
+          </p>
+          <p className="text-[11px] text-neutral-600 mt-0.5">
+            {openGroups.length === 0
+              ? "Alles afgevinkt"
+              : "Klanten nog niet gefactureerd"}
           </p>
         </div>
       </div>
 
+      {openGroups.length > 0 && (
+        <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
+          <p className="text-sm text-neutral-200 font-medium mb-1">Openstaand</p>
+          <p className="text-xs text-neutral-500 mb-3">
+            Nog niet afgevinkt — mag opsparen.
+          </p>
+          <ul className="space-y-2">
+            {openGroups.map((g) => (
+              <li
+                key={g.key}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <button
+                  type="button"
+                  className="text-neutral-300 hover:text-neutral-100 text-left truncate"
+                  onClick={() => openGroup(g)}
+                >
+                  {g.client_name}
+                  <span className="text-neutral-600 text-xs ml-2">
+                    {g.billing_frequency === "quarterly" ? "kwartaal" : "maand"}
+                  </span>
+                </button>
+                <span className="font-mono text-xs text-neutral-500 shrink-0">
+                  {formatCurrency(g.monthly_total)}/mnd
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {loading ? (
         <div className="border border-neutral-800 rounded-lg h-64 animate-pulse" />
-      ) : items.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="py-20 text-center border border-neutral-800 rounded-lg">
           <Shield className="w-8 h-8 text-neutral-700 mx-auto mb-3" />
           <p className="text-neutral-600 text-sm">Nog geen SLA&apos;s</p>
         </div>
       ) : (
-        <div className="border border-neutral-800 rounded-lg overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left">
-            <thead>
-              <tr className="border-b border-neutral-800 bg-neutral-900/50">
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500">
-                  Klant
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500">
-                  Domein
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500 text-right">
-                  / maand
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500">
-                  Facturatie
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500">
-                  Gefactureerd
-                </th>
-                <th className="px-4 py-3 text-xs font-medium text-neutral-500" />
-              </tr>
-            </thead>
-            <tbody>
-              {active.map(renderRow)}
-              {upcoming.length > 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-600 bg-neutral-950/40"
-                  >
-                    Komt eraan
-                  </td>
-                </tr>
-              )}
-              {upcoming.map(renderRow)}
-              {items
-                .filter((s) => s.status !== "active" && s.status !== "upcoming")
-                .map(renderRow)}
-            </tbody>
-          </table>
+        <div className="border border-neutral-800 rounded-lg overflow-hidden">
+          <div className="hidden sm:grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-2.5 border-b border-neutral-800 bg-neutral-900/50 text-xs text-neutral-500">
+            <span>Klant</span>
+            <span className="text-right w-24">Bedrag</span>
+            <span className="w-[7.5rem]">Gefactureerd</span>
+          </div>
+          {activeGroups.map(renderGroup)}
+          {upcomingGroups.length > 0 && (
+            <div className="px-4 py-2 text-[11px] uppercase tracking-wide text-neutral-600 bg-neutral-950/50 border-b border-neutral-800">
+              Komt eraan
+            </div>
+          )}
+          {upcomingGroups.map(renderGroup)}
+          {otherGroups.map(renderGroup)}
         </div>
       )}
 
@@ -594,9 +953,33 @@ export default function SlaPage() {
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
+          setDefaultClient(undefined);
         }}
         onSave={() => void mutate()}
         initial={editing}
+        defaultClient={defaultClient}
+      />
+
+      <ClientGroupDialog
+        open={!!groupEdit}
+        group={
+          groupEdit
+            ? groups.find((g) => g.key === groupEdit.key) ?? groupEdit
+            : null
+        }
+        onClose={() => setGroupEdit(null)}
+        onSave={() => void mutate()}
+        onEditDomain={(row) => {
+          setEditing(row);
+          setDefaultClient(undefined);
+          setFormOpen(true);
+        }}
+        onAddDomain={(clientName) => {
+          setEditing(null);
+          setDefaultClient(clientName);
+          setFormOpen(true);
+        }}
+        onDeleteDomain={(row) => void handleDelete(row)}
       />
     </div>
   );
