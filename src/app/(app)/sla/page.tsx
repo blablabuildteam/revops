@@ -41,6 +41,7 @@ import { formatCurrency, toDateInputValue } from "@/lib/format";
 import {
   buildSlaYearPeriods,
   formatSlaPeriodLabel,
+  listOpenSlaPeriods,
   normalizeInvoicedPeriods,
   slaInvoiceAmount,
   toggleSlaPeriod,
@@ -51,6 +52,7 @@ import {
   SlaStatus,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { cacheKeys, getCached, setCached } from "@/lib/query-cache";
 
 const STATUS_LABELS: Record<SlaStatus, string> = {
   active: "Actief",
@@ -143,6 +145,36 @@ function openAmountForGroup(group: Pick<
   return (
     group.open_periods.length *
     slaInvoiceAmount(group.monthly_total, group.billing_frequency)
+  );
+}
+
+function withLocalPeriods(row: SlaAgreement, periods: string[]): SlaAgreement {
+  const invoiced_periods = normalizeInvoicedPeriods(periods);
+  return {
+    ...row,
+    invoiced_periods,
+    invoiced: invoiced_periods.includes(row.current_period),
+    open_periods: listOpenSlaPeriods(
+      row.billing_frequency,
+      row.start_date,
+      invoiced_periods,
+    ),
+  };
+}
+
+function patchLocalSlaPeriods(
+  targetIds: Set<string>,
+  periodsById: Map<string, string[]>,
+) {
+  const current = getCached<SlaAgreement[]>(cacheKeys.slaAgreements);
+  if (!current) return;
+  setCached(
+    cacheKeys.slaAgreements,
+    current.map((row) => {
+      if (!targetIds.has(row.id)) return row;
+      const periods = periodsById.get(row.id);
+      return periods ? withLocalPeriods(row, periods) : row;
+    }),
   );
 }
 
@@ -762,10 +794,14 @@ export default function SlaPage() {
     if (group.billable.length === 0 && group.rows.length === 0) return;
     const targets = group.billable.length > 0 ? group.billable : group.rows;
     const nextPeriods = toggleSlaPeriod(group.invoiced_periods, period);
-    const snapshots = targets.map((r) => ({
-      id: r.id,
-      invoiced_periods: normalizeInvoicedPeriods(r.invoiced_periods),
-    }));
+    const targetIds = new Set(targets.map((r) => r.id));
+    const previous = new Map(
+      targets.map((r) => [r.id, normalizeInvoicedPeriods(r.invoiced_periods)]),
+    );
+    const next = new Map(targets.map((r) => [r.id, nextPeriods]));
+
+    // Instant UI update — no full list reload.
+    patchLocalSlaPeriods(targetIds, next);
 
     await withUndo({
       label: nextPeriods.includes(period)
@@ -777,17 +813,16 @@ export default function SlaPage() {
             updateSlaAgreement(row.id, { invoiced_periods: nextPeriods }),
           ),
         );
-        void mutate();
       },
       undo: async () => {
+        patchLocalSlaPeriods(targetIds, previous);
         await Promise.all(
-          snapshots.map((row) =>
+          targets.map((row) =>
             updateSlaAgreement(row.id, {
-              invoiced_periods: row.invoiced_periods,
+              invoiced_periods: previous.get(row.id) ?? [],
             }),
           ),
         );
-        void mutate();
       },
     });
   }
@@ -797,7 +832,6 @@ export default function SlaPage() {
       label: "SLA verwijderd",
       run: async () => {
         await deleteSlaAgreement(row.id);
-        void mutate();
         setGroupEdit((current) => {
           if (!current) return null;
           const nextRows = current.rows.filter((r) => r.id !== row.id);
@@ -818,7 +852,6 @@ export default function SlaPage() {
           start_date: row.start_date,
           invoiced_periods: row.invoiced_periods,
         });
-        void mutate();
       },
     });
   }

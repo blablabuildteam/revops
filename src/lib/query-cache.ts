@@ -54,11 +54,15 @@ export function invalidateCache(...keys: string[]) {
   for (const key of keys) {
     const entry = getEntry(key);
     const fetcher = entry?.fetcher;
-    store.delete(key);
-    // Active subscribers should refresh immediately after invalidation
-    if (fetcher && (listeners.get(key)?.size ?? 0) > 0) {
+    const hasSubscribers = (listeners.get(key)?.size ?? 0) > 0;
+
+    if (fetcher && hasSubscribers) {
+      // Keep showing stale data while a background refresh runs.
       void cachedFetch(key, fetcher, { force: true });
+      continue;
     }
+
+    store.delete(key);
   }
 }
 

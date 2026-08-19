@@ -258,7 +258,19 @@ export function MutationProvider({ children }: { children: ReactNode }) {
 }
 
 function MutationProgressBar({ active }: { active: boolean }) {
-  if (!active) return null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setVisible(false);
+      return;
+    }
+    // Skip the bar for snappy mutations so the UI doesn't flash.
+    const timer = setTimeout(() => setVisible(true), 220);
+    return () => clearTimeout(timer);
+  }, [active]);
+
+  if (!visible) return null;
   return (
     <div
       className="fixed top-0 left-0 right-0 z-[200] h-0.5 pointer-events-none overflow-hidden bg-transparent"

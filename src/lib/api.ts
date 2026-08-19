@@ -131,6 +131,39 @@ export function getSlaAgreements(): Promise<SlaAgreement[]> {
   return cachedFetch(cacheKeys.slaAgreements, () => req("/sla"));
 }
 
+function patchSlaCache(updated: SlaAgreement) {
+  const current = getCached<SlaAgreement[]>(cacheKeys.slaAgreements);
+  if (!current) {
+    invalidateCache(cacheKeys.slaAgreements);
+    return;
+  }
+  setCached(
+    cacheKeys.slaAgreements,
+    current.map((row) => (row.id === updated.id ? updated : row)),
+  );
+}
+
+function removeSlaFromCache(id: string) {
+  const current = getCached<SlaAgreement[]>(cacheKeys.slaAgreements);
+  if (!current) {
+    invalidateCache(cacheKeys.slaAgreements);
+    return;
+  }
+  setCached(
+    cacheKeys.slaAgreements,
+    current.filter((row) => row.id !== id),
+  );
+}
+
+function addSlaToCache(created: SlaAgreement) {
+  const current = getCached<SlaAgreement[]>(cacheKeys.slaAgreements);
+  if (!current) {
+    invalidateCache(cacheKeys.slaAgreements);
+    return;
+  }
+  setCached(cacheKeys.slaAgreements, [...current, created]);
+}
+
 export function createSlaAgreement(
   data: Partial<SlaAgreement>,
 ): Promise<SlaAgreement> {
@@ -138,7 +171,7 @@ export function createSlaAgreement(
     method: "POST",
     body: JSON.stringify(data),
   }).then((created) => {
-    invalidateCache(cacheKeys.slaAgreements);
+    addSlaToCache(created);
     return created;
   });
 }
@@ -151,14 +184,14 @@ export function updateSlaAgreement(
     method: "PUT",
     body: JSON.stringify(data),
   }).then((updated) => {
-    invalidateCache(cacheKeys.slaAgreements);
+    patchSlaCache(updated);
     return updated;
   });
 }
 
 export function deleteSlaAgreement(id: string): Promise<void> {
   return req<void>(`/sla/${id}`, { method: "DELETE" }).then(() => {
-    invalidateCache(cacheKeys.slaAgreements);
+    removeSlaFromCache(id);
   });
 }
 

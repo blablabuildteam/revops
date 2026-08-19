@@ -1162,8 +1162,9 @@ export default function TodosPage() {
     () => getCached<Project[]>(cacheKeys.projects) ?? []
   );
   const [currentUser, setCurrentUser] = useState<TodoUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showRefreshHint, setShowRefreshHint] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [formDefaultProject, setFormDefaultProject] = useState<string | undefined>();
@@ -1229,43 +1230,58 @@ export default function TodosPage() {
     // reconcile with the server response.
     const cacheKey = cacheKeys.taskList(`${params}|${boardParams}`);
     const cached = getCached<TaskListPayload>(cacheKey);
+    let loadingTimer: ReturnType<typeof setTimeout> | undefined;
     if (cached) {
       setTodos(cached.todos);
       setBoardTasks(cached.boardTasks);
       setMilestonesByProject(cached.milestonesByProject);
       setLoading(false);
     } else {
-      setLoading(true);
+      // Only show skeletons if the request isn't effectively instant.
+      loadingTimer = setTimeout(() => setLoading(true), 180);
     }
     setRefreshing(true);
 
-    const [todoData, boardPayload] = await Promise.all([
-      fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetch(`/api/tasks/assigned?${boardParams}`)
-        .then((r) => (r.ok ? r.json() : { tasks: [], milestonesByProject: {} }))
-        .catch(() => ({ tasks: [], milestonesByProject: {} })),
-    ]);
+    try {
+      const [todoData, boardPayload] = await Promise.all([
+        fetch(`/api/todos?${params}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+        fetch(`/api/tasks/assigned?${boardParams}`)
+          .then((r) => (r.ok ? r.json() : { tasks: [], milestonesByProject: {} }))
+          .catch(() => ({ tasks: [], milestonesByProject: {} })),
+      ]);
 
-    const boardTasksRaw = Array.isArray(boardPayload)
-      ? boardPayload
-      : (boardPayload.tasks ?? []);
-    const milestonesRaw = Array.isArray(boardPayload)
-      ? {}
-      : (boardPayload.milestonesByProject ?? {});
+      const boardTasksRaw = Array.isArray(boardPayload)
+        ? boardPayload
+        : (boardPayload.tasks ?? []);
+      const milestonesRaw = Array.isArray(boardPayload)
+        ? {}
+        : (boardPayload.milestonesByProject ?? {});
 
-    const payload: TaskListPayload = {
-      todos: todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })),
-      boardTasks: boardTasksRaw.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })),
-      milestonesByProject: milestonesRaw,
-    };
+      const payload: TaskListPayload = {
+        todos: todoData.map((t: Todo) => ({ ...t, _source: "todo" as const })),
+        boardTasks: boardTasksRaw.map((t: ProjectBoardTask) => ({ ...t, _source: "task" as const })),
+        milestonesByProject: milestonesRaw,
+      };
 
-    setCached(cacheKey, payload);
-    setTodos(payload.todos);
-    setBoardTasks(payload.boardTasks);
-    setMilestonesByProject(payload.milestonesByProject);
-    setLoading(false);
-    setRefreshing(false);
+      setCached(cacheKey, payload);
+      setTodos(payload.todos);
+      setBoardTasks(payload.boardTasks);
+      setMilestonesByProject(payload.milestonesByProject);
+    } finally {
+      if (loadingTimer) clearTimeout(loadingTimer);
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [filterAssignee, filterCompany, filterStatus, filtersReady]);
+
+  useEffect(() => {
+    if (!refreshing) {
+      setShowRefreshHint(false);
+      return;
+    }
+    const timer = setTimeout(() => setShowRefreshHint(true), 350);
+    return () => clearTimeout(timer);
+  }, [refreshing]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -1524,7 +1540,7 @@ export default function TodosPage() {
         <div>
           <h1 className="text-lg sm:text-xl font-semibold text-neutral-100 flex items-center gap-2">
             Tasks
-            {refreshing && !loading && (
+            {showRefreshHint && !loading && (
               <span
                 className="w-1.5 h-1.5 rounded-full bg-[#d4e052] animate-pulse"
                 title="Refreshing"

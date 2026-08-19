@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   getCached,
+  setCached,
   subscribe,
-  invalidateCache,
 } from "@/lib/query-cache";
 
 /**
@@ -48,11 +48,22 @@ export function useCachedQuery<T>(key: string, fetcher: () => Promise<T>) {
     };
   }, [key]);
 
-  const mutate = useCallback(async () => {
-    invalidateCache(key);
+  const mutate = useCallback(async (
+    optimistic?: T | ((prev: T | undefined) => T | undefined),
+  ) => {
+    if (typeof optimistic === "function") {
+      const next = (optimistic as (prev: T | undefined) => T | undefined)(
+        getCached<T>(key),
+      );
+      if (next !== undefined) setCached(key, next);
+    } else if (optimistic !== undefined) {
+      setCached(key, optimistic);
+    }
+
     setIsValidating(true);
     setError(null);
     try {
+      // Refresh without wiping the visible cache first.
       await fetcherRef.current();
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
