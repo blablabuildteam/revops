@@ -41,6 +41,28 @@ export type ActivityType =
 
 export type RetainerType = "none" | "fixed" | "commission";
 
+export type SlaBillingFrequency = "monthly" | "quarterly";
+export type SlaStatus = "active" | "upcoming" | "paused" | "ended";
+
+export interface SlaAgreement {
+  id: string;
+  client_name: string;
+  company_id?: string | null;
+  domain?: string | null;
+  monthly_amount: number;
+  billing_frequency: SlaBillingFrequency;
+  invoice_via?: string | null;
+  status: SlaStatus;
+  /** True when the current billing period is marked invoiced. */
+  invoiced: boolean;
+  invoice_period?: string | null;
+  /** Current period key for this row's billing frequency (e.g. 2026-08 or 2026-Q3). */
+  current_period: string;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Company {
   id: string;
   name: string;
@@ -229,7 +251,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
 };
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  open: "Open",
+  open: "To do",
   in_progress: "In progress",
   done: "Done",
 };

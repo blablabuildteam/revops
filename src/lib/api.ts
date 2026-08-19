@@ -8,6 +8,7 @@ import {
   Opportunity,
   Project,
   Milestone,
+  SlaAgreement,
   Task,
   TaskComment,
   TaskAttachment,
@@ -123,6 +124,41 @@ export function createCompany(
   }).then((created) => {
     invalidateCache(cacheKeys.companies);
     return created;
+  });
+}
+
+export function getSlaAgreements(): Promise<SlaAgreement[]> {
+  return cachedFetch(cacheKeys.slaAgreements, () => req("/sla"));
+}
+
+export function createSlaAgreement(
+  data: Partial<SlaAgreement>,
+): Promise<SlaAgreement> {
+  return req<SlaAgreement>("/sla", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    invalidateCache(cacheKeys.slaAgreements);
+    return created;
+  });
+}
+
+export function updateSlaAgreement(
+  id: string,
+  data: Partial<SlaAgreement>,
+): Promise<SlaAgreement> {
+  return req<SlaAgreement>(`/sla/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    invalidateCache(cacheKeys.slaAgreements);
+    return updated;
+  });
+}
+
+export function deleteSlaAgreement(id: string): Promise<void> {
+  return req<void>(`/sla/${id}`, { method: "DELETE" }).then(() => {
+    invalidateCache(cacheKeys.slaAgreements);
   });
 }
 

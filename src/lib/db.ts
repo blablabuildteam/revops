@@ -386,6 +386,7 @@ async function _init() {
             OR project_name ILIKE '%heatnest%'
           )
       `;
+      await ensureSlaAgreementsTable();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -636,6 +637,7 @@ async function _init() {
   `;
 
   await ensureAllocationsTable();
+  await ensureSlaAgreementsTable();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
@@ -650,4 +652,120 @@ async function _init() {
   await runSchemaMigrations();
 
   initialized = true;
+}
+
+async function ensureSlaAgreementsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS sla_agreements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_name TEXT NOT NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      domain TEXT,
+      monthly_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+      billing_frequency TEXT NOT NULL DEFAULT 'monthly'
+        CHECK (billing_frequency IN ('monthly', 'quarterly')),
+      invoice_via TEXT,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'upcoming', 'paused', 'ended')),
+      invoiced BOOLEAN NOT NULL DEFAULT false,
+      invoice_period TEXT,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  const { rows: seedFlag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'sla_seeded_v1'
+  `;
+  if (seedFlag[0]?.value === "true") return;
+
+  const { rows: existing } = await sql`SELECT COUNT(*)::int AS c FROM sla_agreements`;
+  if (Number(existing[0]?.c) === 0) {
+    const seed: Array<{
+      client_name: string;
+      domain: string | null;
+      monthly_amount: number;
+      billing_frequency: "monthly" | "quarterly";
+      invoice_via: string | null;
+      status: "active" | "upcoming";
+      notes: string | null;
+    }> = [
+      { client_name: "J Web Solutions", domain: "Desire-escorts.nl", monthly_amount: 20, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Mykonos-elite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Ibiza-elite.com", monthly_amount: 0, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Salonikaelite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Brendasescort.nl", monthly_amount: 15, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Available-escorts.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Escortinhotel.nl", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "ComfortZzzone", domain: "ComfortZzzone.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "Heatnest", domain: "Heatnest.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      {
+        client_name: "PropertyServiceBG",
+        domain: "https://propertyservicesbg.com/",
+        monthly_amount: 20,
+        billing_frequency: "quarterly",
+        invoice_via: "J Web Solutions",
+        status: "active",
+        notes: "Kwartaalfactuur via J Web Solutions",
+      },
+      {
+        client_name: "TheDailyPack",
+        domain: null,
+        monthly_amount: 20,
+        billing_frequency: "quarterly",
+        invoice_via: null,
+        status: "active",
+        notes: "Invoiced per kwartaal",
+      },
+      {
+        client_name: "Solero",
+        domain: null,
+        monthly_amount: 175,
+        billing_frequency: "monthly",
+        invoice_via: null,
+        status: "upcoming",
+        notes: "Komt eraan · verwacht ~€150–200/mnd",
+      },
+      {
+        client_name: "Thuishaven",
+        domain: null,
+        monthly_amount: 175,
+        billing_frequency: "monthly",
+        invoice_via: null,
+        status: "upcoming",
+        notes: "Komt eraan · verwacht ~€150–200/mnd",
+      },
+    ];
+
+    for (const row of seed) {
+      const { rows: companies } = await sql`
+        SELECT id FROM companies
+        WHERE name ILIKE ${row.client_name}
+           OR name ILIKE ${`%${row.client_name}%`}
+        LIMIT 1
+      `;
+      await sql`
+        INSERT INTO sla_agreements (
+          client_name, company_id, domain, monthly_amount,
+          billing_frequency, invoice_via, status, notes
+        ) VALUES (
+          ${row.client_name},
+          ${companies[0]?.id ?? null},
+          ${row.domain},
+          ${row.monthly_amount},
+          ${row.billing_frequency},
+          ${row.invoice_via},
+          ${row.status},
+          ${row.notes}
+        )
+      `;
+    }
+  }
+
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES ('sla_seeded_v1', 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
 }

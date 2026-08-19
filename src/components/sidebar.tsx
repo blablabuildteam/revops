@@ -10,6 +10,7 @@ import {
   Euro,
   CheckSquare,
   Users,
+  Shield,
   LogOut,
   Sun,
   Moon,
@@ -26,6 +27,7 @@ export const NAV_ITEMS = [
   { href: "/capacity", label: "Capacity", icon: Users },
   { href: "/todos", label: "Tasks", icon: CheckSquare },
   { href: "/finance", label: "Finance", icon: Euro },
+  { href: "/sla", label: "SLA", icon: Shield },
   { href: "/companies", label: "Companies", icon: Building2 },
 ];
 

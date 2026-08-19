@@ -152,4 +152,5 @@ export const cacheKeys = {
   taxSettings: "tax-settings",
   bunqTotals: "bunq-totals",
   bunqAccounts: "bunq-accounts",
+  slaAgreements: "sla-agreements",
 } as const;
