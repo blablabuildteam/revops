@@ -667,6 +667,8 @@ async function ensureSlaAgreementsTable() {
       invoice_via TEXT,
       status TEXT NOT NULL DEFAULT 'active'
         CHECK (status IN ('active', 'upcoming', 'paused', 'ended')),
+      start_date DATE,
+      invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb,
       invoiced BOOLEAN NOT NULL DEFAULT false,
       invoice_period TEXT,
       notes TEXT,
@@ -675,6 +677,56 @@ async function ensureSlaAgreementsTable() {
     )
   `;
 
+  await sql`ALTER TABLE sla_agreements ADD COLUMN IF NOT EXISTS start_date DATE`;
+  await sql`ALTER TABLE sla_agreements ADD COLUMN IF NOT EXISTS invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb`;
+
+  // Older TEXT[] column → JSONB (safe no-op when already JSONB).
+  await sql`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'sla_agreements'
+          AND column_name = 'invoiced_periods'
+          AND data_type = 'ARRAY'
+      ) THEN
+        ALTER TABLE sla_agreements
+          ALTER COLUMN invoiced_periods TYPE JSONB
+          USING to_jsonb(invoiced_periods);
+        ALTER TABLE sla_agreements
+          ALTER COLUMN invoiced_periods SET DEFAULT '[]'::jsonb;
+      END IF;
+    END $$
+  `;
+
+  const { rows: periodsFlag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'sla_periods_v2'
+  `;
+  if (periodsFlag[0]?.value !== "true") {
+    await sql`
+      UPDATE sla_agreements
+      SET invoiced_periods = jsonb_build_array(invoice_period)
+      WHERE invoiced = true
+        AND invoice_period IS NOT NULL
+        AND invoice_period <> ''
+        AND (
+          invoiced_periods IS NULL
+          OR invoiced_periods = '[]'::jsonb
+          OR invoiced_periods = 'null'::jsonb
+        )
+    `;
+    await sql`
+      UPDATE sla_agreements
+      SET start_date = date_trunc('year', CURRENT_DATE)::date
+      WHERE start_date IS NULL
+    `;
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('sla_periods_v2', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
+
   const { rows: seedFlag } = await sql`
     SELECT value FROM finance_settings WHERE key = 'sla_seeded_v1'
   `;
@@ -682,6 +734,7 @@ async function ensureSlaAgreementsTable() {
 
   const { rows: existing } = await sql`SELECT COUNT(*)::int AS c FROM sla_agreements`;
   if (Number(existing[0]?.c) === 0) {
+    const seedStart = `${new Date().getFullYear()}-01-01`;
     const seed: Array<{
       client_name: string;
       domain: string | null;
@@ -690,16 +743,17 @@ async function ensureSlaAgreementsTable() {
       invoice_via: string | null;
       status: "active" | "upcoming";
       notes: string | null;
+      start_date: string | null;
     }> = [
-      { client_name: "J Web Solutions", domain: "Desire-escorts.nl", monthly_amount: 20, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Mykonos-elite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Ibiza-elite.com", monthly_amount: 0, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Salonikaelite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Brendasescort.nl", monthly_amount: 15, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Available-escorts.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "J Web Solutions", domain: "Escortinhotel.nl", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "ComfortZzzone", domain: "ComfortZzzone.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
-      { client_name: "Heatnest", domain: "Heatnest.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null },
+      { client_name: "J Web Solutions", domain: "Desire-escorts.nl", monthly_amount: 20, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Mykonos-elite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Ibiza-elite.com", monthly_amount: 0, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Salonikaelite.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Brendasescort.nl", monthly_amount: 15, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Available-escorts.com", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "J Web Solutions", domain: "Escortinhotel.nl", monthly_amount: 10, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "ComfortZzzone", domain: "ComfortZzzone.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
+      { client_name: "Heatnest", domain: "Heatnest.nl", monthly_amount: 30, billing_frequency: "monthly", invoice_via: null, status: "active", notes: null, start_date: seedStart },
       {
         client_name: "PropertyServiceBG",
         domain: "https://propertyservicesbg.com/",
@@ -708,6 +762,7 @@ async function ensureSlaAgreementsTable() {
         invoice_via: "J Web Solutions",
         status: "active",
         notes: "Kwartaalfactuur via J Web Solutions",
+        start_date: seedStart,
       },
       {
         client_name: "TheDailyPack",
@@ -717,6 +772,7 @@ async function ensureSlaAgreementsTable() {
         invoice_via: null,
         status: "active",
         notes: "Invoiced per kwartaal",
+        start_date: seedStart,
       },
       {
         client_name: "Solero",
@@ -726,6 +782,7 @@ async function ensureSlaAgreementsTable() {
         invoice_via: null,
         status: "upcoming",
         notes: "Komt eraan · verwacht ~€150–200/mnd",
+        start_date: null,
       },
       {
         client_name: "Thuishaven",
@@ -735,6 +792,7 @@ async function ensureSlaAgreementsTable() {
         invoice_via: null,
         status: "upcoming",
         notes: "Komt eraan · verwacht ~€150–200/mnd",
+        start_date: null,
       },
     ];
 
@@ -748,7 +806,7 @@ async function ensureSlaAgreementsTable() {
       await sql`
         INSERT INTO sla_agreements (
           client_name, company_id, domain, monthly_amount,
-          billing_frequency, invoice_via, status, notes
+          billing_frequency, invoice_via, status, notes, start_date
         ) VALUES (
           ${row.client_name},
           ${companies[0]?.id ?? null},
@@ -757,7 +815,8 @@ async function ensureSlaAgreementsTable() {
           ${row.billing_frequency},
           ${row.invoice_via},
           ${row.status},
-          ${row.notes}
+          ${row.notes},
+          ${row.start_date}
         )
       `;
     }

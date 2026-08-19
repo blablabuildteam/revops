@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { slaInvoicePeriod } from "@/lib/sla";
+import {
+  mapSlaRow,
+  normalizeInvoicedPeriods,
+  slaInvoicePeriod,
+} from "@/lib/sla";
 import type { SlaBillingFrequency } from "@/lib/types";
-
-function mapRow(row: Record<string, unknown>) {
-  const frequency = (row.billing_frequency as SlaBillingFrequency) ?? "monthly";
-  const currentPeriod = slaInvoicePeriod(frequency);
-  const storedPeriod = (row.invoice_period as string | null) ?? null;
-  const storedInvoiced = Boolean(row.invoiced);
-  return {
-    ...row,
-    monthly_amount: Number(row.monthly_amount) || 0,
-    invoiced: storedInvoiced && storedPeriod === currentPeriod,
-    current_period: currentPeriod,
-  };
-}
 
 export async function GET() {
   try {
@@ -31,7 +22,7 @@ export async function GET() {
         client_name ASC,
         domain ASC NULLS LAST
     `;
-    return NextResponse.json(rows.map(mapRow));
+    return NextResponse.json(rows.map(mapSlaRow));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -51,7 +42,9 @@ export async function POST(req: NextRequest) {
       invoice_via,
       status,
       notes,
+      start_date,
       invoiced,
+      invoiced_periods,
     } = body;
 
     if (!client_name?.trim()) {
@@ -61,12 +54,16 @@ export async function POST(req: NextRequest) {
     const frequency: SlaBillingFrequency =
       billing_frequency === "quarterly" ? "quarterly" : "monthly";
     const period = slaInvoicePeriod(frequency);
+    let periods = normalizeInvoicedPeriods(invoiced_periods);
+    if (invoiced === true && !periods.includes(period)) {
+      periods = [...periods, period];
+    }
 
     const { rows } = await sql`
       INSERT INTO sla_agreements (
         client_name, company_id, domain, monthly_amount,
         billing_frequency, invoice_via, status, notes,
-        invoiced, invoice_period
+        start_date, invoiced_periods, invoiced, invoice_period
       ) VALUES (
         ${client_name.trim()},
         ${company_id ?? null},
@@ -76,12 +73,14 @@ export async function POST(req: NextRequest) {
         ${invoice_via?.trim() || null},
         ${status ?? "active"},
         ${notes?.trim() || null},
-        ${Boolean(invoiced)},
-        ${invoiced ? period : null}
+        ${start_date || null},
+        ${JSON.stringify(periods)}::jsonb,
+        ${periods.includes(period)},
+        ${periods.includes(period) ? period : null}
       )
       RETURNING *
     `;
-    return NextResponse.json(mapRow(rows[0]), { status: 201 });
+    return NextResponse.json(mapSlaRow(rows[0]), { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

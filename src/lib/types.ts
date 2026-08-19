@@ -53,11 +53,17 @@ export interface SlaAgreement {
   billing_frequency: SlaBillingFrequency;
   invoice_via?: string | null;
   status: SlaStatus;
+  /** SLA start — invoice periods count from this date. */
+  start_date?: string | null;
+  /** Checked period keys (`YYYY-MM` or `YYYY-Qn`). */
+  invoiced_periods: string[];
   /** True when the current billing period is marked invoiced. */
   invoiced: boolean;
   invoice_period?: string | null;
   /** Current period key for this row's billing frequency (e.g. 2026-08 or 2026-Q3). */
   current_period: string;
+  /** Open periods from start through now. */
+  open_periods: string[];
   notes?: string | null;
   created_at: string;
   updated_at: string;

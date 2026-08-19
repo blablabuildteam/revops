@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { slaInvoicePeriod } from "@/lib/sla";
+import {
+  mapSlaRow,
+  normalizeInvoicedPeriods,
+  slaInvoicePeriod,
+  toggleSlaPeriod,
+} from "@/lib/sla";
 import type { SlaBillingFrequency } from "@/lib/types";
-
-function mapRow(row: Record<string, unknown>) {
-  const frequency = (row.billing_frequency as SlaBillingFrequency) ?? "monthly";
-  const currentPeriod = slaInvoicePeriod(frequency);
-  const storedPeriod = (row.invoice_period as string | null) ?? null;
-  const storedInvoiced = Boolean(row.invoiced);
-  return {
-    ...row,
-    monthly_amount: Number(row.monthly_amount) || 0,
-    invoiced: storedInvoiced && storedPeriod === currentPeriod,
-    current_period: currentPeriod,
-  };
-}
 
 export async function PUT(
   req: NextRequest,
@@ -38,14 +30,32 @@ export async function PUT(
         ? body.billing_frequency
         : (existing.billing_frequency as SlaBillingFrequency);
 
-    const period = slaInvoicePeriod(frequency);
-    let invoiced = existing.invoiced;
-    let invoicePeriod = existing.invoice_period;
-
-    if (typeof body.invoiced === "boolean") {
-      invoiced = body.invoiced;
-      invoicePeriod = body.invoiced ? period : null;
+    const currentPeriod = slaInvoicePeriod(frequency);
+    let periods = normalizeInvoicedPeriods(existing.invoiced_periods);
+    if (
+      Boolean(existing.invoiced) &&
+      typeof existing.invoice_period === "string" &&
+      existing.invoice_period &&
+      !periods.includes(existing.invoice_period)
+    ) {
+      periods = [...periods, existing.invoice_period];
     }
+
+    if (Array.isArray(body.invoiced_periods)) {
+      periods = normalizeInvoicedPeriods(body.invoiced_periods);
+    } else if (typeof body.toggle_period === "string" && body.toggle_period) {
+      periods = toggleSlaPeriod(periods, body.toggle_period);
+    } else if (typeof body.invoiced === "boolean") {
+      const set = new Set(periods);
+      if (body.invoiced) set.add(currentPeriod);
+      else set.delete(currentPeriod);
+      periods = [...set].sort();
+    }
+
+    const startDate =
+      body.start_date !== undefined
+        ? body.start_date || null
+        : existing.start_date;
 
     const { rows } = await sql`
       UPDATE sla_agreements SET
@@ -57,13 +67,15 @@ export async function PUT(
         invoice_via = ${body.invoice_via !== undefined ? (body.invoice_via?.trim() || null) : existing.invoice_via},
         status = COALESCE(${body.status ?? null}, status),
         notes = ${body.notes !== undefined ? (body.notes?.trim() || null) : existing.notes},
-        invoiced = ${Boolean(invoiced)},
-        invoice_period = ${invoicePeriod},
+        start_date = ${startDate},
+        invoiced_periods = ${JSON.stringify(periods)}::jsonb,
+        invoiced = ${periods.includes(currentPeriod)},
+        invoice_period = ${periods.includes(currentPeriod) ? currentPeriod : null},
         updated_at = now()
       WHERE id = ${id}
       RETURNING *
     `;
-    return NextResponse.json(mapRow(rows[0]));
+    return NextResponse.json(mapSlaRow(rows[0]));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

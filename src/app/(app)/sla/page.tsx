@@ -9,10 +9,13 @@ import {
   ExternalLink,
   Trash2,
   Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -34,10 +37,13 @@ import {
   deleteSlaAgreement,
   updateSlaAgreement,
 } from "@/lib/api";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, toDateInputValue } from "@/lib/format";
 import {
+  buildSlaYearPeriods,
   formatSlaPeriodLabel,
+  normalizeInvoicedPeriods,
   slaInvoiceAmount,
+  toggleSlaPeriod,
 } from "@/lib/sla";
 import {
   SlaAgreement,
@@ -61,6 +67,7 @@ type FormState = {
   invoice_via: string;
   status: SlaStatus;
   notes: string;
+  start_date: string;
 };
 
 const blankForm: FormState = {
@@ -71,6 +78,7 @@ const blankForm: FormState = {
   invoice_via: "",
   status: "active",
   notes: "",
+  start_date: `${new Date().getFullYear()}-01-01`,
 };
 
 type ClientGroup = {
@@ -82,7 +90,9 @@ type ClientGroup = {
   monthly_total: number;
   invoice_via: string | null;
   notes: string | null;
-  invoiced: boolean;
+  start_date: string | null;
+  invoiced_periods: string[];
+  open_periods: string[];
   current_period: string;
   billable: SlaAgreement[];
 };
@@ -109,6 +119,22 @@ function pickGroupFrequency(rows: SlaAgreement[]): SlaBillingFrequency {
     : "monthly";
 }
 
+function earliestStart(rows: SlaAgreement[]): string | null {
+  const dates = rows
+    .map((r) => r.start_date)
+    .filter((d): d is string => !!d)
+    .sort();
+  return dates[0] ?? null;
+}
+
+function mergePeriods(rows: SlaAgreement[]): string[] {
+  const set = new Set<string>();
+  for (const row of rows) {
+    for (const p of normalizeInvoicedPeriods(row.invoiced_periods)) set.add(p);
+  }
+  return [...set].sort();
+}
+
 function buildGroups(items: SlaAgreement[]): ClientGroup[] {
   const map = new Map<string, SlaAgreement[]>();
   for (const row of items) {
@@ -127,6 +153,10 @@ function buildGroups(items: SlaAgreement[]): ClientGroup[] {
       (r) => r.status === "active" && (Number(r.monthly_amount) || 0) > 0,
     );
     const frequency = pickGroupFrequency(sorted);
+    const invoiced_periods = mergePeriods(sorted);
+    const open_periods = [
+      ...new Set(sorted.flatMap((r) => r.open_periods ?? [])),
+    ].sort();
     const periodRow =
       billable[0] ?? sorted.find((r) => r.status === "active") ?? sorted[0];
     groups.push({
@@ -140,7 +170,9 @@ function buildGroups(items: SlaAgreement[]): ClientGroup[] {
         .reduce((sum, r) => sum + (Number(r.monthly_amount) || 0), 0),
       invoice_via: sorted.find((r) => r.invoice_via)?.invoice_via ?? null,
       notes: sorted.find((r) => r.notes)?.notes ?? null,
-      invoiced: billable.length > 0 && billable.every((r) => r.invoiced),
+      start_date: earliestStart(sorted),
+      invoiced_periods,
+      open_periods,
       current_period: periodRow.current_period,
       billable,
     });
@@ -153,6 +185,76 @@ function buildGroups(items: SlaAgreement[]): ClientGroup[] {
     (a, b) =>
       rank(a.status) - rank(b.status) ||
       a.client_name.localeCompare(b.client_name),
+  );
+}
+
+function PeriodChips({
+  group,
+  year,
+  disabled,
+  onToggle,
+}: {
+  group: ClientGroup;
+  year: number;
+  disabled?: boolean;
+  onToggle: (period: string) => void;
+}) {
+  const periods = buildSlaYearPeriods(
+    year,
+    group.billing_frequency,
+    group.start_date,
+  );
+  const checked = new Set(group.invoiced_periods);
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap gap-1.5",
+        group.billing_frequency === "quarterly" ? "max-w-[280px]" : "max-w-full",
+      )}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {periods.map((p) => {
+        const isOn = checked.has(p.key);
+        const canToggle = !disabled && p.available;
+        return (
+          <button
+            key={p.key}
+            type="button"
+            disabled={!canToggle}
+            onClick={() => canToggle && onToggle(p.key)}
+            title={
+              !p.available
+                ? "Voor startdatum SLA"
+                : `${formatSlaPeriodLabel(p.key)}${isOn ? " · gefactureerd" : " · open"}`
+            }
+            className={cn(
+              "min-w-[2.4rem] px-1.5 py-1 rounded text-[11px] font-medium border transition-colors",
+              !p.available &&
+                "border-transparent text-neutral-700 bg-transparent cursor-default",
+              p.available &&
+                isOn &&
+                "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
+              p.available &&
+                !isOn &&
+                !p.future &&
+                "border-neutral-700 bg-neutral-950/50 text-neutral-300 hover:border-neutral-500",
+              p.available &&
+                !isOn &&
+                p.future &&
+                "border-neutral-800 bg-neutral-900/30 text-neutral-600 hover:border-neutral-600 hover:text-neutral-400",
+              !canToggle && p.available && "opacity-50 cursor-not-allowed",
+            )}
+          >
+            <span className="inline-flex items-center justify-center gap-0.5">
+              {isOn && <Check className="w-2.5 h-2.5" />}
+              {p.label.replace(/\.$/, "")}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -185,6 +287,7 @@ function SlaForm({
             invoice_via: initial.invoice_via ?? "",
             status: initial.status,
             notes: initial.notes ?? "",
+            start_date: toDateInputValue(initial.start_date) || "",
           }
         : {
             ...blankForm,
@@ -208,6 +311,7 @@ function SlaForm({
         invoice_via: form.invoice_via.trim() || null,
         status: form.status,
         notes: form.notes.trim() || null,
+        start_date: form.start_date || null,
       };
 
       if (initial) {
@@ -228,7 +332,8 @@ function SlaForm({
               invoice_via: snapshot.invoice_via,
               status: snapshot.status,
               notes: snapshot.notes,
-              invoiced: snapshot.invoiced,
+              start_date: snapshot.start_date,
+              invoiced_periods: snapshot.invoiced_periods,
             });
             onSave();
           },
@@ -301,6 +406,16 @@ function SlaForm({
               </Select>
             </div>
           </div>
+          <div className="space-y-2">
+            <Label>Startdatum SLA</Label>
+            <DatePicker
+              value={form.start_date || undefined}
+              onChange={(v) => s("start_date", v || "")}
+            />
+            <p className="text-[11px] text-neutral-600">
+              Maanden/kwartalen tellen vanaf deze datum.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Status</Label>
@@ -357,7 +472,6 @@ function SlaForm({
   );
 }
 
-/** Edit shared client fields + pick a domain line to tweak/delete. */
 function ClientGroupDialog({
   open,
   group,
@@ -380,6 +494,7 @@ function ClientGroupDialog({
   const [invoiceVia, setInvoiceVia] = useState("");
   const [status, setStatus] = useState<SlaStatus>("active");
   const [notes, setNotes] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [loading, setLoading] = useState(false);
   const withUndo = useUndoToast();
 
@@ -390,6 +505,7 @@ function ClientGroupDialog({
     setInvoiceVia(group.invoice_via ?? "");
     setStatus(group.status);
     setNotes(group.notes ?? "");
+    setStartDate(toDateInputValue(group.start_date) || "");
   }, [open, group]);
 
   if (!group) return null;
@@ -411,6 +527,7 @@ function ClientGroupDialog({
                 invoice_via: invoiceVia.trim() || null,
                 status,
                 notes: notes.trim() || null,
+                start_date: startDate || null,
               }),
             ),
           );
@@ -426,6 +543,7 @@ function ClientGroupDialog({
                 invoice_via: row.invoice_via,
                 status: row.status,
                 notes: row.notes,
+                start_date: row.start_date,
               }),
             ),
           );
@@ -488,6 +606,13 @@ function ClientGroupDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Startdatum SLA</Label>
+            <DatePicker
+              value={startDate || undefined}
+              onChange={(v) => setStartDate(v || "")}
+            />
           </div>
           <div className="space-y-2">
             <Label>Factuur via</Label>
@@ -572,60 +697,6 @@ function ClientGroupDialog({
   );
 }
 
-function InvoiceCheck({
-  checked,
-  periodLabel,
-  frequency,
-  disabled,
-  onToggle,
-}: {
-  checked: boolean;
-  periodLabel: string;
-  frequency: SlaBillingFrequency;
-  disabled?: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        "inline-flex items-center gap-2 text-left rounded-md border px-2.5 py-1.5 transition-colors shrink-0",
-        disabled && "opacity-40 cursor-not-allowed",
-        checked
-          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-          : "border-neutral-700 bg-neutral-950/40 text-neutral-300 hover:border-neutral-500",
-      )}
-      title={
-        checked
-          ? `Gefactureerd · ${periodLabel}`
-          : `Afvinken wanneer ${frequency === "quarterly" ? "dit kwartaal" : "deze maand"} gefactureerd is`
-      }
-    >
-      <span
-        className={cn(
-          "w-4 h-4 rounded border flex items-center justify-center shrink-0",
-          checked
-            ? "border-emerald-400 bg-emerald-500/20"
-            : "border-neutral-500",
-        )}
-      >
-        {checked && <Check className="w-3 h-3" />}
-      </span>
-      <span className="leading-tight">
-        <span className="block text-xs font-medium">
-          {frequency === "quarterly" ? "Kwartaal" : "Maand"}
-        </span>
-        <span className="block text-[11px] opacity-70">{periodLabel}</span>
-      </span>
-    </button>
-  );
-}
-
 export default function SlaPage() {
   const {
     data: items = [],
@@ -637,6 +708,7 @@ export default function SlaPage() {
   const [editing, setEditing] = useState<SlaAgreement | null>(null);
   const [defaultClient, setDefaultClient] = useState<string | undefined>();
   const [groupEdit, setGroupEdit] = useState<ClientGroup | null>(null);
+  const [year, setYear] = useState(() => new Date().getFullYear());
   const withUndo = useUndoToast();
 
   const groups = useMemo(() => buildGroups(items), [items]);
@@ -663,23 +735,31 @@ export default function SlaPage() {
     [upcomingGroups],
   );
   const openGroups = useMemo(
-    () => activeGroups.filter((g) => g.billable.length > 0 && !g.invoiced),
+    () => activeGroups.filter((g) => g.open_periods.length > 0),
     [activeGroups],
   );
+  const openPeriodCount = useMemo(
+    () => openGroups.reduce((sum, g) => sum + g.open_periods.length, 0),
+    [openGroups],
+  );
 
-  async function toggleGroupInvoiced(group: ClientGroup) {
-    if (group.billable.length === 0) return;
-    const next = !group.invoiced;
-    const snapshots = group.billable.map((r) => ({
+  async function toggleGroupPeriod(group: ClientGroup, period: string) {
+    if (group.billable.length === 0 && group.rows.length === 0) return;
+    const targets = group.billable.length > 0 ? group.billable : group.rows;
+    const nextPeriods = toggleSlaPeriod(group.invoiced_periods, period);
+    const snapshots = targets.map((r) => ({
       id: r.id,
-      invoiced: r.invoiced,
+      invoiced_periods: normalizeInvoicedPeriods(r.invoiced_periods),
     }));
+
     await withUndo({
-      label: next ? "Gemarkeerd als gefactureerd" : "Factuurstatus teruggezet",
+      label: nextPeriods.includes(period)
+        ? `${formatSlaPeriodLabel(period)} afgevinkt`
+        : `${formatSlaPeriodLabel(period)} opengezet`,
       run: async () => {
         await Promise.all(
-          group.billable.map((row) =>
-            updateSlaAgreement(row.id, { invoiced: next }),
+          targets.map((row) =>
+            updateSlaAgreement(row.id, { invoiced_periods: nextPeriods }),
           ),
         );
         void mutate();
@@ -687,7 +767,9 @@ export default function SlaPage() {
       undo: async () => {
         await Promise.all(
           snapshots.map((row) =>
-            updateSlaAgreement(row.id, { invoiced: row.invoiced }),
+            updateSlaAgreement(row.id, {
+              invoiced_periods: row.invoiced_periods,
+            }),
           ),
         );
         void mutate();
@@ -718,7 +800,8 @@ export default function SlaPage() {
           invoice_via: row.invoice_via,
           status: row.status,
           notes: row.notes,
-          invoiced: row.invoiced,
+          start_date: row.start_date,
+          invoiced_periods: row.invoiced_periods,
         });
         void mutate();
       },
@@ -740,10 +823,7 @@ export default function SlaPage() {
       group.monthly_total,
       group.billing_frequency,
     );
-    const periodLabel = formatSlaPeriodLabel(group.current_period);
-    const domains = group.rows
-      .map((r) => (r.domain ? formatDomain(r.domain) : null))
-      .filter(Boolean) as string[];
+    const canInvoice = group.status === "active" && !!group.start_date;
 
     return (
       <div
@@ -758,84 +838,113 @@ export default function SlaPage() {
           }
         }}
         className={cn(
-          "flex items-start gap-3 px-4 py-3.5 border-b border-neutral-800/80 cursor-pointer transition-colors",
+          "px-4 py-3.5 border-b border-neutral-800/80 cursor-pointer transition-colors",
           "hover:bg-neutral-900/50 focus-visible:outline-none focus-visible:bg-neutral-900/50",
           group.status === "upcoming" && "opacity-80",
         )}
       >
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium text-neutral-100">
-              {group.client_name}
-            </p>
-            {group.status !== "active" && (
-              <span
-                className={cn(
-                  "text-[11px] px-1.5 py-0.5 rounded",
-                  group.status === "upcoming" && "bg-blue-500/10 text-blue-300",
-                  group.status === "paused" && "bg-neutral-800 text-neutral-400",
-                  group.status === "ended" && "bg-neutral-900 text-neutral-600",
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium text-neutral-100">
+                {group.client_name}
+              </p>
+              {group.status !== "active" && (
+                <span
+                  className={cn(
+                    "text-[11px] px-1.5 py-0.5 rounded",
+                    group.status === "upcoming" &&
+                      "bg-blue-500/10 text-blue-300",
+                    group.status === "paused" &&
+                      "bg-neutral-800 text-neutral-400",
+                    group.status === "ended" &&
+                      "bg-neutral-900 text-neutral-600",
+                  )}
+                >
+                  {STATUS_LABELS[group.status]}
+                </span>
+              )}
+              <span className="text-[11px] text-neutral-600">
+                {group.billing_frequency === "quarterly"
+                  ? "Per kwartaal"
+                  : "Per maand"}
+              </span>
+              {group.start_date && (
+                <span className="text-[11px] text-neutral-600">
+                  vanaf {group.start_date}
+                </span>
+              )}
+              {group.invoice_via && (
+                <span className="text-[11px] text-neutral-500">
+                  via {group.invoice_via}
+                </span>
+              )}
+            </div>
+
+            {group.rows.some((r) => r.domain) ? (
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {group.rows.map((row) =>
+                  row.domain ? (
+                    <a
+                      key={row.id}
+                      href={domainHref(row.domain)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
+                    >
+                      {formatDomain(row.domain)}
+                      <span className="font-mono text-neutral-600">
+                        {formatCurrency(Number(row.monthly_amount) || 0)}
+                      </span>
+                      <ExternalLink className="w-2.5 h-2.5 opacity-40" />
+                    </a>
+                  ) : null,
                 )}
-              >
-                {STATUS_LABELS[group.status]}
-              </span>
+              </div>
+            ) : (
+              <p className="text-xs text-neutral-600">Geen domein</p>
             )}
-            {group.invoice_via && (
-              <span className="text-[11px] text-neutral-500">
-                via {group.invoice_via}
-              </span>
+
+            {group.notes && (
+              <p className="text-[11px] text-neutral-600">{group.notes}</p>
             )}
           </div>
 
-          {domains.length > 0 ? (
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {group.rows.map((row) =>
-                row.domain ? (
-                  <a
-                    key={row.id}
-                    href={domainHref(row.domain)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-xs text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1"
-                  >
-                    {formatDomain(row.domain)}
-                    <span className="font-mono text-neutral-600">
-                      {formatCurrency(Number(row.monthly_amount) || 0)}
-                    </span>
-                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
-                  </a>
-                ) : null,
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-neutral-600">Geen domein</p>
-          )}
-
-          {group.notes && (
-            <p className="text-[11px] text-neutral-600">{group.notes}</p>
-          )}
-        </div>
-
-        <div className="text-right shrink-0 pt-0.5">
-          <p className="text-sm font-mono text-neutral-200">
-            {formatCurrency(group.monthly_total)}
-            <span className="text-neutral-600 text-xs">/mnd</span>
-          </p>
-          {group.billing_frequency === "quarterly" && (
-            <p className="text-[11px] text-neutral-500 mt-0.5">
-              {formatCurrency(invoiceAmt)}/kw
+          <div className="text-right shrink-0 pt-0.5">
+            <p className="text-sm font-mono text-neutral-200">
+              {formatCurrency(group.monthly_total)}
+              <span className="text-neutral-600 text-xs">/mnd</span>
             </p>
-          )}
+            {group.billing_frequency === "quarterly" && (
+              <p className="text-[11px] text-neutral-500 mt-0.5">
+                {formatCurrency(invoiceAmt)}/kw
+              </p>
+            )}
+            {group.open_periods.length > 0 && (
+              <p className="text-[11px] text-amber-400/80 mt-1">
+                {group.open_periods.length} open
+              </p>
+            )}
+          </div>
         </div>
 
-        <InvoiceCheck
-          checked={group.invoiced}
-          periodLabel={periodLabel}
-          frequency={group.billing_frequency}
-          disabled={group.status !== "active" || group.billable.length === 0}
-          onToggle={() => void toggleGroupInvoiced(group)}
-        />
+        {group.status === "active" && (
+          <div className="mt-3">
+            {!group.start_date ? (
+              <p className="text-xs text-neutral-600">
+                Zet een startdatum om periodes af te vinken.
+              </p>
+            ) : (
+              <PeriodChips
+                group={group}
+                year={year}
+                disabled={!canInvoice}
+                onToggle={(period) => void toggleGroupPeriod(group, period)}
+              />
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -848,19 +957,42 @@ export default function SlaPage() {
             SLA&apos;s
           </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            Per klant · klik om te wijzigen · vink maand/kwartaal af
+            Per klant · afvinken per maand of kwartaal vanaf startdatum
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDefaultClient(undefined);
-            setFormOpen(true);
-          }}
-          className="w-full sm:w-auto bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
-        >
-          <Plus className="w-4 h-4" /> Nieuwe SLA
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <div className="flex items-center gap-1 border border-neutral-800 rounded-lg bg-neutral-900/40 px-1">
+            <button
+              type="button"
+              onClick={() => setYear((y) => y - 1)}
+              className="p-2 text-neutral-500 hover:text-neutral-200"
+              aria-label="Vorig jaar"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-mono text-neutral-200 w-12 text-center">
+              {year}
+            </span>
+            <button
+              type="button"
+              onClick={() => setYear((y) => y + 1)}
+              className="p-2 text-neutral-500 hover:text-neutral-200"
+              aria-label="Volgend jaar"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setDefaultClient(undefined);
+              setFormOpen(true);
+            }}
+            className="w-full sm:w-auto bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2"
+          >
+            <Plus className="w-4 h-4" /> Nieuwe SLA
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -882,12 +1014,12 @@ export default function SlaPage() {
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
           <p className="text-xs text-neutral-500 mb-1">Nog open</p>
           <p className="text-lg font-mono text-neutral-200 font-medium">
-            {openGroups.length}
+            {openPeriodCount}
           </p>
           <p className="text-[11px] text-neutral-600 mt-0.5">
-            {openGroups.length === 0
-              ? "Alles afgevinkt"
-              : "Klanten nog niet gefactureerd"}
+            {openPeriodCount === 0
+              ? "Alles bij · vanaf start t/m nu"
+              : `${openGroups.length} klanten · mag opsparen`}
           </p>
         </div>
       </div>
@@ -896,26 +1028,32 @@ export default function SlaPage() {
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
           <p className="text-sm text-neutral-200 font-medium mb-1">Openstaand</p>
           <p className="text-xs text-neutral-500 mb-3">
-            Nog niet afgevinkt — mag opsparen.
+            Periodes vanaf startdatum die nog niet zijn afgevinkt.
           </p>
           <ul className="space-y-2">
             {openGroups.map((g) => (
               <li
                 key={g.key}
-                className="flex items-center justify-between gap-3 text-sm"
+                className="flex items-start justify-between gap-3 text-sm"
               >
                 <button
                   type="button"
-                  className="text-neutral-300 hover:text-neutral-100 text-left truncate"
+                  className="text-neutral-300 hover:text-neutral-100 text-left min-w-0"
                   onClick={() => openGroup(g)}
                 >
-                  {g.client_name}
-                  <span className="text-neutral-600 text-xs ml-2">
-                    {g.billing_frequency === "quarterly" ? "kwartaal" : "maand"}
+                  <span className="block truncate">{g.client_name}</span>
+                  <span className="text-[11px] text-neutral-600">
+                    {g.open_periods
+                      .slice(0, 6)
+                      .map((p) => formatSlaPeriodLabel(p, true))
+                      .join(" · ")}
+                    {g.open_periods.length > 6
+                      ? ` +${g.open_periods.length - 6}`
+                      : ""}
                   </span>
                 </button>
                 <span className="font-mono text-xs text-neutral-500 shrink-0">
-                  {formatCurrency(g.monthly_total)}/mnd
+                  {g.open_periods.length} open
                 </span>
               </li>
             ))}
@@ -932,10 +1070,9 @@ export default function SlaPage() {
         </div>
       ) : (
         <div className="border border-neutral-800 rounded-lg overflow-hidden">
-          <div className="hidden sm:grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-2.5 border-b border-neutral-800 bg-neutral-900/50 text-xs text-neutral-500">
-            <span>Klant</span>
-            <span className="text-right w-24">Bedrag</span>
-            <span className="w-[7.5rem]">Gefactureerd</span>
+          <div className="px-4 py-2.5 border-b border-neutral-800 bg-neutral-900/50 text-xs text-neutral-500 flex justify-between gap-3">
+            <span>Klant · periodes {year}</span>
+            <span>Bedrag</span>
           </div>
           {activeGroups.map(renderGroup)}
           {upcomingGroups.length > 0 && (
