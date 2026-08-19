@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
     const {
       title,
       description,
+      status,
       priority,
       assignee_id,
       company_id,
@@ -81,14 +82,19 @@ export async function POST(req: NextRequest) {
 
     const resolvedAssignee =
       assignee_id === null ? null : (assignee_id || user.id);
+    const resolvedStatus =
+      status === "backlog" || status === "in_progress" || status === "done"
+        ? status
+        : "open";
 
     const { rows } = await sql`
       INSERT INTO todos (
-        title, description, priority, assignee_id, company_id, project_id, due_date, created_by
+        title, description, status, priority, assignee_id, company_id, project_id, due_date, created_by
       )
       VALUES (
         ${title.trim()},
         ${description?.trim() || null},
+        ${resolvedStatus},
         ${priority ?? "low"},
         ${resolvedAssignee},
         ${company_id ?? null},

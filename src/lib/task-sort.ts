@@ -12,7 +12,8 @@ export const PRIORITY_RANK: Record<string, number> = {
 export const STATUS_RANK: Record<string, number> = {
   in_progress: 0,
   open: 1,
-  done: 2,
+  backlog: 2,
+  done: 3,
 };
 
 function compareNullableString(a: string, b: string, sortAsc: boolean): number {

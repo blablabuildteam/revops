@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
     let assigneeName = searchParams.get("assignee_name") || null;
     const assigneeId = searchParams.get("assignee") || null;
     const status = searchParams.get("status") || null;
+    const company = searchParams.get("company") || null;
 
     // Resolve assignee name from user id so clients can fetch in one parallel round-trip
     if (!assigneeName && assigneeId) {
@@ -45,11 +46,13 @@ export async function GET(req: NextRequest) {
       WHERE
         t.approved = true
         AND (COALESCE(${assigneeName}, '') = '' OR t.assignee = ${assigneeName})
+        AND (COALESCE(${company}, '') = '' OR c.id::text = ${company})
         AND (
           COALESCE(${status}, '') = ''
-          OR (${status} = 'active' AND (m.name IS NULL OR LOWER(m.name) != 'done'))
+          OR (${status} = 'active' AND (m.name IS NULL OR LOWER(m.name) NOT IN ('done', 'backlog')))
           OR (${status} = 'done' AND LOWER(m.name) = 'done')
-          OR (${status} NOT IN ('active', 'done') AND t.status = ${status})
+          OR (${status} = 'backlog' AND LOWER(m.name) = 'backlog')
+          OR (${status} NOT IN ('active', 'done', 'backlog') AND t.status = ${status})
         )
       ORDER BY
         p.name ASC,

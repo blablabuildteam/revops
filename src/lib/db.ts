@@ -111,6 +111,8 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`;
   await sql`ALTER TABLE todos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`;
+  await sql`ALTER TABLE todos DROP CONSTRAINT IF EXISTS todos_status_check`;
+  await sql`ALTER TABLE todos ADD CONSTRAINT todos_status_check CHECK (status IN ('backlog', 'open', 'in_progress', 'done'))`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
   await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
@@ -358,6 +360,18 @@ async function _init() {
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS monthly_hours NUMERIC(8,1)`;
       await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      const { rows: todoStatusFlag } = await sql`
+        SELECT value FROM finance_settings WHERE key = 'todos_backlog_status'
+      `;
+      if (todoStatusFlag[0]?.value !== "true") {
+        await sql`ALTER TABLE todos DROP CONSTRAINT IF EXISTS todos_status_check`;
+        await sql`ALTER TABLE todos ADD CONSTRAINT todos_status_check CHECK (status IN ('backlog', 'open', 'in_progress', 'done'))`;
+        await sql`
+          INSERT INTO finance_settings (key, value, updated_at)
+          VALUES ('todos_backlog_status', 'true', now())
+          ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+        `;
+      }
       // Partner / commission defaults: Escort, Comfortzone, Heatnest → 10u/mnd.
       await sql`
         UPDATE finance_deals
@@ -517,7 +531,7 @@ async function _init() {
       title TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'open'
-        CHECK (status IN ('open', 'in_progress', 'done')),
+        CHECK (status IN ('backlog', 'open', 'in_progress', 'done')),
       priority TEXT DEFAULT 'low'
         CHECK (priority IN ('low', 'medium', 'high')),
       assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,

@@ -49,6 +49,7 @@ interface Todo {
   assignee_name?: string;
   company_id?: string;
   company_name?: string;
+  company_logo_url?: string;
   project_id?: string;
   project_name?: string;
   project_company_name?: string;
@@ -195,6 +196,7 @@ function defaultOpenMilestoneId(milestones: Milestone[]) {
 
 const statusFilterLabels: Record<string, string> = {
   active: "Active",
+  backlog: "Backlog",
   all: "All",
   done: "Done",
 };
@@ -206,21 +208,25 @@ const sortOptions: TodoSortKey[] = ["smart", "priority", "due_date", "title", "c
 // ---------------------------------------------------------------------------
 
 function TodoFormDialog({
-  open, onClose, onSave, todo, users, projects, currentUser, defaultProjectId,
+  open, onClose, onSave, todo, users, companies, projects, currentUser, defaultProjectId, defaultCompanyId,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: () => void;
   todo?: Todo | null;
   users: TodoUser[];
+  companies: Company[];
   projects: Project[];
   currentUser: TodoUser | null;
   defaultProjectId?: string;
+  defaultCompanyId?: string;
 }) {
   const isEdit = !!todo;
+  const boardMode = !!defaultProjectId;
   const [form, setForm] = useState({
-    title: "", description: "", priority: "low",
+    title: "", description: "", status: "open" as TodoStatus, priority: "low",
     assignee_id: "",
+    company_id: "",
     project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
   });
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -236,7 +242,8 @@ function TodoFormDialog({
     return a.name.localeCompare(b.name);
   });
   const selectedProject = projects.find((p) => p.id === form.project_id) ?? null;
-  const showPhaseStatus = !!form.project_id;
+  const showPhaseStatus = boardMode && !!form.project_id;
+  const selectedCompany = companies.find((c) => c.id === form.company_id) ?? null;
 
   useEffect(() => {
     if (!open) return;
@@ -246,22 +253,23 @@ function TodoFormDialog({
       setForm({
         title: todo.title,
         description: todo.description ?? "",
+        status: todo.status,
         priority: todo.priority,
         assignee_id: todo.assignee_id ?? "",
-        // If this to-do was tagged with a project, prefill the board so saving
-        // converts it into a real board task instead of keeping a project to-do.
-        project_id: todo.project_id ?? "",
+        company_id: todo.company_id ?? "",
+        project_id: "",
         milestone_id: "",
         due_date: toDateInputValue(todo.due_date),
       });
       return;
     }
     setForm({
-      title: "", description: "", priority: "low",
+      title: "", description: "", status: "open", priority: "low",
       assignee_id: currentUser?.id ?? "",
+      company_id: defaultCompanyId ?? "",
       project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
     });
-  }, [open, todo, currentUser, defaultProjectId]);
+  }, [open, todo, currentUser, defaultProjectId, defaultCompanyId]);
 
   useEffect(() => {
     if (!open || !form.project_id) {
@@ -310,7 +318,7 @@ function TodoFormDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
-    if (form.project_id && milestonesLoading) {
+    if (boardMode && form.project_id && milestonesLoading) {
       setError("Loading board statuses...");
       return;
     }
@@ -322,8 +330,8 @@ function TodoFormDialog({
           ?? (currentUser?.id === form.assignee_id ? currentUser.name : null))
         : null;
 
-      // Any Project Board selection → real board task (never a project-tagged to-do)
-      if (form.project_id) {
+      // Project group “Add task” still lands on the project board.
+      if (boardMode && form.project_id) {
         const milestoneId = await resolveMilestoneId(form.project_id, form.milestone_id);
         if (!milestoneId) {
           setError("This project board has no statuses yet");
@@ -337,7 +345,6 @@ function TodoFormDialog({
           due_date: form.due_date || null,
           milestone_id: milestoneId,
         });
-        // Editing a to-do into a board: remove the old to-do row
         if (isEdit && todo) {
           await fetch(`/api/todos/${todo.id}`, { method: "DELETE" }).catch(() => null);
         }
@@ -346,16 +353,16 @@ function TodoFormDialog({
         return;
       }
 
-      // Personal to-do only — never attach project_id from this form
       const payload = {
         title: form.title.trim(),
         description: form.description,
+        status: form.status,
         priority: form.priority,
         assignee_id:
           form.assignee_id === ""
             ? null
             : (form.assignee_id || currentUser?.id || null),
-        company_id: null,
+        company_id: form.company_id || null,
         project_id: null,
         due_date: form.due_date || null,
       };
@@ -380,10 +387,11 @@ function TodoFormDialog({
             await putTodo(todo.id, {
               title: todo.title,
               description: todo.description ?? null,
+              status: todo.status,
               priority: todo.priority,
               assignee_id: todo.assignee_id ?? null,
               company_id: todo.company_id ?? null,
-              project_id: todo.project_id ?? null,
+              project_id: null,
               due_date: todo.due_date ?? null,
             });
             onSave();
@@ -452,6 +460,8 @@ function TodoFormDialog({
               </Select>
             </div>
           </div>
+          {boardMode ? (
+            <>
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Project Board</Label>
             <Select
@@ -510,6 +520,40 @@ function TodoFormDialog({
                 </SelectContent>
               </Select>
             </div>
+          )}
+            </>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-neutral-400 text-xs">Company</Label>
+                <Select
+                  value={form.company_id || "none"}
+                  onValueChange={(v) => s("company_id", v === "none" ? "" : (v ?? ""))}
+                >
+                  <SelectTrigger className="w-full bg-neutral-800 border-neutral-700 text-neutral-100">
+                    <SelectValue placeholder="Optional">
+                      {selectedCompany?.name ?? "No company"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-neutral-800 border-neutral-700 max-h-60">
+                    <SelectItem value="none" className="text-neutral-400">No company</SelectItem>
+                    {companies.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-neutral-100">
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-neutral-400 text-xs">Status</Label>
+                <TodoStatusSelect
+                  status={form.status}
+                  onChange={(next) => s("status", next)}
+                  className="h-10 w-full bg-neutral-800 border-neutral-700"
+                />
+              </div>
+            </>
           )}
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Due date</Label>
@@ -714,6 +758,11 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
           <span className="truncate">
             <BinaryText text={todo.title} id={todo.id} />
           </span>
+          {todo.company_name && (
+            <span className="hidden sm:inline text-[11px] text-neutral-600 truncate max-w-28 shrink-0">
+              {todo.company_name}
+            </span>
+          )}
           {isOverdue && (
             <span
               className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0"
@@ -834,6 +883,69 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
   );
 }
 
+function CompanyGroup({
+  companyName, companyLogoUrl, todos, filterStatus, sortKey,
+  onTodoUpdate, onTodoDelete, onTodoEdit,
+}: {
+  companyName: string;
+  companyLogoUrl?: string;
+  todos: Todo[];
+  filterStatus: string;
+  sortKey: TodoSortKey;
+  onTodoUpdate: (t: Todo) => void;
+  onTodoDelete: (id: string) => void;
+  onTodoEdit: (t: Todo) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const filtered = filterStatus === "done"
+    ? todos.filter((t) => t.status === "done")
+    : filterStatus === "backlog"
+      ? todos.filter((t) => t.status === "backlog")
+      : filterStatus === "active"
+        ? todos.filter((t) => t.status !== "done")
+        : todos;
+  const visible = sortTodos(filtered, sortKey);
+  const doneCount = todos.filter((t) => t.status === "done").length;
+
+  return (
+    <div className="border border-neutral-800 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-3 w-full px-4 py-3 bg-neutral-900/60 hover:bg-neutral-900/80 transition-colors text-left"
+      >
+        {expanded
+          ? <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />
+        }
+        <CompanyAvatar name={companyName} logoUrl={companyLogoUrl} size="sm" />
+        <span className="flex-1 min-w-0 text-sm font-medium text-neutral-200 truncate">
+          {companyName}
+        </span>
+        <span className="text-xs text-neutral-600 font-mono shrink-0">
+          {doneCount}/{todos.length}
+        </span>
+      </button>
+      {expanded && (
+        <div className="divide-y divide-neutral-800/40">
+          {visible.map((todo) => (
+            <TodoCard
+              key={todo.id}
+              todo={todo}
+              onUpdate={onTodoUpdate}
+              onDelete={onTodoDelete}
+              onEdit={onTodoEdit}
+            />
+          ))}
+          {visible.length === 0 && (
+            <p className="text-xs text-neutral-700 px-4 py-3">No tasks</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Collapsible project group
 // ---------------------------------------------------------------------------
@@ -851,7 +963,7 @@ function ProjectGroup({
   todos: Todo[];
   boardTasks: ProjectBoardTask[];
   milestones?: Milestone[];
-  filterStatus: "active" | "all" | "done";
+  filterStatus: string;
   sortKey: TodoSortKey;
   onTodoUpdate: (t: Todo) => void;
   onTodoDelete: (id: string) => void;
@@ -864,9 +976,11 @@ function ProjectGroup({
 
   const filteredTodos = filterStatus === "done"
     ? todos.filter((t) => t.status === "done")
-    : filterStatus === "active"
-      ? todos.filter((t) => t.status !== "done")
-      : todos;
+    : filterStatus === "backlog"
+      ? todos.filter((t) => t.status === "backlog")
+      : filterStatus === "active"
+        ? todos.filter((t) => t.status !== "done")
+        : todos;
   const visibleTodos = sortTodos(filteredTodos, sortKey);
 
   const todoDone = todos.filter((t) => t.status === "done").length;
@@ -928,9 +1042,16 @@ function ProjectGroup({
           )}
           <ProjectTaskBoardPanel
             projectId={projectId}
-            tasks={boardTasks.map(boardTaskToTask)}
+            tasks={boardTasks
+              .filter((t) => {
+                if (filterStatus === "backlog") return (t.milestone_name ?? "").toLowerCase() === "backlog";
+                return true;
+              })
+              .map(boardTaskToTask)}
             milestonesOverride={milestones}
-            filterStatus={filterStatus}
+            filterStatus={
+              filterStatus === "backlog" ? "all" : (filterStatus as "active" | "all" | "done")
+            }
             sortKeyOverride={todoSortToBoardSortKey(sortKey)}
             hideToolbar
             onTaskUpdate={onBoardTaskUpdate}
@@ -1033,10 +1154,13 @@ export default function TodosPage() {
     const params = new URLSearchParams();
     if (filterAssignee !== "all") params.set("assignee", filterAssignee);
     if (filterCompany !== "all") params.set("company", filterCompany);
-    if (filterStatus !== "all") params.set("status", filterStatus === "active" ? "" : filterStatus);
+    if (filterStatus === "backlog" || filterStatus === "done") {
+      params.set("status", filterStatus);
+    }
 
     const boardParams = new URLSearchParams();
     if (filterAssignee !== "all") boardParams.set("assignee", filterAssignee);
+    if (filterCompany !== "all") boardParams.set("company", filterCompany);
     if (filterStatus !== "all") boardParams.set("status", filterStatus);
 
     // Paint whatever we showed last time for this filter combination, then
@@ -1222,9 +1346,35 @@ export default function TodosPage() {
   const people = assigneeOptions(users, currentUser);
   const searchActive = !!normalizeTaskSearchQuery(search);
 
-  // Split todos into personal vs project-linked
-  const personalTodos = todos.filter((t) => !t.project_id);
+  // Personal = no company, no project. Company todos hang on the client.
+  const personalTodos = todos.filter((t) => !t.company_id && !t.project_id);
+  const companyTodos = todos.filter((t) => !!t.company_id && !t.project_id);
   const projectTodos = todos.filter((t) => !!t.project_id);
+
+  const companyGroups = new Map<string, {
+    name: string;
+    logoUrl?: string;
+    todos: Todo[];
+  }>();
+  for (const t of companyTodos) {
+    const cid = t.company_id!;
+    if (!companyGroups.has(cid)) {
+      companyGroups.set(cid, {
+        name: t.company_name || "Unknown company",
+        logoUrl: t.company_logo_url,
+        todos: [],
+      });
+    }
+    companyGroups.get(cid)!.todos.push(t);
+  }
+  if (searchActive) {
+    for (const [cid, group] of Array.from(companyGroups.entries())) {
+      if (!matchesTaskSearch(search, group.name)) {
+        group.todos = group.todos.filter((t) => todoMatchesSearch(t, search));
+      }
+      if (group.todos.length === 0) companyGroups.delete(cid);
+    }
+  }
 
   // Build unified project groups: combine todo-based and board-based tasks
   const projectGroups = new Map<string, {
@@ -1286,19 +1436,23 @@ export default function TodosPage() {
   // Further split personal to-dos
   const personalActive = filterStatus === "done"
     ? []
-    : sortTodos(searchedPersonalTodos.filter((t) => t.status !== "done"), sortKey);
+    : filterStatus === "backlog"
+      ? sortTodos(searchedPersonalTodos.filter((t) => t.status === "backlog"), sortKey)
+      : sortTodos(searchedPersonalTodos.filter((t) => t.status !== "done"), sortKey);
   const personalDone = sortCompletedLatest(searchedPersonalTodos.filter((t) => t.status === "done"));
   const personalDonePreview = personalDone.slice(0, 3);
   const showCompletedView = myTodosView === "completed" || filterStatus === "done";
 
   // Stats (include both sources) — based on unfiltered lists so header counts stay stable
-  const totalOpen = personalTodos.filter((t) => t.status === "open").length
+  const totalOpen = todos.filter((t) => t.status === "open").length
     + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.status === "open").length;
-  const totalInProgress = personalTodos.filter((t) => t.status === "in_progress").length
+  const totalInProgress = todos.filter((t) => t.status === "in_progress").length
     + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.status === "in_progress").length;
+  const totalBacklog = todos.filter((t) => t.status === "backlog").length;
   const totalOverdue =
-    personalTodos.filter((t) => t.due_date && t.status !== "done" && new Date(t.due_date) < new Date()).length
+    todos.filter((t) => t.due_date && t.status !== "done" && t.status !== "backlog" && new Date(t.due_date) < new Date()).length
     + boardTasks.filter((t) => !isDonePhase(t.milestone_name) && t.due_date && new Date(t.due_date) < new Date()).length;
+  const totalCompanyItems = Array.from(companyGroups.values()).reduce((sum, g) => sum + g.todos.length, 0);
   const totalProjectItems = Array.from(projectGroups.values()).reduce((sum, g) => sum + g.todos.length + g.boardTasks.length, 0);
 
   return (
@@ -1318,6 +1472,7 @@ export default function TodosPage() {
           </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {totalOpen} open · {totalInProgress} in progress
+            {totalBacklog > 0 && <span className="ml-2">· {totalBacklog} backlog</span>}
             {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
           </p>
         </div>
@@ -1376,6 +1531,7 @@ export default function TodosPage() {
           </SelectTrigger>
           <SelectContent className="bg-neutral-800 border-neutral-700">
             <SelectItem value="active" className="text-neutral-100">Active</SelectItem>
+            <SelectItem value="backlog" className="text-neutral-400">Backlog</SelectItem>
             <SelectItem value="all" className="text-neutral-400">All</SelectItem>
             <SelectItem value="done" className="text-stone-300">Done</SelectItem>
           </SelectContent>
@@ -1521,6 +1677,37 @@ export default function TodosPage() {
             </div>
           </section>
 
+          {companyGroups.size > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Building2 className="w-4 h-4 text-neutral-500" />
+                <h2 className="text-sm font-medium text-neutral-400 uppercase tracking-wider">
+                  Companies
+                </h2>
+                <span className="text-xs text-neutral-600 font-mono ml-1">
+                  {totalCompanyItems}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {Array.from(companyGroups.entries())
+                  .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                  .map(([cid, group]) => (
+                    <CompanyGroup
+                      key={cid}
+                      companyName={group.name}
+                      companyLogoUrl={group.logoUrl}
+                      todos={group.todos}
+                      filterStatus={filterStatus}
+                      sortKey={sortKey}
+                      onTodoUpdate={handleTodoUpdate}
+                      onTodoDelete={handleDelete}
+                      onTodoEdit={openEditTask}
+                    />
+                  ))}
+              </div>
+            </section>
+          )}
+
           {/* =========================================================== */}
           {/* SECTION 2: PROJECT TASKS (grouped by project) */}
           {/* =========================================================== */}
@@ -1548,7 +1735,7 @@ export default function TodosPage() {
                       todos={group.todos}
                       boardTasks={group.boardTasks}
                       milestones={milestonesByProject[pid]}
-                      filterStatus={filterStatus as "active" | "all" | "done"}
+                      filterStatus={filterStatus}
                       sortKey={sortKey}
                       onTodoUpdate={handleTodoUpdate}
                       onTodoDelete={handleDelete}
@@ -1566,7 +1753,7 @@ export default function TodosPage() {
                     {searchActive ? "No project tasks match your search" : "No project tasks yet"}
                   </p>
                   {!searchActive && (
-                    <p className="text-neutral-700 text-xs mt-1">Assign a project when creating a task to see it here</p>
+                    <p className="text-neutral-700 text-xs mt-1">Project-board work still shows here</p>
                   )}
                 </div>
               )}
@@ -1581,9 +1768,11 @@ export default function TodosPage() {
         onSave={() => { load(); }}
         todo={editingTodo}
         users={users}
+        companies={companies}
         projects={projects as Project[]}
         currentUser={currentUser}
         defaultProjectId={formDefaultProject}
+        defaultCompanyId={filterCompany !== "all" ? filterCompany : undefined}
       />
 
       {confirmDialog}
