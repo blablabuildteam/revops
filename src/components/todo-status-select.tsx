@@ -13,7 +13,7 @@ export const TODO_STATUS_ORDER: TodoStatus[] = ["in_progress", "open", "backlog"
 
 export const TODO_STATUS_LABELS: Record<TodoStatus, string> = {
   backlog: "Backlog",
-  open: "Open",
+  open: "To do",
   in_progress: "In progress",
   done: "Done",
 };

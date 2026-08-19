@@ -24,7 +24,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { createTask, getCompanies, getProject, getProjects, getUsers } from "@/lib/api";
+import { createCompany, createTask, getCompanies, getProject, getProjects, getUsers } from "@/lib/api";
 import { Company, Milestone, Project, Task } from "@/lib/types";
 import { toDateInputValue } from "@/lib/format";
 import { matchesTaskSearch, normalizeTaskSearchQuery } from "@/lib/task-search";
@@ -209,6 +209,7 @@ const sortOptions: TodoSortKey[] = ["smart", "priority", "due_date", "title", "c
 
 function TodoFormDialog({
   open, onClose, onSave, todo, users, companies, projects, currentUser, defaultProjectId, defaultCompanyId,
+  onCompanyCreated,
 }: {
   open: boolean;
   onClose: () => void;
@@ -220,6 +221,7 @@ function TodoFormDialog({
   currentUser: TodoUser | null;
   defaultProjectId?: string;
   defaultCompanyId?: string;
+  onCompanyCreated?: (company: Company) => void;
 }) {
   const isEdit = !!todo;
   const boardMode = !!defaultProjectId;
@@ -233,6 +235,9 @@ function TodoFormDialog({
   const [milestonesLoading, setMilestonesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [addingCompany, setAddingCompany] = useState(false);
+  const [localCompanies, setLocalCompanies] = useState<Company[]>(companies);
   const withUndo = useUndoToast();
 
   const people = assigneeOptions(users, currentUser);
@@ -243,11 +248,36 @@ function TodoFormDialog({
   });
   const selectedProject = projects.find((p) => p.id === form.project_id) ?? null;
   const showPhaseStatus = boardMode && !!form.project_id;
-  const selectedCompany = companies.find((c) => c.id === form.company_id) ?? null;
+  const selectedCompany = localCompanies.find((c) => c.id === form.company_id) ?? null;
+
+  useEffect(() => {
+    setLocalCompanies(companies);
+  }, [companies]);
+
+  async function handleAddCompany() {
+    const name = newCompanyName.trim();
+    if (!name || addingCompany) return;
+    setAddingCompany(true);
+    setError("");
+    try {
+      const company = await createCompany({ name });
+      setLocalCompanies((list) =>
+        [...list, company].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      onCompanyCreated?.(company);
+      setForm((f) => ({ ...f, company_id: company.id }));
+      setNewCompanyName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add company");
+    } finally {
+      setAddingCompany(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
     setError("");
+    setNewCompanyName("");
     setMilestones([]);
     if (todo) {
       setForm({
@@ -528,20 +558,52 @@ function TodoFormDialog({
                 <Label className="text-neutral-400 text-xs">Company</Label>
                 <Select
                   value={form.company_id || "none"}
-                  onValueChange={(v) => s("company_id", v === "none" ? "" : (v ?? ""))}
+                  onValueChange={(v) => {
+                    if (v === "__new__") return;
+                    s("company_id", v === "none" ? "" : (v ?? ""));
+                  }}
                 >
                   <SelectTrigger className="w-full bg-neutral-800 border-neutral-700 text-neutral-100">
                     <SelectValue placeholder="Optional">
                       {selectedCompany?.name ?? "No company"}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent className="bg-neutral-800 border-neutral-700 max-h-60">
+                  <SelectContent className="bg-neutral-800 border-neutral-700 max-h-72">
                     <SelectItem value="none" className="text-neutral-400">No company</SelectItem>
-                    {companies.map((c) => (
+                    {localCompanies.map((c) => (
                       <SelectItem key={c.id} value={c.id} className="text-neutral-100">
                         {c.name}
                       </SelectItem>
                     ))}
+                    <div className="border-t border-neutral-700 mt-1 pt-1 px-1 pb-1">
+                      <div
+                        className="flex gap-1.5 items-center"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          value={newCompanyName}
+                          onChange={(e) => setNewCompanyName(e.target.value)}
+                          placeholder="Nieuw bedrijf..."
+                          className="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-100 placeholder:text-neutral-600 outline-none focus:border-neutral-500"
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleAddCompany();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleAddCompany()}
+                          disabled={addingCompany || !newCompanyName.trim()}
+                          className="shrink-0 h-6 w-6 rounded bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
                   </SelectContent>
                 </Select>
               </div>
@@ -1471,7 +1533,7 @@ export default function TodosPage() {
             )}
           </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            {totalOpen} open · {totalInProgress} in progress
+            {totalOpen} to do · {totalInProgress} in progress
             {totalBacklog > 0 && <span className="ml-2">· {totalBacklog} backlog</span>}
             {totalOverdue > 0 && <span className="text-red-400 ml-2">· {totalOverdue} overdue</span>}
           </p>
@@ -1773,6 +1835,13 @@ export default function TodosPage() {
         currentUser={currentUser}
         defaultProjectId={formDefaultProject}
         defaultCompanyId={filterCompany !== "all" ? filterCompany : undefined}
+        onCompanyCreated={(company) => {
+          setCompanies((prev) =>
+            prev.some((c) => c.id === company.id)
+              ? prev
+              : [...prev, company].sort((a, b) => a.name.localeCompare(b.name)),
+          );
+        }}
       />
 
       {confirmDialog}
