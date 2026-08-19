@@ -135,6 +135,17 @@ function mergePeriods(rows: SlaAgreement[]): string[] {
   return [...set].sort();
 }
 
+function openAmountForGroup(group: Pick<
+  ClientGroup,
+  "monthly_total" | "billing_frequency" | "open_periods"
+>): number {
+  if (group.open_periods.length === 0) return 0;
+  return (
+    group.open_periods.length *
+    slaInvoiceAmount(group.monthly_total, group.billing_frequency)
+  );
+}
+
 function buildGroups(items: SlaAgreement[]): ClientGroup[] {
   const map = new Map<string, SlaAgreement[]>();
   for (const row of items) {
@@ -742,6 +753,10 @@ export default function SlaPage() {
     () => openGroups.reduce((sum, g) => sum + g.open_periods.length, 0),
     [openGroups],
   );
+  const openAmountTotal = useMemo(
+    () => openGroups.reduce((sum, g) => sum + openAmountForGroup(g), 0),
+    [openGroups],
+  );
 
   async function toggleGroupPeriod(group: ClientGroup, period: string) {
     if (group.billable.length === 0 && group.rows.length === 0) return;
@@ -923,7 +938,8 @@ export default function SlaPage() {
             )}
             {group.open_periods.length > 0 && (
               <p className="text-[11px] text-amber-400/80 mt-1">
-                {group.open_periods.length} open
+                {group.open_periods.length} open ·{" "}
+                {formatCurrency(openAmountForGroup(group))}
               </p>
             )}
           </div>
@@ -1014,12 +1030,12 @@ export default function SlaPage() {
         <div className="border border-neutral-800 rounded-lg p-4 bg-neutral-900/20">
           <p className="text-xs text-neutral-500 mb-1">Nog open</p>
           <p className="text-lg font-mono text-neutral-200 font-medium">
-            {openPeriodCount}
+            {openPeriodCount === 0 ? "—" : formatCurrency(openAmountTotal)}
           </p>
           <p className="text-[11px] text-neutral-600 mt-0.5">
             {openPeriodCount === 0
               ? "Alles bij · vanaf start t/m nu"
-              : `${openGroups.length} klanten · mag opsparen`}
+              : `${openPeriodCount} periodes · ${openGroups.length} klanten`}
           </p>
         </div>
       </div>
@@ -1031,32 +1047,41 @@ export default function SlaPage() {
             Periodes vanaf startdatum die nog niet zijn afgevinkt.
           </p>
           <ul className="space-y-2">
-            {openGroups.map((g) => (
-              <li
-                key={g.key}
-                className="flex items-start justify-between gap-3 text-sm"
-              >
-                <button
-                  type="button"
-                  className="text-neutral-300 hover:text-neutral-100 text-left min-w-0"
-                  onClick={() => openGroup(g)}
+            {openGroups.map((g) => {
+              const amount = openAmountForGroup(g);
+              const perPeriod = slaInvoiceAmount(
+                g.monthly_total,
+                g.billing_frequency,
+              );
+              return (
+                <li
+                  key={g.key}
+                  className="flex items-start justify-between gap-3 text-sm"
                 >
-                  <span className="block truncate">{g.client_name}</span>
-                  <span className="text-[11px] text-neutral-600">
-                    {g.open_periods
-                      .slice(0, 6)
-                      .map((p) => formatSlaPeriodLabel(p, true))
-                      .join(" · ")}
-                    {g.open_periods.length > 6
-                      ? ` +${g.open_periods.length - 6}`
-                      : ""}
+                  <button
+                    type="button"
+                    className="text-neutral-300 hover:text-neutral-100 text-left min-w-0"
+                    onClick={() => openGroup(g)}
+                  >
+                    <span className="block truncate">{g.client_name}</span>
+                    <span className="text-[11px] text-neutral-600">
+                      {g.open_periods
+                        .slice(0, 6)
+                        .map((p) => formatSlaPeriodLabel(p, true))
+                        .join(" · ")}
+                      {g.open_periods.length > 6
+                        ? ` +${g.open_periods.length - 6}`
+                        : ""}
+                      {" · "}
+                      {g.open_periods.length}× {formatCurrency(perPeriod)}
+                    </span>
+                  </button>
+                  <span className="font-mono text-sm text-amber-300/90 shrink-0">
+                    {formatCurrency(amount)}
                   </span>
-                </button>
-                <span className="font-mono text-xs text-neutral-500 shrink-0">
-                  {g.open_periods.length} open
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
