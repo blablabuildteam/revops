@@ -7,7 +7,16 @@ import { Plus, AlertCircle, FolderKanban, ArrowDown, ArrowUp, ArrowUpDown } from
 import { Button } from "@/components/ui/button";
 import { createProject, getCompanies, updateProject, type ProjectWithStats } from "@/lib/api";
 import { useProjects } from "@/hooks/use-api-data";
-import { Company, Project, type ProjectPriority, type ProjectStatus } from "@/lib/types";
+import {
+  Company,
+  Project,
+  TASK_ASSIGNEES,
+  parseProjectLeads,
+  serializeProjectLeads,
+  type ProjectPriority,
+} from "@/lib/types";
+import { avatarForName, useAssigneeUsers } from "@/components/assignee-select";
+import { UserAvatar } from "@/components/user-avatar";
 import { parseLocalDate, toDateInputValue } from "@/lib/format";
 import { projectScheduleProgress } from "@/lib/project-status";
 import { cn } from "@/lib/utils";
@@ -32,7 +41,6 @@ import {
 import Link from "next/link";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { PrioritySelect } from "@/components/priority-select";
-import { ProjectStatusSelect } from "@/components/project-status-select";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 import { getCached, setCached, cacheKeys } from "@/lib/query-cache";
 import {
@@ -50,7 +58,7 @@ const statusFilterLabels: Record<string, string> = {
 };
 
 const PROJECT_LIST_GRID =
-  "grid items-center gap-x-4 px-4 [grid-template-columns:minmax(0,1fr)_6.5rem] md:[grid-template-columns:minmax(0,1fr)_6.5rem_9.25rem_8.25rem_8.25rem] xl:[grid-template-columns:minmax(0,1fr)_6.5rem_9.25rem_8rem_8.25rem_8.25rem]";
+  "grid items-center gap-x-4 px-4 [grid-template-columns:minmax(0,1fr)_5.5rem] md:[grid-template-columns:minmax(0,1fr)_5.5rem_4.75rem_8.25rem_8.25rem] xl:[grid-template-columns:minmax(0,1fr)_5.5rem_4.75rem_8.25rem_8rem_8.25rem]";
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -181,6 +189,58 @@ function ProjectDateCell({
   );
 }
 
+function ProjectLeadSelect({
+  value,
+  onChange,
+}: {
+  value?: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  const users = useAssigneeUsers();
+  const selected = parseProjectLeads(value);
+
+  function toggle(name: string) {
+    const next = selected.includes(name)
+      ? selected.filter((n) => n !== name)
+      : [...selected, name];
+    onChange(serializeProjectLeads(next));
+  }
+
+  return (
+    <div className="flex items-center gap-1" role="group" aria-label="Project lead">
+      {TASK_ASSIGNEES.map((name) => {
+        const active = selected.includes(name);
+        return (
+          <button
+            key={name}
+            type="button"
+            aria-pressed={active}
+            aria-label={`${active ? "Unassign" : "Assign"} ${name}`}
+            title={name}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle(name);
+            }}
+            className={cn(
+              "rounded-full p-px transition-opacity",
+              active
+                ? "opacity-100 ring-2 ring-[#d4e052] ring-offset-1 ring-offset-neutral-900"
+                : "opacity-35 hover:opacity-70",
+            )}
+          >
+            <UserAvatar
+              name={name}
+              avatarUrl={avatarForName(users, name)}
+              size="sm"
+              className="rounded-full"
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function NewProjectDialog({
   open,
   onClose,
@@ -200,6 +260,7 @@ function NewProjectDialog({
     start_date: "",
     end_date: "",
     priority: "low" as ProjectPriority,
+    lead: "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -216,6 +277,7 @@ function NewProjectDialog({
         company_id: form.company_id || undefined,
         start_date: form.start_date || undefined,
         end_date: form.end_date || undefined,
+        lead: form.lead || undefined,
       });
       onSave(project);
       onClose();
@@ -228,6 +290,7 @@ function NewProjectDialog({
         start_date: "",
         end_date: "",
         priority: "low",
+        lead: "",
       });
     } finally {
       setLoading(false);
@@ -269,6 +332,13 @@ function NewProjectDialog({
                 onChange={(next) => setForm((f) => ({ ...f, priority: next }))}
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-neutral-400 text-xs">Lead</Label>
+            <ProjectLeadSelect
+              value={form.lead}
+              onChange={(next) => setForm((f) => ({ ...f, lead: next ?? "" }))}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -375,31 +445,39 @@ function ProjectRow({
         </p>
         </Link>
       </div>
-      <PrioritySelect
-        priority={project.priority ?? "low"}
-        onChange={(next) => {
-          void patchProject({
-            item: project,
-            patch: { priority: next },
-            apply: (id, patch) => updateProject(id, patch),
-            onSuccess: onUpdate,
-          });
-        }}
-        className="w-full"
-      />
-      <div className="hidden md:block min-w-0">
-        <ProjectStatusSelect
-          status={project.status}
-          startDate={project.start_date}
-          endDate={project.end_date}
-          onChange={(next: ProjectStatus) => {
+      <div className="flex justify-center">
+        <PrioritySelect
+          iconOnly
+          priority={project.priority ?? "low"}
+          onChange={(next) => {
             void patchProject({
               item: project,
-              patch: { status: next },
+              patch: { priority: next },
               apply: (id, patch) => updateProject(id, patch),
               onSuccess: onUpdate,
             });
           }}
+        />
+      </div>
+      <div className="hidden md:block min-w-0">
+        <ProjectLeadSelect
+          value={project.lead}
+          onChange={(next) => {
+            void patchProject({
+              item: project,
+              patch: { lead: next },
+              apply: (id, patch) => updateProject(id, patch),
+              onSuccess: onUpdate,
+            });
+          }}
+        />
+      </div>
+      <div className="hidden md:block min-w-0">
+        <ProjectDateCell
+          project={project}
+          field="start_date"
+          placeholder="Start"
+          onUpdate={onUpdate}
         />
       </div>
       <div className="hidden xl:flex items-center gap-2 min-w-0">
@@ -420,14 +498,6 @@ function ProjectRow({
         >
           {progress == null ? "—" : `${progress}%`}
         </span>
-      </div>
-      <div className="hidden md:block min-w-0">
-        <ProjectDateCell
-          project={project}
-          field="start_date"
-          placeholder="Start"
-          onUpdate={onUpdate}
-        />
       </div>
       <div className="hidden md:block min-w-0">
         <ProjectDateCell
@@ -633,10 +703,10 @@ export default function ProjectsPage() {
         <div className="border border-neutral-800 rounded-lg overflow-hidden">
           <div className={`${PROJECT_LIST_GRID} py-2 text-[11px] border-b border-neutral-800`}>
             <ProjectSortHeader label="Project" column="name" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-            <ProjectSortHeader label="Priority" column="priority" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} />
-            <ProjectSortHeader label="Status" column="status" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden md:inline-flex" />
-            <ProjectSortHeader label="Progress" column="progress" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden xl:inline-flex" />
+            <ProjectSortHeader label="Priority" column="priority" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="justify-self-center" />
+            <ProjectSortHeader label="Lead" column="lead" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden md:inline-flex" />
             <ProjectSortHeader label="Start" column="start_date" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden md:inline-flex" />
+            <ProjectSortHeader label="Progress" column="progress" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden xl:inline-flex" />
             <ProjectSortHeader label="End" column="end_date" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden md:inline-flex" />
           </div>
           <div className="divide-y divide-neutral-800/60">

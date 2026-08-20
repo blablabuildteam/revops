@@ -18,7 +18,7 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 
 const TEXT_COLORS: Record<Priority, string> = {
   low: "text-sky-400",
-  medium: "text-yellow-400",
+  medium: "text-yellow-300",
   high: "text-orange-400",
   urgent: "text-red-400",
 };
@@ -80,7 +80,7 @@ export function PrioritySelect({
           ) : (
             <span className="flex min-w-0 items-center gap-1.5">
               <PriorityIcon priority={priority} />
-              <span className={`truncate ${TEXT_COLORS[priority]}`}>
+              <span className={`whitespace-nowrap ${TEXT_COLORS[priority]}`}>
                 {SHORT_LABELS[priority]}
               </span>
             </span>

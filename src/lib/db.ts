@@ -135,6 +135,7 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority_manual BOOLEAN DEFAULT false`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS lead TEXT`;
   await ensurePriorityAllowsUrgent();
   await ensureTaskCreatedByConstraint();
   await sql`
@@ -381,6 +382,7 @@ async function _init() {
       await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority_manual BOOLEAN DEFAULT false`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS lead TEXT`;
       const { rows: urgentFlag } = await sql`
         SELECT value FROM finance_settings WHERE key = 'priority_urgent'
       `;
@@ -505,6 +507,7 @@ async function _init() {
       priority TEXT DEFAULT 'low'
         CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
       priority_manual BOOLEAN DEFAULT false,
+      lead TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )

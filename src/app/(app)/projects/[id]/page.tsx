@@ -6,7 +6,7 @@ import { useEffect, useState, use, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
-  ChevronDown, ChevronRight, Search,
+  ChevronDown, ChevronRight, Search, MoreHorizontal,
 } from "lucide-react";
 import { PrioritySelect } from "@/components/priority-select";
 import { ProjectStatusSelect } from "@/components/project-status-select";
@@ -2254,6 +2254,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               }}
               className="w-[10.5rem]"
             />
+            <div className="flex items-center gap-1">
             <DatePicker
               value={toDateInputValue(project.start_date)}
               placeholder="Start date"
@@ -2268,8 +2269,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   },
                 });
               }}
-              className="h-7 w-[9.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+              className="h-7 w-[8.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
             />
+            <span className="text-neutral-600 text-xs">–</span>
             <DatePicker
               value={toDateInputValue(project.end_date)}
               placeholder="End date"
@@ -2290,8 +2292,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   },
                 });
               }}
-              className="h-7 w-[9.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+              className="h-7 w-[8.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
             />
+            </div>
           </div>
         </div>
         </div>
@@ -2336,37 +2339,47 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </PopoverContent>
           </Popover>
           <button
-            onClick={() => setEditStatusesOpen(true)}
-            className="flex items-center gap-2 text-xs border border-neutral-700 px-3 py-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            Edit statuses
-          </button>
-          <button
             onClick={shareEditAccess}
             disabled={sharingEdit}
             className="flex items-center gap-2 text-xs border border-[#d4e052]/30 px-3 py-2 rounded-lg text-[#d4e052] hover:border-[#d4e052]/50 transition-colors disabled:opacity-50"
           >
             {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-            {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share board access"}
+            {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share"}
           </button>
-          {project.edit_token && (
-            <button
-              onClick={removeEditAccess}
-              disabled={revokingEdit}
-              className="flex items-center gap-2 text-xs border border-red-900/50 px-3 py-2 rounded-lg text-red-400 hover:border-red-800 transition-colors disabled:opacity-50"
+          <Popover>
+            <PopoverTrigger
+              className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors cursor-pointer"
+              aria-label="More actions"
             >
-              <UserX className="w-3.5 h-3.5" />
-              {revokingEdit ? "Removing..." : "Remove access"}
-            </button>
-          )}
-          <button
-            onClick={requestDeleteProject}
-            className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-500 hover:text-red-400 hover:border-red-900/50 transition-colors"
-            aria-label="Delete project"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-48 p-1">
+              <button
+                onClick={() => setEditStatusesOpen(true)}
+                className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit statuses
+              </button>
+              {project.edit_token && (
+                <button
+                  onClick={removeEditAccess}
+                  disabled={revokingEdit}
+                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-red-400 hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  {revokingEdit ? "Removing..." : "Remove board access"}
+                </button>
+              )}
+              <button
+                onClick={requestDeleteProject}
+                className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-red-400 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete project
+              </button>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 

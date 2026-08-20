@@ -67,7 +67,7 @@ export async function PUT(
     const body = await req.json();
     const {
       name, description, company_id, opportunity_id,
-      status, priority, priority_manual, client_name, client_email, start_date, end_date,
+      status, priority, priority_manual, client_name, client_email, start_date, end_date, lead,
     } = body;
     const nextPriorityManual = "priority_manual" in body
       ? Boolean(priority_manual)
@@ -88,6 +88,7 @@ export async function PUT(
         client_email = CASE WHEN ${"client_email" in body} THEN ${client_email ?? null} ELSE client_email END,
         start_date = CASE WHEN ${"start_date" in body} THEN ${start_date || null} ELSE start_date END,
         end_date = CASE WHEN ${"end_date" in body} THEN ${end_date || null} ELSE end_date END,
+        lead = CASE WHEN ${"lead" in body} THEN ${lead || null} ELSE lead END,
         updated_at = now()
       WHERE id = ${id}
       RETURNING *

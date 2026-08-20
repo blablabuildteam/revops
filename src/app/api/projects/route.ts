@@ -35,17 +35,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       name, description, company_id, opportunity_id,
-      status, priority, client_name, client_email, start_date, end_date,
+      status, priority, client_name, client_email, start_date, end_date, lead,
     } = body;
     const createdPriority = priority ?? "low";
     const priorityManual = createdPriority !== "low";
 
     const { rows } = await sql`
-      INSERT INTO projects (name, description, company_id, opportunity_id, status, priority, priority_manual, client_name, client_email, start_date, end_date)
+      INSERT INTO projects (name, description, company_id, opportunity_id, status, priority, priority_manual, client_name, client_email, start_date, end_date, lead)
       VALUES (
         ${name}, ${description ?? null}, ${company_id ?? null}, ${opportunity_id ?? null},
         ${status ?? "active"}, ${createdPriority}, ${priorityManual}, ${client_name ?? null}, ${client_email ?? null},
-        ${start_date ?? null}, ${end_date ?? null}
+        ${start_date ?? null}, ${end_date ?? null}, ${lead || null}
       )
       RETURNING *
     `;

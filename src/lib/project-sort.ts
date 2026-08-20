@@ -6,6 +6,7 @@ export type ProjectSortKey =
   | "priority"
   | "name"
   | "status"
+  | "lead"
   | "progress"
   | "start_date"
   | "end_date"
@@ -15,6 +16,7 @@ export const PROJECT_SORT_LABELS: Record<ProjectSortKey, string> = {
   priority: "Priority",
   name: "Name",
   status: "Status",
+  lead: "Lead",
   progress: "Progress",
   start_date: "Start date",
   end_date: "End date",
@@ -24,7 +26,7 @@ export const PROJECT_SORT_LABELS: Record<ProjectSortKey, string> = {
 export const PROJECT_SORT_OPTIONS: ProjectSortKey[] = [
   "priority",
   "name",
-  "status",
+  "lead",
   "progress",
   "start_date",
   "end_date",
@@ -35,6 +37,7 @@ export const PROJECT_SORT_DEFAULT_ASC: Record<ProjectSortKey, boolean> = {
   priority: true,
   name: true,
   status: true,
+  lead: true,
   progress: false,
   start_date: true,
   end_date: true,
@@ -55,6 +58,7 @@ export type SortableProject = {
   name?: string;
   status?: string;
   priority?: string;
+  lead?: string | null;
   start_date?: string | null;
   end_date?: string | null;
   updated_at?: string;
@@ -101,6 +105,15 @@ export function compareProjects<T extends SortableProject>(
   if (key === "status") {
     const statusCmp = statusRank(a) - statusRank(b);
     if (statusCmp !== 0) return statusCmp;
+    return priorityRank(a.priority) - priorityRank(b.priority);
+  }
+
+  if (key === "lead") {
+    if (!a.lead && !b.lead) return 0;
+    if (!a.lead) return 1;
+    if (!b.lead) return -1;
+    const leadCmp = a.lead.localeCompare(b.lead, undefined, { sensitivity: "base" });
+    if (leadCmp !== 0) return leadCmp;
     return priorityRank(a.priority) - priorityRank(b.priority);
   }
 

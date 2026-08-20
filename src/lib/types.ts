@@ -191,6 +191,8 @@ export interface Project {
   client_email?: string;
   start_date?: string | null;
   end_date?: string | null;
+  /** Delivery lead — Kevin, Xennith, or both. */
+  lead?: string | null;
   milestones?: Milestone[];
   created_at: string;
   updated_at: string;
@@ -266,6 +268,24 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 export const TASK_ASSIGNEES = ["Kevin", "Xennith"] as const;
+export const PROJECT_LEAD_BOTH = "Kevin + Xennith";
+
+export function parseProjectLeads(value?: string | null): string[] {
+  if (!value?.trim()) return [];
+  const tokens = value.split(/[+,&]/).map((part) => part.trim()).filter(Boolean);
+  return TASK_ASSIGNEES.filter((name) =>
+    tokens.some((token) => token.toLowerCase() === name.toLowerCase()),
+  );
+}
+
+export function serializeProjectLeads(names: readonly string[]): string | null {
+  const selected = TASK_ASSIGNEES.filter((name) =>
+    names.some((n) => n.toLowerCase() === name.toLowerCase()),
+  );
+  if (selected.length === 0) return null;
+  if (selected.length === TASK_ASSIGNEES.length) return PROJECT_LEAD_BOTH;
+  return selected[0];
+}
 
 export type AllocationTargetType = "project" | "opportunity" | "generic";
 
