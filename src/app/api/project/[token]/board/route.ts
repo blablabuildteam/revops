@@ -33,7 +33,7 @@ export async function GET(
       ) cc ON cc.task_id = t.id
       WHERE t.project_id = ${project.id}
       ORDER BY
-        CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         t.position,
         t.created_at
     `;

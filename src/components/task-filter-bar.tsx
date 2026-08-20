@@ -47,6 +47,7 @@ const OPERATOR_LABELS: Record<string, string> = {
 };
 
 const PRIORITY_OPTIONS = [
+  { value: "urgent", label: "Urgent" },
   { value: "high", label: "High" },
   { value: "medium", label: "Medium" },
   { value: "low", label: "Low" },

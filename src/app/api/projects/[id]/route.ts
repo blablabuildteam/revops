@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { applyDeadlineDefaultPriority } from "@/lib/project-deadline-priority";
 
 export async function GET(
   _req: NextRequest,
@@ -7,6 +8,7 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
+    await ensureTables();
     const { rows: projectRows } = await sql`
       SELECT p.*, json_build_object('id', c.id, 'name', c.name, 'logo_url', c.logo_url) AS company
       FROM projects p
@@ -15,7 +17,7 @@ export async function GET(
     `;
     if (!projectRows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const project = projectRows[0];
+    const project = await applyDeadlineDefaultPriority(projectRows[0]);
 
     const { rows: milestones } = await sql`
       SELECT * FROM milestones WHERE project_id = ${id} ORDER BY position, created_at
@@ -37,7 +39,7 @@ export async function GET(
       ) ha ON ha.task_id = t.id
       WHERE t.project_id = ${id}
       ORDER BY
-        CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         t.position,
         t.created_at
     `;
@@ -65,8 +67,11 @@ export async function PUT(
     const body = await req.json();
     const {
       name, description, company_id, opportunity_id,
-      status, client_name, client_email, start_date, end_date,
+      status, priority, priority_manual, client_name, client_email, start_date, end_date,
     } = body;
+    const nextPriorityManual = "priority_manual" in body
+      ? Boolean(priority_manual)
+      : "priority" in body;
 
     // Only touch fields present in the body so partial updates (e.g. rename)
     // do not wipe description, company, dates, or other columns.
@@ -77,15 +82,17 @@ export async function PUT(
         company_id = CASE WHEN ${"company_id" in body} THEN ${company_id ?? null} ELSE company_id END,
         opportunity_id = CASE WHEN ${"opportunity_id" in body} THEN ${opportunity_id ?? null} ELSE opportunity_id END,
         status = CASE WHEN ${"status" in body} THEN ${status ?? null} ELSE status END,
+        priority = CASE WHEN ${"priority" in body} THEN ${priority ?? null} ELSE priority END,
+        priority_manual = CASE WHEN ${"priority" in body || "priority_manual" in body} THEN ${nextPriorityManual} ELSE priority_manual END,
         client_name = CASE WHEN ${"client_name" in body} THEN ${client_name ?? null} ELSE client_name END,
         client_email = CASE WHEN ${"client_email" in body} THEN ${client_email ?? null} ELSE client_email END,
-        start_date = CASE WHEN ${"start_date" in body} THEN ${start_date ?? null} ELSE start_date END,
-        end_date = CASE WHEN ${"end_date" in body} THEN ${end_date ?? null} ELSE end_date END,
+        start_date = CASE WHEN ${"start_date" in body} THEN ${start_date || null} ELSE start_date END,
+        end_date = CASE WHEN ${"end_date" in body} THEN ${end_date || null} ELSE end_date END,
         updated_at = now()
       WHERE id = ${id}
       RETURNING *
     `;
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(await applyDeadlineDefaultPriority(rows[0]));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

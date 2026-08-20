@@ -5,33 +5,36 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-export type Priority = "low" | "medium" | "high";
+export type Priority = "low" | "medium" | "high" | "urgent";
 
-export const PRIORITY_ORDER: Priority[] = ["low", "medium", "high"];
+export const PRIORITY_ORDER: Priority[] = ["low", "medium", "high", "urgent"];
 
 export const PRIORITY_LABELS: Record<Priority, string> = {
-  low: "No priority",
+  low: "Low priority",
   medium: "Medium priority",
   high: "High priority",
+  urgent: "Urgent",
 };
 
 const TEXT_COLORS: Record<Priority, string> = {
-  low: "text-neutral-500",
-  medium: "text-amber-400/90",
-  high: "text-red-400/90",
+  low: "text-sky-400",
+  medium: "text-yellow-400",
+  high: "text-orange-400",
+  urgent: "text-red-400",
 };
 
 const SHORT_LABELS: Record<Priority, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
+  urgent: "Urgent",
 };
 
-/** Menu is ordered high → low so the most urgent option sits at the top. */
+/** Menu is ordered urgent → low so the most urgent option sits at the top. */
 const MENU_ORDER = [...PRIORITY_ORDER].reverse();
 
 function PriorityIcon({ priority, className }: { priority: Priority; className?: string }) {
-  const Icon = priority === "high" ? AlertCircle : Flag;
+  const Icon = priority === "urgent" ? AlertCircle : Flag;
   return <Icon className={`${className ?? "w-3 h-3"} ${TEXT_COLORS[priority]} shrink-0`} />;
 }
 

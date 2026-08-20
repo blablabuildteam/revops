@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
         AND (COALESCE(${status}, '') = '' OR t.status = ${status})
         AND (COALESCE(${company}, '') = '' OR t.company_id::text = ${company})
       ORDER BY
-        CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         t.due_date ASC NULLS LAST,
         t.created_at DESC
     `;

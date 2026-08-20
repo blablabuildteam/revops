@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 import { ensureDefaultMilestones } from "@/lib/milestones";
+import { applyDeadlineDefaultPriorities, applyDeadlineDefaultPriority } from "@/lib/project-deadline-priority";
 
 export async function GET() {
   try {
@@ -16,9 +17,12 @@ export async function GET() {
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.created_by = 'client' AND t.approved = false) AS pending_requests
       FROM projects p
       LEFT JOIN companies c ON c.id = p.company_id
-      ORDER BY p.updated_at DESC
+      ORDER BY
+        CASE p.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        CASE p.status WHEN 'active' THEN 0 WHEN 'on_hold' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+        p.name
     `;
-    return NextResponse.json(rows);
+    return NextResponse.json(await applyDeadlineDefaultPriorities(rows));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -31,20 +35,22 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       name, description, company_id, opportunity_id,
-      status, client_name, client_email, start_date, end_date,
+      status, priority, client_name, client_email, start_date, end_date,
     } = body;
+    const createdPriority = priority ?? "low";
+    const priorityManual = createdPriority !== "low";
 
     const { rows } = await sql`
-      INSERT INTO projects (name, description, company_id, opportunity_id, status, client_name, client_email, start_date, end_date)
+      INSERT INTO projects (name, description, company_id, opportunity_id, status, priority, priority_manual, client_name, client_email, start_date, end_date)
       VALUES (
         ${name}, ${description ?? null}, ${company_id ?? null}, ${opportunity_id ?? null},
-        ${status ?? "active"}, ${client_name ?? null}, ${client_email ?? null},
+        ${status ?? "active"}, ${createdPriority}, ${priorityManual}, ${client_name ?? null}, ${client_email ?? null},
         ${start_date ?? null}, ${end_date ?? null}
       )
       RETURNING *
     `;
 
-    const project = rows[0];
+    const project = await applyDeadlineDefaultPriority(rows[0]);
     await ensureDefaultMilestones(project.id);
 
     return NextResponse.json(project, { status: 201 });

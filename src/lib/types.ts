@@ -170,6 +170,8 @@ export const SENTIMENT_LABELS: Record<Sentiment, string> = {
 export type ProjectStatus = "active" | "on_hold" | "completed" | "cancelled";
 export type TaskStatus = "open" | "in_progress" | "done";
 export type MilestoneStatus = "pending" | "in_progress" | "completed";
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
+export type ProjectPriority = TaskPriority;
 
 export interface Project {
   id: string;
@@ -180,12 +182,15 @@ export interface Project {
   name: string;
   description?: string;
   status: ProjectStatus;
+  priority: ProjectPriority;
+  /** True once priority was set by a person. Deadline defaulting then leaves it alone. */
+  priority_manual?: boolean;
   share_token: string;
   edit_token?: string | null;
   client_name?: string;
   client_email?: string;
-  start_date?: string;
-  end_date?: string;
+  start_date?: string | null;
+  end_date?: string | null;
   milestones?: Milestone[];
   created_at: string;
   updated_at: string;
@@ -204,8 +209,6 @@ export interface Milestone {
   created_at: string;
   updated_at: string;
 }
-
-export type TaskPriority = "low" | "medium" | "high";
 
 export interface Task {
   id: string;

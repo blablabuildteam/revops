@@ -34,7 +34,7 @@ import { sql } from "@vercel/postgres";
 const CLICKUP_API = "https://api.clickup.com/api/v2";
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
-type TaskPriority = "low" | "medium" | "high";
+type TaskPriority = "low" | "medium" | "high" | "urgent";
 type TaskStatus = "open" | "in_progress" | "done";
 
 type ClickUpPriority = { id: string; priority: string; color: string } | null;
@@ -203,7 +203,8 @@ function mapPriority(priority: ClickUpPriority): TaskPriority {
   if (!priority) return "low";
   const id = String(priority.id);
   // ClickUp: 1 urgent, 2 high, 3 normal, 4 low
-  if (id === "1" || id === "2") return "high";
+  if (id === "1") return "urgent";
+  if (id === "2") return "high";
   if (id === "3") return "medium";
   return "low";
 }

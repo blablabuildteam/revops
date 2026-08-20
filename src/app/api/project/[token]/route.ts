@@ -33,7 +33,7 @@ export async function GET(
       WHERE project_id = ${project.id}
         AND (approved = true OR created_by = 'client')
       ORDER BY
-        CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         position,
         created_at
     `;

@@ -19,7 +19,7 @@ export type SortableTodo = {
 };
 
 function priorityRank(value?: string) {
-  return PRIORITY_RANK[value ?? "low"] ?? 2;
+  return PRIORITY_RANK[value ?? "low"] ?? 3;
 }
 
 function statusRank(value?: string) {

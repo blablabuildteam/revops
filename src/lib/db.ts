@@ -133,6 +133,9 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS monthly_hours NUMERIC(8,1)`;
   await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS edit_token TEXT UNIQUE`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority_manual BOOLEAN DEFAULT false`;
+  await ensurePriorityAllowsUrgent();
   await ensureTaskCreatedByConstraint();
   await sql`
     CREATE TABLE IF NOT EXISTS task_comments (
@@ -252,6 +255,22 @@ async function ensurePerformanceIndexes() {
   await sql`CREATE INDEX IF NOT EXISTS milestones_project_id_position ON milestones (project_id, position)`;
 }
 
+/** Allow `urgent` on projects, tasks, and todos. Idempotent. */
+async function ensurePriorityAllowsUrgent() {
+  await sql`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_priority_check`;
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_priority_check`;
+  await sql`ALTER TABLE todos DROP CONSTRAINT IF EXISTS todos_priority_check`;
+  try {
+    await sql`ALTER TABLE projects ADD CONSTRAINT projects_priority_check CHECK (priority IN ('low', 'medium', 'high', 'urgent'))`;
+  } catch { /* already present */ }
+  try {
+    await sql`ALTER TABLE tasks ADD CONSTRAINT tasks_priority_check CHECK (priority IN ('low', 'medium', 'high', 'urgent'))`;
+  } catch { /* already present */ }
+  try {
+    await sql`ALTER TABLE todos ADD CONSTRAINT todos_priority_check CHECK (priority IN ('low', 'medium', 'high', 'urgent'))`;
+  } catch { /* already present */ }
+}
+
 /** Allow share-link board creates (`created_by = 'external'`). Idempotent. */
 async function ensureTaskCreatedByConstraint() {
   await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_created_by_check`;
@@ -360,6 +379,19 @@ async function _init() {
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
       await sql`ALTER TABLE finance_deals ADD COLUMN IF NOT EXISTS monthly_hours NUMERIC(8,1)`;
       await sql`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS delivery_weeks NUMERIC(6,1)`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority_manual BOOLEAN DEFAULT false`;
+      const { rows: urgentFlag } = await sql`
+        SELECT value FROM finance_settings WHERE key = 'priority_urgent'
+      `;
+      if (urgentFlag[0]?.value !== "true") {
+        await ensurePriorityAllowsUrgent();
+        await sql`
+          INSERT INTO finance_settings (key, value, updated_at)
+          VALUES ('priority_urgent', 'true', now())
+          ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+        `;
+      }
       const { rows: todoStatusFlag } = await sql`
         SELECT value FROM finance_settings WHERE key = 'todos_backlog_status'
       `;
@@ -470,6 +502,9 @@ async function _init() {
       client_email TEXT,
       start_date DATE,
       end_date DATE,
+      priority TEXT DEFAULT 'low'
+        CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+      priority_manual BOOLEAN DEFAULT false,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
@@ -508,7 +543,7 @@ async function _init() {
       due_date DATE,
       url TEXT,
       priority TEXT DEFAULT 'low'
-        CHECK (priority IN ('low', 'medium', 'high')),
+        CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
       position INTEGER DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
@@ -534,7 +569,7 @@ async function _init() {
       status TEXT DEFAULT 'open'
         CHECK (status IN ('backlog', 'open', 'in_progress', 'done')),
       priority TEXT DEFAULT 'low'
-        CHECK (priority IN ('low', 'medium', 'high')),
+        CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
       assignee_id UUID REFERENCES users(id) ON DELETE SET NULL,
       company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
       project_id UUID REFERENCES projects(id) ON DELETE SET NULL,

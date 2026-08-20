@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { ApiUser, ProjectWithStats } from "@/lib/api";
 import { cacheKeys, setCached } from "@/lib/query-cache";
 import type { Company, Opportunity } from "@/lib/types";
@@ -42,14 +42,18 @@ export function QueryCacheProvider({ seed, children }: QueryCacheProviderProps) 
 /**
  * Standalone seeder so the layout can stream list data in after the shell has
  * already painted, instead of blocking first render on those queries.
+ *
+ * Must write after commit. This component is a sibling of the page, so a
+ * render-time setCached() would notify subscribed pages mid-render.
  */
 export function QueryCacheSeed({ seed }: { seed: QueryCacheSeed }) {
   const seeded = useRef(false);
 
-  if (!seeded.current) {
+  useLayoutEffect(() => {
+    if (seeded.current) return;
     applySeed(seed);
     seeded.current = true;
-  }
+  }, [seed]);
 
   return null;
 }

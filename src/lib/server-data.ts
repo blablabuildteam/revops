@@ -1,6 +1,7 @@
 import { resolveSessionUser, type SessionUser } from "@/lib/auth";
 import { ensureTables, sql } from "@/lib/db";
 import { formatOpportunityRow } from "@/lib/format";
+import { applyDeadlineDefaultPriorities } from "@/lib/project-deadline-priority";
 import type { Company, Opportunity, Project } from "@/lib/types";
 
 export type ProjectWithStats = Project & {
@@ -43,9 +44,12 @@ async function fetchProjects(): Promise<ProjectWithStats[]> {
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.created_by = 'client' AND t.approved = false) AS pending_requests
     FROM projects p
     LEFT JOIN companies c ON c.id = p.company_id
-    ORDER BY p.updated_at DESC
+    ORDER BY
+      CASE p.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+      CASE p.status WHEN 'active' THEN 0 WHEN 'on_hold' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+      p.name
   `;
-  return rows as ProjectWithStats[];
+  return applyDeadlineDefaultPriorities(rows as ProjectWithStats[]);
 }
 
 async function fetchUsers(): Promise<ApiUser[]> {

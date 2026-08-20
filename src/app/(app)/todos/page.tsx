@@ -44,7 +44,7 @@ interface Todo {
   title: string;
   description?: string;
   status: TodoStatus;
-  priority: "low" | "medium" | "high";
+  priority: Priority;
   assignee_id?: string;
   assignee_name?: string;
   company_id?: string;
@@ -467,9 +467,10 @@ function TodoFormDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="high" className="text-red-400">High</SelectItem>
-                  <SelectItem value="medium" className="text-neutral-300">Medium</SelectItem>
-                  <SelectItem value="low" className="text-neutral-400">Low</SelectItem>
+                  <SelectItem value="urgent" className="text-red-400">Urgent</SelectItem>
+                  <SelectItem value="high" className="text-orange-400">High</SelectItem>
+                  <SelectItem value="medium" className="text-yellow-400">Medium</SelectItem>
+                  <SelectItem value="low" className="text-sky-400">Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -9,6 +9,7 @@ import {
   ChevronDown, ChevronRight, Search,
 } from "lucide-react";
 import { PrioritySelect } from "@/components/priority-select";
+import { ProjectStatusSelect } from "@/components/project-status-select";
 import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
 import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import Link from "next/link";
@@ -57,7 +58,8 @@ import {
 import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/task-filter-bar";
 import { filterTasksBySearch } from "@/lib/task-search";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment } from "@/lib/api";
+import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment, type ProjectWithStats } from "@/lib/api";
+import { getCached, setCached, cacheKeys } from "@/lib/query-cache";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -1337,6 +1339,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const { filters, addFilter, updateFilter, removeFilter, clearFilters } = useTaskFilters();
   const [search, setSearch] = useState("");
+  const patchProject = useUndoablePatch<Project>();
 
   const taskDetailApi = useMemo(() => ({
     ...baseTaskDetailApi,
@@ -2150,11 +2153,33 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </Link>
-        {(project.company as { logo_url?: string; name?: string })?.name && (
+        {(project.company as { id?: string; logo_url?: string; name?: string })?.name && (
           <CompanyAvatar
+            id={project.company_id ?? (project.company as { id?: string }).id}
             name={(project.company as { name?: string }).name!}
             logoUrl={(project.company as { logo_url?: string }).logo_url}
             size="lg"
+            uploadable
+            onLogoChange={(logoUrl) => {
+              setProject((prev) =>
+                prev?.company ? { ...prev, company: { ...prev.company, logo_url: logoUrl } } : prev,
+              );
+              const companyId = project.company_id ?? (project.company as { id?: string }).id;
+              if (!companyId) return;
+              const prev = getCached<ProjectWithStats[]>(cacheKeys.projects);
+              if (!prev) return;
+              setCached(
+                cacheKeys.projects,
+                prev.map((p) => {
+                  const id = p.company_id ?? p.company?.id;
+                  if (id !== companyId) return p;
+                  return {
+                    ...p,
+                    company: p.company ? { ...p.company, logo_url: logoUrl } : p.company,
+                  };
+                }),
+              );
+            }}
           />
         )}
         <div className="flex-1 min-w-0">
@@ -2194,10 +2219,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </span>
             )}
           </h1>
-          <p className="text-sm text-neutral-600 mt-0.5">
-            {(project.company as { name?: string })?.name || "—"}
-            {project.client_name && ` · ${project.client_name}`}
-          </p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <p className="text-sm text-neutral-600">
+              {(project.company as { name?: string })?.name || "—"}
+              {project.client_name && ` · ${project.client_name}`}
+            </p>
+            <PrioritySelect
+              priority={project.priority ?? "low"}
+              onChange={(next) => {
+                void patchProject({
+                  item: project,
+                  patch: { priority: next },
+                  apply: (id, patch) => updateProject(id, patch),
+                  onSuccess: (updated) => {
+                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                  },
+                });
+              }}
+              className="w-[100px]"
+            />
+            <ProjectStatusSelect
+              status={project.status}
+              startDate={project.start_date}
+              endDate={project.end_date}
+              onChange={(next) => {
+                void patchProject({
+                  item: project,
+                  patch: { status: next },
+                  apply: (id, patch) => updateProject(id, patch),
+                  onSuccess: (updated) => {
+                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                  },
+                });
+              }}
+              className="w-[10.5rem]"
+            />
+            <DatePicker
+              value={toDateInputValue(project.start_date)}
+              placeholder="Start date"
+              size="sm"
+              onChange={(v) => {
+                void patchProject({
+                  item: project,
+                  patch: { start_date: v || null },
+                  apply: (id, patch) => updateProject(id, patch),
+                  onSuccess: (updated) => {
+                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                  },
+                });
+              }}
+              className="h-7 w-[9.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+            />
+            <DatePicker
+              value={toDateInputValue(project.end_date)}
+              placeholder="End date"
+              size="sm"
+              overdue={
+                !!project.end_date &&
+                project.status !== "completed" &&
+                project.status !== "cancelled" &&
+                new Date(project.end_date) < new Date()
+              }
+              onChange={(v) => {
+                void patchProject({
+                  item: project,
+                  patch: { end_date: v || null },
+                  apply: (id, patch) => updateProject(id, patch),
+                  onSuccess: (updated) => {
+                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                  },
+                });
+              }}
+              className="h-7 w-[9.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+            />
+          </div>
         </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:shrink-0">

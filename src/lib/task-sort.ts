@@ -3,9 +3,10 @@ import type { Task } from "@/lib/types";
 export type TaskBoardSortKey = "title" | "priority" | "assignee" | "due_date" | "status";
 
 export const PRIORITY_RANK: Record<string, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
 };
 
 /** Work in flight ranks above work not started, which ranks above finished work. */
@@ -38,8 +39,8 @@ export function compareTasks(
     );
     if (cmp !== 0) return cmp;
   } else if (sortKey === "priority") {
-    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
-    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
+    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 3;
+    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 3;
     if (pa !== pb) return sortAsc ? pa - pb : pb - pa;
   } else if (sortKey === "assignee") {
     const cmp = compareNullableString(
@@ -55,8 +56,8 @@ export function compareTasks(
     const sa = STATUS_RANK[a.status ?? "open"] ?? 1;
     const sb = STATUS_RANK[b.status ?? "open"] ?? 1;
     if (sa !== sb) return sortAsc ? sa - sb : sb - sa;
-    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 2;
-    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 2;
+    const pa = PRIORITY_RANK[a.priority ?? "low"] ?? 3;
+    const pb = PRIORITY_RANK[b.priority ?? "low"] ?? 3;
     if (pa !== pb) return pa - pb;
   }
 
