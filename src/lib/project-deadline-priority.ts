@@ -10,15 +10,23 @@ type DeadlinePriorityProject = {
   end_date?: string | null;
 };
 
-export async function applyDeadlineDefaultPriority<T extends DeadlinePriorityProject>(
+function asDeadlineProject(project: unknown): DeadlinePriorityProject | null {
+  if (!project || typeof project !== "object") return null;
+  const row = project as Record<string, unknown>;
+  if (typeof row.id !== "string") return null;
+  return row as DeadlinePriorityProject;
+}
+
+export async function applyDeadlineDefaultPriority<T>(
   project: T,
 ): Promise<T> {
-  if (!shouldApplyDeadlineDefaultPriority(project)) return project;
+  const row = asDeadlineProject(project);
+  if (!row || !shouldApplyDeadlineDefaultPriority(row)) return project;
 
   const { rows } = await sql`
     UPDATE projects
     SET priority = 'medium', updated_at = now()
-    WHERE id = ${project.id}
+    WHERE id = ${row.id}
       AND COALESCE(priority_manual, false) = false
       AND COALESCE(priority, 'low') = 'low'
     RETURNING id
@@ -28,15 +36,23 @@ export async function applyDeadlineDefaultPriority<T extends DeadlinePriorityPro
   return { ...project, priority: "medium" };
 }
 
-export async function applyDeadlineDefaultPriorities<T extends DeadlinePriorityProject>(
+export async function applyDeadlineDefaultPriorities<T>(
   projects: T[],
 ): Promise<T[]> {
-  const needed = projects.filter((project) => shouldApplyDeadlineDefaultPriority(project));
+  const needed = projects.filter((project) => {
+    const row = asDeadlineProject(project);
+    return row ? shouldApplyDeadlineDefaultPriority(row) : false;
+  });
   if (needed.length === 0) return projects;
 
   await Promise.all(needed.map((project) => applyDeadlineDefaultPriority(project)));
-  const ids = new Set(needed.map((project) => project.id));
-  return projects.map((project) =>
-    ids.has(project.id) ? { ...project, priority: "medium" } : project,
+  const ids = new Set(
+    needed
+      .map((project) => asDeadlineProject(project)?.id)
+      .filter((id): id is string => Boolean(id)),
   );
+  return projects.map((project) => {
+    const id = asDeadlineProject(project)?.id;
+    return id && ids.has(id) ? { ...project, priority: "medium" } : project;
+  });
 }
