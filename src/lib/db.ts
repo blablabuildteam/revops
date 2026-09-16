@@ -1174,6 +1174,38 @@ async function ensureRetainersTable() {
       AND start_date <= CURRENT_DATE
   `;
 
+  // Always ensure Adsomnia exists even if an earlier seed flag was set empty.
+  const { rows: adsomniaRows } = await sql`
+    SELECT id FROM retainer_agreements WHERE client_name ILIKE 'Adsomnia' LIMIT 1
+  `;
+  if (!adsomniaRows[0]) {
+    const { rows: companies } = await sql`
+      SELECT id FROM companies WHERE name ILIKE 'Adsomnia' LIMIT 1
+    `;
+    await sql`
+      INSERT INTO retainer_agreements (
+        client_name, company_id, status, hours_cadence, hours_included,
+        billing_model, hourly_rate, monthly_fee, start_date,
+        period_anchor, flex_hours, notes, hour_buckets, linked_repos
+      ) VALUES (
+        'Adsomnia',
+        ${companies[0]?.id ?? null},
+        'active',
+        'weekly',
+        12,
+        'hourly',
+        175,
+        0,
+        '2026-09-15',
+        'start_day',
+        false,
+        '12u/week · €175/uur · Innovatie/Productie/Business · vanaf 15e',
+        ${JSON.stringify(adsomniaBuckets)}::jsonb,
+        ${JSON.stringify(["adsomnia", "deleted-users"])}::jsonb
+      )
+    `;
+  }
+
   const { rows: seedFlag } = await sql`
     SELECT value FROM finance_settings WHERE key = 'retainers_seeded_v1'
   `;

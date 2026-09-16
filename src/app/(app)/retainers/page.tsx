@@ -105,11 +105,11 @@ function RetainerCard({
   // Allow logging in any week that overlaps/starts after the retainer start
   // (not vs week Monday — mid-week starts like Adsomnia 15th broke that).
   const weekEnd = addDays(weekStart, 6);
-  const weekOpen =
-    retainer.start_date <= weekEnd &&
+  const startOk = /^\d{4}-\d{2}-\d{2}$/.test(retainer.start_date);
+  const canLog =
     retainer.status !== "ended" &&
-    retainer.status !== "paused";
-  const canLog = weekOpen;
+    retainer.status !== "paused" &&
+    (!startOk || retainer.start_date <= weekEnd);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -424,46 +424,19 @@ function RetainerCard({
       )}
 
       <div className="px-4 py-3 space-y-3">
-        <p className="text-xs text-neutral-500 uppercase tracking-wide">
-          Week {formatWeekLabel(weekStart)}
-        </p>
-
-        {weekEntries.length === 0 ? (
-          <p className="text-sm text-neutral-600 py-2">Nog geen uren deze week.</p>
-        ) : (
-          <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
-            {weekEntries.map((entry) => (
-              <li
-                key={entry.id}
-                className="flex items-start gap-3 px-3 py-2.5 bg-neutral-950/30"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-neutral-200">{entry.activity}</p>
-                  <p className="text-[11px] text-neutral-600 mt-0.5">
-                    {entry.logged_by ?? "—"}
-                    {entry.category ? ` · ${entry.category}` : ""}
-                  </p>
-                </div>
-                <span className="font-mono text-sm text-neutral-300 shrink-0">
-                  {Number(entry.hours).toFixed(1)}u
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(entry.id)}
-                  className="p-1 text-neutral-700 hover:text-red-400"
-                  title="Verwijderen"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-neutral-500 uppercase tracking-wide">
+            Uren loggen · week {formatWeekLabel(weekStart)}
+          </p>
+          <p className="text-xs font-mono text-neutral-400">
+            {weekHours.toFixed(1)} / {weekCap}u
+          </p>
+        </div>
 
         {canLog ? (
           <form
             onSubmit={(e) => void handleAdd(e)}
-            className="grid grid-cols-1 sm:grid-cols-[5rem_1fr_9rem_8rem_auto] gap-2 items-end pt-1"
+            className="rounded-lg border border-[#d4e052]/25 bg-[#d4e052]/5 p-3 grid grid-cols-1 sm:grid-cols-[5rem_1fr_9rem_8rem_auto] gap-2 items-end"
           >
             <div className="space-y-1">
               <Label className="text-[11px] text-neutral-500">Uren</Label>
@@ -473,17 +446,17 @@ function RetainerCard({
                 min="0.25"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
-                placeholder="2"
+                placeholder="8"
                 className="bg-neutral-900 border-neutral-700 h-9"
                 required
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Activiteit</Label>
+              <Label className="text-[11px] text-neutral-500">Wat gedaan?</Label>
               <Input
                 value={activity}
                 onChange={(e) => setActivity(e.target.value)}
-                placeholder="Wat gedaan?"
+                placeholder="bijv. deleted-users kickoff"
                 className="bg-neutral-900 border-neutral-700 h-9"
                 required
               />
@@ -533,17 +506,51 @@ function RetainerCard({
               className="h-9 bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
-              Log
+              Log uren
             </Button>
           </form>
         ) : (
           <p className="text-xs text-neutral-600">
             {retainer.status === "paused" || retainer.status === "ended"
               ? "Deze retainer is niet actief."
-              : retainer.start_date > weekEnd
+              : startOk && retainer.start_date > weekEnd
                 ? `Logging start vanaf ${retainer.start_date}.`
                 : "Logging niet beschikbaar voor deze week."}
           </p>
+        )}
+
+        {weekEntries.length === 0 ? (
+          <p className="text-sm text-neutral-600 py-1">
+            Nog geen uren deze week — vul hierboven in en klik Log uren.
+          </p>
+        ) : (
+          <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
+            {weekEntries.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex items-start gap-3 px-3 py-2.5 bg-neutral-950/30"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-neutral-200">{entry.activity}</p>
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    {entry.logged_by ?? "—"}
+                    {entry.category ? ` · ${entry.category}` : ""}
+                  </p>
+                </div>
+                <span className="font-mono text-sm text-neutral-300 shrink-0">
+                  {Number(entry.hours).toFixed(1)}u
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(entry.id)}
+                  className="p-1 text-neutral-700 hover:text-red-400"
+                  title="Verwijderen"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </section>

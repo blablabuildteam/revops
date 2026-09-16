@@ -1,3 +1,4 @@
+import { toDateInputValue } from "@/lib/format";
 import type {
   RetainerAgreement,
   RetainerBillingModel,
@@ -316,12 +317,10 @@ export function retainerActualForFinanceMonth(
 }
 
 export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement {
-  const startDate =
-    row.start_date == null
-      ? ""
-      : typeof row.start_date === "string"
-        ? row.start_date.slice(0, 10)
-        : String(row.start_date).slice(0, 10);
+  // Postgres DATE often arrives as a Date — never String(date).slice(0,10).
+  const startDate = toDateInputValue(
+    row.start_date as string | Date | null | undefined,
+  );
 
   const today = toDateOnly(new Date());
   let status = (row.status as RetainerAgreement["status"]) ?? "upcoming";
@@ -378,20 +377,16 @@ export function mapTimeEntryRow(row: Record<string, unknown>): RetainerTimeEntry
   return {
     id: String(row.id),
     retainer_id: String(row.retainer_id),
-    week_start:
-      typeof row.week_start === "string"
-        ? row.week_start.slice(0, 10)
-        : String(row.week_start).slice(0, 10),
+    week_start: toDateInputValue(
+      row.week_start as string | Date | null | undefined,
+    ),
     hours: Number(row.hours) || 0,
     activity: String(row.activity ?? ""),
     category: (row.category as string | null) ?? null,
     logged_by: (row.logged_by as string | null) ?? null,
-    work_date:
-      row.work_date == null
-        ? null
-        : typeof row.work_date === "string"
-          ? row.work_date.slice(0, 10)
-          : String(row.work_date).slice(0, 10),
+    work_date: row.work_date
+      ? toDateInputValue(row.work_date as string | Date)
+      : null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
