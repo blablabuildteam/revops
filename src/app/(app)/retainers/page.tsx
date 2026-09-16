@@ -102,8 +102,14 @@ function RetainerCard({
   const flex = retainer.flex_hours ? flexHoursBalance(retainer) : null;
   const invoiced = new Set(retainer.invoiced_periods ?? []);
 
-  const started = retainer.start_date <= weekStartOf();
-  const canLog = retainer.status !== "ended" && started;
+  // Allow logging in any week that overlaps/starts after the retainer start
+  // (not vs week Monday — mid-week starts like Adsomnia 15th broke that).
+  const weekEnd = addDays(weekStart, 6);
+  const weekOpen =
+    retainer.start_date <= weekEnd &&
+    retainer.status !== "ended" &&
+    retainer.status !== "paused";
+  const canLog = weekOpen;
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -532,9 +538,11 @@ function RetainerCard({
           </form>
         ) : (
           <p className="text-xs text-neutral-600">
-            {retainer.status === "upcoming"
-              ? `Logging start vanaf ${retainer.start_date}.`
-              : "Deze retainer is niet actief."}
+            {retainer.status === "paused" || retainer.status === "ended"
+              ? "Deze retainer is niet actief."
+              : retainer.start_date > weekEnd
+                ? `Logging start vanaf ${retainer.start_date}.`
+                : "Logging niet beschikbaar voor deze week."}
           </p>
         )}
       </div>

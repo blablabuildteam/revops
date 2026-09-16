@@ -1165,6 +1165,15 @@ async function ensureRetainersTable() {
     `;
   }
 
+  // Keep Adsomnia marked active once start_date has passed (seed may have lagged).
+  await sql`
+    UPDATE retainer_agreements
+    SET status = 'active', updated_at = now()
+    WHERE client_name ILIKE 'Adsomnia'
+      AND status = 'upcoming'
+      AND start_date <= CURRENT_DATE
+  `;
+
   const { rows: seedFlag } = await sql`
     SELECT value FROM finance_settings WHERE key = 'retainers_seeded_v1'
   `;
