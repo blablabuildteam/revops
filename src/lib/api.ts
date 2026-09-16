@@ -8,6 +8,8 @@ import {
   Opportunity,
   Project,
   Milestone,
+  RetainerTimeEntry,
+  RetainerWithEntries,
   SlaAgreement,
   Task,
   TaskComment,
@@ -193,6 +195,99 @@ export function deleteSlaAgreement(id: string): Promise<void> {
   return req<void>(`/sla/${id}`, { method: "DELETE" }).then(() => {
     removeSlaFromCache(id);
   });
+}
+
+export function getRetainers(): Promise<RetainerWithEntries[]> {
+  return cachedFetch(cacheKeys.retainers, () => req("/retainers"));
+}
+
+function patchRetainersCache(updater: (list: RetainerWithEntries[]) => RetainerWithEntries[]) {
+  const current = getCached<RetainerWithEntries[]>(cacheKeys.retainers);
+  if (!current) {
+    invalidateCache(cacheKeys.retainers);
+    return;
+  }
+  setCached(cacheKeys.retainers, updater(current));
+}
+
+export function updateRetainerAgreement(
+  id: string,
+  data: Partial<RetainerWithEntries> & { toggle_period?: string },
+): Promise<RetainerWithEntries> {
+  return req<RetainerWithEntries>(`/retainers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    patchRetainersCache((list) =>
+      list.map((r) =>
+        r.id === updated.id ? { ...r, ...updated, entries: r.entries } : r,
+      ),
+    );
+    return updated;
+  });
+}
+
+export function createRetainerTimeEntry(
+  retainerId: string,
+  data: Partial<RetainerTimeEntry>,
+): Promise<RetainerTimeEntry> {
+  return req<RetainerTimeEntry>(`/retainers/${retainerId}/entries`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    patchRetainersCache((list) =>
+      list.map((r) =>
+        r.id === retainerId
+          ? { ...r, entries: [created, ...(r.entries ?? [])] }
+          : r,
+      ),
+    );
+    return created;
+  });
+}
+
+export function updateRetainerTimeEntry(
+  entryId: string,
+  data: Partial<RetainerTimeEntry>,
+): Promise<RetainerTimeEntry> {
+  return req<RetainerTimeEntry>(`/retainers/entries/${entryId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    patchRetainersCache((list) =>
+      list.map((r) =>
+        r.id === updated.retainer_id
+          ? {
+              ...r,
+              entries: (r.entries ?? []).map((e) =>
+                e.id === updated.id ? updated : e,
+              ),
+            }
+          : r,
+      ),
+    );
+    return updated;
+  });
+}
+
+export function deleteRetainerTimeEntry(
+  entryId: string,
+  retainerId: string,
+): Promise<void> {
+  return req<void>(`/retainers/entries/${entryId}`, { method: "DELETE" }).then(
+    () => {
+      patchRetainersCache((list) =>
+        list.map((r) =>
+          r.id === retainerId
+            ? {
+                ...r,
+                entries: (r.entries ?? []).filter((e) => e.id !== entryId),
+              }
+            : r,
+        ),
+      );
+    },
+  );
 }
 
 export function getProjects(): Promise<ProjectWithStats[]> {

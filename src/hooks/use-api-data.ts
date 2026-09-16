@@ -11,6 +11,7 @@ import {
   getFinanceSummary,
   getOpportunities,
   getProjects,
+  getRetainers,
   getSlaAgreements,
   getTaxSettings,
   getUsers,
@@ -21,7 +22,14 @@ import {
 } from "@/lib/api";
 import { cacheKeys } from "@/lib/query-cache";
 import type { TaxSettings } from "@/lib/tax-settings";
-import type { Allocation, Company, FinanceDeal, Opportunity, SlaAgreement } from "@/lib/types";
+import type {
+  Allocation,
+  Company,
+  FinanceDeal,
+  Opportunity,
+  RetainerWithEntries,
+  SlaAgreement,
+} from "@/lib/types";
 
 export function useOpportunities() {
   return useCachedQuery<Opportunity[]>(cacheKeys.opportunities, getOpportunities);
@@ -33,6 +41,10 @@ export function useCompanies() {
 
 export function useSlaAgreements() {
   return useCachedQuery<SlaAgreement[]>(cacheKeys.slaAgreements, getSlaAgreements);
+}
+
+export function useRetainers() {
+  return useCachedQuery<RetainerWithEntries[]>(cacheKeys.retainers, getRetainers);
 }
 
 export function useProjects() {

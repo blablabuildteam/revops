@@ -24,6 +24,10 @@ import { formatCurrency, toDateInputValue } from "@/lib/format";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
 import { VatAmountPair } from "@/components/vat-amount-pair";
 import { removeVat } from "@/lib/vat";
+import {
+  retainerActualForFinanceMonth,
+  retainerExpectedForFinanceMonth,
+} from "@/lib/retainers";
 import { updateFinanceDeal, updateTaxSettings } from "@/lib/api";
 import { useUndoToast } from "@/components/mutation-provider";
 import {
@@ -32,6 +36,7 @@ import {
   useFinanceDeals,
   useFinanceSummary,
   useOpportunities,
+  useRetainers,
   useTaxSettings,
 } from "@/hooks/use-api-data";
 import { DEFAULT_TAX_SETTINGS, type TaxSettings } from "@/lib/tax-settings";
@@ -259,6 +264,7 @@ export default function FinancePage() {
   const { data: summary, isLoading: summaryLoading, mutate: mutateSummary } =
     useFinanceSummary<Summary>(month);
   const { data: deals = [], isLoading: dealsLoading, mutate: mutateDeals } = useFinanceDeals();
+  const { data: retainers = [] } = useRetainers();
   const { data: opportunities = [], isLoading: oppsLoading } = useOpportunities();
   const { data: bunqTotals } = useBunqTotals();
   const { data: bunqPots } = useBunqPots();
@@ -430,16 +436,63 @@ export default function FinancePage() {
     ? Math.max(...summary.history.map((h) => Number(h.revenue)))
     : 1;
 
-  const insights = monthlyInsights(deals, insightsMonth);
+  const insights = useMemo(() => {
+    const base = monthlyInsights(deals, insightsMonth);
+    const retainerExpected = retainerExpectedForFinanceMonth(
+      retainers,
+      insightsMonth,
+    ).reduce((s, i) => s + i.amount, 0);
+    const retainerActual = retainerActualForFinanceMonth(
+      retainers,
+      insightsMonth,
+    ).reduce((s, i) => s + i.amount, 0);
+    const actual = base.actual + retainerActual;
+    const actualNet = removeVat(actual);
+    return {
+      ...base,
+      expected: base.expected + retainerExpected,
+      actual,
+      // Recompute salary availability with retainer actual included.
+      actualIncomeTax: actualNet * 0.4,
+      availableSalary: actualNet - actualNet * 0.4 - base.salaryTarget,
+    };
+  }, [deals, retainers, insightsMonth]);
   const expectedBreakdown = useMemo(
-    () => expectedRevenueBreakdownForMonth(deals, insightsMonth),
-    [deals, insightsMonth],
+    () =>
+      [
+        ...expectedRevenueBreakdownForMonth(deals, insightsMonth),
+        ...retainerExpectedForFinanceMonth(retainers, insightsMonth),
+      ].sort((a, b) => b.amount - a.amount),
+    [deals, retainers, insightsMonth],
   );
   const actualBreakdown = useMemo(
-    () => actualRevenueBreakdownForMonth(deals, insightsMonth),
-    [deals, insightsMonth],
+    () =>
+      [
+        ...actualRevenueBreakdownForMonth(deals, insightsMonth),
+        ...retainerActualForFinanceMonth(retainers, insightsMonth),
+      ].sort((a, b) => b.amount - a.amount),
+    [deals, retainers, insightsMonth],
   );
-  const insightSeries = buildInsightSeries(deals, opportunities, month, 12);
+  const insightSeries = useMemo(() => {
+    const base = buildInsightSeries(deals, opportunities, month, 12);
+    return base.map((point) => {
+      const retainerExpected = retainerExpectedForFinanceMonth(
+        retainers,
+        point.month,
+      ).reduce((s, i) => s + i.amount, 0);
+      const retainerActual = retainerActualForFinanceMonth(
+        retainers,
+        point.month,
+      ).reduce((s, i) => s + i.amount, 0);
+      const expected = point.expected + retainerExpected;
+      return {
+        ...point,
+        expected,
+        actual: point.actual + retainerActual,
+        netAfterSalary: removeVat(expected) - 9000,
+      };
+    });
+  }, [deals, opportunities, retainers, month]);
 
   const cashPosition = useMemo(() => {
     const year = new Date().getFullYear();

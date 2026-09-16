@@ -1,5 +1,5 @@
 import { sql } from "@vercel/postgres";
-import { backfillMissingStandardPhases } from "@/lib/milestones";
+import { backfillMissingStandardPhases, ensureDefaultMilestones } from "@/lib/milestones";
 export { sql };
 
 let initialized = false;
@@ -421,6 +421,7 @@ async function _init() {
           )
       `;
       await ensureSlaAgreementsTable();
+      await ensureRetainersTable();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -676,6 +677,7 @@ async function _init() {
 
   await ensureAllocationsTable();
   await ensureSlaAgreementsTable();
+  await ensureRetainersTable();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
@@ -866,3 +868,395 @@ async function ensureSlaAgreementsTable() {
     ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
   `;
 }
+
+async function ensureRetainersTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS retainer_agreements (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_name TEXT NOT NULL,
+      company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      status TEXT NOT NULL DEFAULT 'upcoming'
+        CHECK (status IN ('active', 'upcoming', 'paused', 'ended')),
+      hours_cadence TEXT NOT NULL DEFAULT 'weekly'
+        CHECK (hours_cadence IN ('weekly', 'monthly')),
+      hours_included NUMERIC(8,2) NOT NULL DEFAULT 0,
+      billing_model TEXT NOT NULL DEFAULT 'hourly'
+        CHECK (billing_model IN ('hourly', 'fixed_monthly')),
+      hourly_rate NUMERIC(12,2) DEFAULT 0,
+      monthly_fee NUMERIC(12,2) DEFAULT 0,
+      start_date DATE NOT NULL,
+      period_anchor TEXT NOT NULL DEFAULT 'calendar'
+        CHECK (period_anchor IN ('calendar', 'start_day')),
+      flex_hours BOOLEAN NOT NULL DEFAULT false,
+      invoice_mode TEXT NOT NULL DEFAULT 'arrears_monthly'
+        CHECK (invoice_mode IN ('arrears_monthly')),
+      invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb,
+      hour_buckets JSONB NOT NULL DEFAULT '[]'::jsonb,
+      linked_repos JSONB NOT NULL DEFAULT '[]'::jsonb,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS period_anchor TEXT NOT NULL DEFAULT 'calendar'`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS flex_hours BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS hour_buckets JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS linked_repos JSONB NOT NULL DEFAULT '[]'::jsonb`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS retainer_time_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      retainer_id UUID NOT NULL REFERENCES retainer_agreements(id) ON DELETE CASCADE,
+      week_start DATE NOT NULL,
+      hours NUMERIC(8,2) NOT NULL DEFAULT 0 CHECK (hours >= 0),
+      activity TEXT NOT NULL DEFAULT '',
+      category TEXT,
+      logged_by TEXT,
+      work_date DATE,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`ALTER TABLE retainer_time_entries ADD COLUMN IF NOT EXISTS category TEXT`;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS retainer_time_entries_retainer_week_idx
+    ON retainer_time_entries (retainer_id, week_start DESC)
+  `;
+
+  const adsomniaBuckets = [
+    {
+      id: "adsomnia-innovatie",
+      label: "Innovatie",
+      source: "proposal",
+      notes: "AI-initiatieven uit workshop-roadmap — meedenken, meebouwen, landen als GO in Workspace",
+    },
+    {
+      id: "adsomnia-productie",
+      label: "Productie",
+      source: "proposal",
+      notes: "Blockers, bugs, escalaties, Workspace/Jira — vliegende PM/PO wanneer nodig",
+    },
+    {
+      id: "adsomnia-business",
+      label: "Business",
+      source: "proposal",
+      notes: "Strategisch sparren: keuzes, roadmap, prioriteiten, Go/No-Go",
+    },
+  ];
+
+  const soleroBuckets = [
+    {
+      id: "solero-builds",
+      label: "Productie van nieuwe projecten",
+      source: "proposal",
+      notes: "Stream 1 — Shademaker, Parasols-XL, La Sombrilla (deel van 110u-pot)",
+    },
+    {
+      id: "solero-shademaker",
+      label: "Shademaker Benelux",
+      source: "proposal",
+      estimated_hours: 55,
+      notes: "Build-venster okt–nov (~55u totaal voor die stretch)",
+    },
+    {
+      id: "solero-parasols-xl",
+      label: "Parasols-XL.nl",
+      source: "proposal",
+      estimated_hours: 55,
+      notes: "Build-venster dec–jan (~55u)",
+    },
+    {
+      id: "solero-la-sombrilla",
+      label: "La Sombrilla",
+      source: "proposal",
+      estimated_hours: 45,
+      notes: "Build-venster jan–feb (~45u)",
+    },
+    {
+      id: "solero-growth",
+      label: "Groei, optimalisatie & service",
+      source: "proposal",
+      notes: "Stream 2 — CRO, SEO, email, ads-strategie, beheer (deel van 110u-pot)",
+    },
+    {
+      id: "solero-cro-ux",
+      label: "CRO, UX & design",
+      source: "proposal",
+    },
+    {
+      id: "solero-seo",
+      label: "SEO / AEO / GEO",
+      source: "proposal",
+    },
+    {
+      id: "solero-email",
+      label: "E-mailmarketing",
+      source: "proposal",
+    },
+    {
+      id: "solero-ads",
+      label: "Google Ads (strategie) & Social Ads",
+      source: "proposal",
+    },
+    {
+      id: "solero-ops",
+      label: "Beheer en doorbouw",
+      source: "proposal",
+    },
+    {
+      id: "solero-analytics",
+      label: "Analytics, tracking & sturing",
+      source: "proposal",
+    },
+    {
+      id: "solero-content",
+      label: "Content & merchandising",
+      source: "proposal",
+    },
+  ];
+
+  const { rows: v2Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'retainers_v2'
+  `;
+  if (v2Flag[0]?.value !== "true") {
+    await sql`
+      UPDATE retainer_agreements SET
+        billing_model = 'hourly',
+        hourly_rate = 175,
+        monthly_fee = 0,
+        period_anchor = 'start_day',
+        flex_hours = false,
+        notes = '8u/week (voorstel) · €175/uur · periode vanaf 15e · factuur achteraf',
+        hour_buckets = ${JSON.stringify(adsomniaBuckets)}::jsonb,
+        updated_at = now()
+      WHERE client_name ILIKE 'Adsomnia'
+    `;
+    await sql`
+      UPDATE retainer_agreements SET
+        billing_model = 'hourly',
+        hourly_rate = 150,
+        monthly_fee = 0,
+        period_anchor = 'calendar',
+        flex_hours = true,
+        notes = '110u/maand soft cap · €150/uur · flex over maanden · factuur achteraf',
+        hour_buckets = ${JSON.stringify(soleroBuckets)}::jsonb,
+        updated_at = now()
+      WHERE client_name ILIKE 'Solero'
+    `;
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('retainers_v2', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
+
+  const { rows: v3Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'retainers_v3_proposals'
+  `;
+  if (v3Flag[0]?.value !== "true") {
+    // Sync buckets + hours from proposals repo (blablabuild clients).
+    await sql`
+      UPDATE retainer_agreements SET
+        hours_included = 8,
+        hours_cadence = 'weekly',
+        hourly_rate = 175,
+        billing_model = 'hourly',
+        period_anchor = 'start_day',
+        notes = '8u/week (uit voorstel) · €175/uur · Innovatie/Productie/Business · vanaf 15e',
+        hour_buckets = ${JSON.stringify(adsomniaBuckets)}::jsonb,
+        linked_repos = ${JSON.stringify(["adsomnia"])}::jsonb,
+        updated_at = now()
+      WHERE client_name ILIKE 'Adsomnia'
+    `;
+    await sql`
+      UPDATE retainer_agreements SET
+        hours_included = 110,
+        hours_cadence = 'monthly',
+        hourly_rate = 150,
+        billing_model = 'hourly',
+        period_anchor = 'calendar',
+        flex_hours = true,
+        notes = '110u/maand · €150/uur · builds + groei/ops · flex · uit Solero-voorstel',
+        hour_buckets = ${JSON.stringify(soleroBuckets)}::jsonb,
+        linked_repos = ${JSON.stringify(["solero-global-hub"])}::jsonb,
+        updated_at = now()
+      WHERE client_name ILIKE 'Solero'
+    `;
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('retainers_v3_proposals', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
+
+  const { rows: v4Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'retainers_v4_adsomnia_12h'
+  `;
+  if (v4Flag[0]?.value !== "true") {
+    // Commercial reality: 12u/week (not the 8u in the written proposal).
+    await sql`
+      UPDATE retainer_agreements SET
+        hours_included = 12,
+        hours_cadence = 'weekly',
+        hourly_rate = 175,
+        notes = '12u/week · €175/uur · Innovatie/Productie/Business · vanaf 15e',
+        linked_repos = ${JSON.stringify(["adsomnia", "deleted-users"])}::jsonb,
+        hour_buckets = ${JSON.stringify(adsomniaBuckets)}::jsonb,
+        updated_at = now()
+      WHERE client_name ILIKE 'Adsomnia'
+    `;
+
+    // Ensure Adsomnia company + deleted-users project exist.
+    let adsomniaCompanyId: string | null = null;
+    const { rows: existingCompany } = await sql`
+      SELECT id FROM companies WHERE name ILIKE 'Adsomnia' LIMIT 1
+    `;
+    if (existingCompany[0]?.id) {
+      adsomniaCompanyId = String(existingCompany[0].id);
+    } else {
+      const { rows: createdCompany } = await sql`
+        INSERT INTO companies (name, industry, retainer_type)
+        VALUES ('Adsomnia', 'Agency / production', 'fixed')
+        RETURNING id
+      `;
+      adsomniaCompanyId = String(createdCompany[0].id);
+    }
+
+    await sql`
+      UPDATE retainer_agreements
+      SET company_id = ${adsomniaCompanyId}, updated_at = now()
+      WHERE client_name ILIKE 'Adsomnia' AND company_id IS NULL
+    `;
+
+    const { rows: existingProject } = await sql`
+      SELECT id FROM projects
+      WHERE name ILIKE 'deleted-users'
+         OR name ILIKE 'Deleted Users'
+      LIMIT 1
+    `;
+    if (!existingProject[0]) {
+      const { rows: createdProject } = await sql`
+        INSERT INTO projects (
+          name, description, company_id, status, priority, priority_manual, client_name, lead
+        ) VALUES (
+          'deleted-users',
+          'Nieuw Adsomnia-project · uren vallen onder de Adsomnia-retainer',
+          ${adsomniaCompanyId},
+          'active',
+          'medium',
+          true,
+          'Adsomnia',
+          'Kevin + Xennith'
+        )
+        RETURNING id
+      `;
+      if (createdProject[0]?.id) {
+        await ensureDefaultMilestones(String(createdProject[0].id));
+      }
+    }
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('retainers_v4_adsomnia_12h', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
+
+  const { rows: seedFlag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'retainers_seeded_v1'
+  `;
+  if (seedFlag[0]?.value === "true") return;
+
+  const { rows: existing } = await sql`
+    SELECT COUNT(*)::int AS c FROM retainer_agreements
+  `;
+  if (Number(existing[0]?.c) === 0) {
+    const seed: Array<{
+      client_name: string;
+      status: "active" | "upcoming";
+      hours_cadence: "weekly" | "monthly";
+      hours_included: number;
+      billing_model: "hourly" | "fixed_monthly";
+      hourly_rate: number;
+      monthly_fee: number;
+      start_date: string;
+      period_anchor: "calendar" | "start_day";
+      flex_hours: boolean;
+      notes: string;
+      hour_buckets: unknown;
+      linked_repos: string[];
+    }> = [
+      {
+        client_name: "Adsomnia",
+        status: "active",
+        hours_cadence: "weekly",
+        hours_included: 12,
+        billing_model: "hourly",
+        hourly_rate: 175,
+        monthly_fee: 0,
+        start_date: "2026-09-15",
+        period_anchor: "start_day",
+        flex_hours: false,
+        notes: "12u/week · €175/uur · Innovatie/Productie/Business · vanaf 15e",
+        hour_buckets: adsomniaBuckets,
+        linked_repos: ["adsomnia", "deleted-users"],
+      },
+      {
+        client_name: "Solero",
+        status: "upcoming",
+        hours_cadence: "monthly",
+        hours_included: 110,
+        billing_model: "hourly",
+        hourly_rate: 150,
+        monthly_fee: 0,
+        start_date: "2026-10-01",
+        period_anchor: "calendar",
+        flex_hours: true,
+        notes: "110u/maand · €150/uur · builds + groei/ops · flex · uit Solero-voorstel",
+        hour_buckets: soleroBuckets,
+        linked_repos: ["solero-global-hub"],
+      },
+    ];
+
+    for (const row of seed) {
+      const { rows: companies } = await sql`
+        SELECT id FROM companies
+        WHERE name ILIKE ${row.client_name}
+           OR name ILIKE ${`%${row.client_name}%`}
+        LIMIT 1
+      `;
+      await sql`
+        INSERT INTO retainer_agreements (
+          client_name, company_id, status, hours_cadence, hours_included,
+          billing_model, hourly_rate, monthly_fee, start_date,
+          period_anchor, flex_hours, notes, hour_buckets, linked_repos
+        ) VALUES (
+          ${row.client_name},
+          ${companies[0]?.id ?? null},
+          ${row.status},
+          ${row.hours_cadence},
+          ${row.hours_included},
+          ${row.billing_model},
+          ${row.hourly_rate},
+          ${row.monthly_fee},
+          ${row.start_date},
+          ${row.period_anchor},
+          ${row.flex_hours},
+          ${row.notes},
+          ${JSON.stringify(row.hour_buckets)}::jsonb,
+          ${JSON.stringify(row.linked_repos)}::jsonb
+        )
+      `;
+    }
+  }
+
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES ('retainers_seeded_v1', 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
+}
+

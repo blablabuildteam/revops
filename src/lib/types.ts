@@ -44,6 +44,68 @@ export type RetainerType = "none" | "fixed" | "commission";
 export type SlaBillingFrequency = "monthly" | "quarterly";
 export type SlaStatus = "active" | "upcoming" | "paused" | "ended";
 
+export type RetainerStatus = "active" | "upcoming" | "paused" | "ended";
+export type RetainerHoursCadence = "weekly" | "monthly";
+export type RetainerBillingModel = "hourly" | "fixed_monthly";
+/** calendar = full months; start_day = rolling from start_date day (e.g. 15th→14th). */
+export type RetainerPeriodAnchor = "calendar" | "start_day";
+
+export interface RetainerHourBucket {
+  id: string;
+  label: string;
+  /** e.g. proposal section — filled later from voorstel */
+  source?: string | null;
+  /** Optional estimate from proposal (hours in a period, not always monthly). */
+  estimated_hours?: number | null;
+  notes?: string | null;
+}
+
+export interface RetainerAgreement {
+  id: string;
+  client_name: string;
+  company_id?: string | null;
+  status: RetainerStatus;
+  /** Cap measured per week or per calendar month. */
+  hours_cadence: RetainerHoursCadence;
+  hours_included: number;
+  billing_model: RetainerBillingModel;
+  hourly_rate: number;
+  monthly_fee: number;
+  start_date: string;
+  period_anchor: RetainerPeriodAnchor;
+  /** Soft cap — over/under hours flex into next periods. */
+  flex_hours: boolean;
+  invoice_mode: "arrears_monthly";
+  invoiced_periods: string[];
+  /** Proposal activity buckets (labels for now). */
+  hour_buckets: RetainerHourBucket[];
+  /** Local repo folder names that bill to this retainer (future auto-log). */
+  linked_repos: string[];
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetainerTimeEntry {
+  id: string;
+  retainer_id: string;
+  /** Monday of the logged week (YYYY-MM-DD). */
+  week_start: string;
+  hours: number;
+  activity: string;
+  /** Optional proposal bucket id/label. */
+  category?: string | null;
+  logged_by?: string | null;
+  /** Optional specific day within the week. */
+  work_date?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RetainerWithEntries extends RetainerAgreement {
+  entries: RetainerTimeEntry[];
+}
+
 export interface SlaAgreement {
   id: string;
   client_name: string;
