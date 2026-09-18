@@ -16,7 +16,9 @@ export async function middleware(req: NextRequest) {
   // Allow public routes and API routes that don't need auth
   const isPublic =
     PUBLIC.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith("/retainer/") || // public client retainer hours
     pathname.startsWith("/api/project/") || // public client task submission
+    pathname.startsWith("/api/retainer/") || // public client retainer hours
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/setup-users") ||
     pathname.startsWith("/api/seed-sample-data");

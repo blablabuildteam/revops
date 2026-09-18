@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { parseLocalDate } from "@/lib/format";
 import { mapTimeEntryRow, weekStartOf } from "@/lib/retainers";
 
 export async function POST(
@@ -26,11 +27,15 @@ export async function POST(
       return NextResponse.json({ error: "activity is required" }, { status: 400 });
     }
 
-    const weekStart = body.week_start
-      ? String(body.week_start).slice(0, 10)
-      : weekStartOf(
-          body.work_date ? new Date(String(body.work_date).slice(0, 10)) : new Date(),
-        );
+    const workDate = body.work_date
+      ? String(body.work_date).slice(0, 10)
+      : null;
+    const parsedWork = workDate ? parseLocalDate(workDate) : null;
+    const weekStart = parsedWork
+      ? weekStartOf(parsedWork)
+      : body.week_start
+        ? String(body.week_start).slice(0, 10)
+        : weekStartOf();
 
     const { rows } = await sql`
       INSERT INTO retainer_time_entries (
@@ -42,7 +47,7 @@ export async function POST(
         ${body.activity.trim()},
         ${body.category?.trim() || null},
         ${body.logged_by?.trim() || null},
-        ${body.work_date ? String(body.work_date).slice(0, 10) : null}
+        ${workDate}
       )
       RETURNING *
     `;

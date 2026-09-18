@@ -1,5 +1,6 @@
 import { toDateInputValue } from "@/lib/format";
 import type {
+  PublicRetainer,
   RetainerAgreement,
   RetainerBillingModel,
   RetainerHoursCadence,
@@ -16,6 +17,23 @@ export function weekStartOf(date = new Date()): string {
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   return toDateOnly(d);
+}
+
+export function todayDateOnly(): string {
+  return toDateOnly(new Date());
+}
+
+/** Monday of the week that contains a YYYY-MM-DD calendar date. */
+export function weekStartFromDateOnly(dateOnly: string): string {
+  return weekStartOf(parseDateOnly(dateOnly.slice(0, 10)));
+}
+
+/** Today if it falls in the week, otherwise the week's Monday. */
+export function defaultWorkDateForWeek(weekStart: string): string {
+  const today = todayDateOnly();
+  const weekEnd = addDays(weekStart, 6);
+  if (today >= weekStart && today <= weekEnd) return today;
+  return weekStart;
 }
 
 export function addDays(dateOnly: string, days: number): string {
@@ -155,7 +173,7 @@ export function currentBillingPeriod(
 }
 
 export function entryInPeriod(
-  entry: RetainerTimeEntry,
+  entry: Pick<RetainerTimeEntry, "work_date" | "week_start">,
   period: Pick<RetainerBillingPeriod, "start" | "end">,
 ): boolean {
   const ref = (entry.work_date || entry.week_start || "").slice(0, 10);
@@ -164,10 +182,13 @@ export function entryInPeriod(
 }
 
 export function entryInWeek(entry: RetainerTimeEntry, weekStart: string): boolean {
+  if (entry.work_date) {
+    return weekStartFromDateOnly(entry.work_date) === weekStart;
+  }
   return entry.week_start?.slice(0, 10) === weekStart;
 }
 
-export function sumHours(entries: RetainerTimeEntry[]): number {
+export function sumHours(entries: Pick<RetainerTimeEntry, "hours">[]): number {
   return entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
 }
 
@@ -252,6 +273,71 @@ export function hoursInBillingPeriod(
   return sumHours(
     (retainer.entries ?? []).filter((e) => entryInPeriod(e, period)),
   );
+}
+
+export function formatDayLabel(dateOnly?: string | null): string {
+  if (!dateOnly || !/^\d{4}-\d{2}-\d{2}$/.test(dateOnly.slice(0, 10))) {
+    return "—";
+  }
+  return parseDateOnly(dateOnly.slice(0, 10)).toLocaleDateString("nl-NL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export function groupRetainerEntriesByWeek<
+  T extends Pick<RetainerTimeEntry, "work_date" | "week_start"> & {
+    created_at?: string;
+  },
+>(entries: T[]): { weekStart: string; entries: T[] }[] {
+  const map = new Map<string, T[]>();
+  for (const entry of entries) {
+    const week =
+      entry.work_date && /^\d{4}-\d{2}-\d{2}$/.test(entry.work_date)
+        ? weekStartFromDateOnly(entry.work_date)
+        : (entry.week_start || "").slice(0, 10);
+    if (!week) continue;
+    const list = map.get(week) ?? [];
+    list.push(entry);
+    map.set(week, list);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([weekStart, list]) => ({
+      weekStart,
+      entries: [...list].sort((a, b) => {
+        const da = a.work_date || a.week_start || "";
+        const db = b.work_date || b.week_start || "";
+        if (da !== db) return da.localeCompare(db);
+        return (a.created_at || "").localeCompare(b.created_at || "");
+      }),
+    }));
+}
+
+export function toPublicRetainer(
+  retainer: RetainerWithEntries,
+): PublicRetainer {
+  return {
+    client_name: retainer.client_name,
+    status: retainer.status,
+    hours_cadence: retainer.hours_cadence,
+    hours_included: retainer.hours_included,
+    start_date: retainer.start_date,
+    period_anchor: retainer.period_anchor,
+    hour_buckets: (retainer.hour_buckets ?? []).map((b) => ({
+      id: b.id,
+      label: b.label,
+    })),
+    entries: (retainer.entries ?? []).map((entry) => ({
+      id: entry.id,
+      hours: Number(entry.hours) || 0,
+      activity: entry.activity,
+      category: entry.category ?? null,
+      work_date: entry.work_date ?? null,
+      week_start: entry.week_start,
+    })),
+  };
 }
 
 /** Expected retainer revenue attributed to a finance calendar month. */
@@ -367,6 +453,7 @@ export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement 
     invoiced_periods: normalizeInvoicedPeriods(row.invoiced_periods),
     hour_buckets: hourBuckets ?? [],
     linked_repos: linkedRepos,
+    share_token: String(row.share_token ?? ""),
     notes: (row.notes as string | null) ?? null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),

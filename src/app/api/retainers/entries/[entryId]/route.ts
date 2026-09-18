@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { mapTimeEntryRow } from "@/lib/retainers";
+import { parseLocalDate } from "@/lib/format";
+import { mapTimeEntryRow, weekStartOf } from "@/lib/retainers";
 
 export async function PUT(
   req: NextRequest,
@@ -25,13 +26,26 @@ export async function PUT(
       return NextResponse.json({ error: "hours must be >= 0" }, { status: 400 });
     }
 
+    const workDate =
+      body.work_date !== undefined
+        ? body.work_date
+          ? String(body.work_date).slice(0, 10)
+          : null
+        : undefined;
+    const parsedWork = workDate ? parseLocalDate(workDate) : null;
+    const weekStart = parsedWork
+      ? weekStartOf(parsedWork)
+      : body.week_start
+        ? String(body.week_start).slice(0, 10)
+        : null;
+
     const { rows } = await sql`
       UPDATE retainer_time_entries SET
-        week_start = COALESCE(${body.week_start ? String(body.week_start).slice(0, 10) : null}, week_start),
+        week_start = COALESCE(${weekStart}, week_start),
         hours = ${hours},
         activity = COALESCE(${body.activity?.trim() ?? null}, activity),
         logged_by = ${body.logged_by !== undefined ? (body.logged_by?.trim() || null) : existing.logged_by},
-        work_date = ${body.work_date !== undefined ? (body.work_date ? String(body.work_date).slice(0, 10) : null) : existing.work_date},
+        work_date = ${workDate !== undefined ? workDate : existing.work_date},
         updated_at = now()
       WHERE id = ${entryId}
       RETURNING *

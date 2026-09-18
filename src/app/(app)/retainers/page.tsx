@@ -2,8 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
+  ArrowRight,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -12,6 +14,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
+import { HoursMeter } from "@/components/hours-meter";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,11 +31,13 @@ import {
   createRetainerTimeEntry,
   deleteRetainerTimeEntry,
   updateRetainerAgreement,
+  updateRetainerTimeEntry,
 } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import {
   addDays,
   currentBillingPeriod,
+  defaultWorkDateForWeek,
   entryInPeriod,
   entryInWeek,
   estimateInvoiceAmount,
@@ -42,9 +48,11 @@ import {
   includedHoursForWeek,
   listRetainerBillingPeriods,
   sumHours,
+  weekStartFromDateOnly,
   weekStartOf,
 } from "@/lib/retainers";
 import {
+  RetainerTimeEntry,
   RetainerWithEntries,
   TASK_ASSIGNEES,
 } from "@/lib/types";
@@ -67,6 +75,9 @@ function RetainerCard({
   const withUndo = useUndoToast();
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
+  const [workDate, setWorkDate] = useState(() =>
+    defaultWorkDateForWeek(weekStart),
+  );
   const [category, setCategory] = useState<string>("");
   const [loggedBy, setLoggedBy] = useState<string>(TASK_ASSIGNEES[0]);
   const [saving, setSaving] = useState(false);
@@ -102,6 +113,10 @@ function RetainerCard({
   const flex = retainer.flex_hours ? flexHoursBalance(retainer) : null;
   const invoiced = new Set(retainer.invoiced_periods ?? []);
 
+  useEffect(() => {
+    setWorkDate(defaultWorkDateForWeek(weekStart));
+  }, [weekStart]);
+
   // Allow logging in any week that overlaps/starts after the retainer start
   // (not vs week Monday — mid-week starts like Adsomnia 15th broke that).
   const weekEnd = addDays(weekStart, 6);
@@ -115,6 +130,7 @@ function RetainerCard({
     e.preventDefault();
     const h = parseFloat(hours);
     if (!activity.trim() || !Number.isFinite(h) || h <= 0) return;
+    const date = workDate || defaultWorkDateForWeek(weekStart);
     setSaving(true);
     let createdId: string | null = null;
     try {
@@ -122,11 +138,12 @@ function RetainerCard({
         label: "Uren gelogd",
         run: async () => {
           const created = await createRetainerTimeEntry(retainer.id, {
-            week_start: weekStart,
+            week_start: weekStartFromDateOnly(date),
             hours: h,
             activity: activity.trim(),
             category: category || null,
             logged_by: loggedBy,
+            work_date: date,
           });
           createdId = created.id;
           setHours("");
@@ -141,6 +158,30 @@ function RetainerCard({
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleWorkDateChange(
+    entry: RetainerTimeEntry,
+    next: string,
+  ) {
+    if ((entry.work_date ?? "") === next) return;
+    await withUndo({
+      label: next ? "Datum bijgewerkt" : "Datum verwijderd",
+      run: async () => {
+        await updateRetainerTimeEntry(entry.id, {
+          work_date: next || null,
+          week_start: next
+            ? weekStartFromDateOnly(next)
+            : entry.week_start,
+        });
+      },
+      undo: async () => {
+        await updateRetainerTimeEntry(entry.id, {
+          work_date: entry.work_date ?? null,
+          week_start: entry.week_start,
+        });
+      },
+    });
   }
 
   async function handleDelete(entryId: string) {
@@ -324,35 +365,17 @@ function RetainerCard({
               </div>
             )}
           </div>
-          <div className="text-right text-xs space-y-1">
-            <p className="text-neutral-500">
-              Week ·{" "}
-              <span
-                className={cn(
-                  "font-mono",
-                  weekHours > weekCap ? "text-amber-300" : "text-neutral-200",
-                )}
-              >
-                {weekHours.toFixed(1)} / {weekCap}u
-              </span>
-            </p>
+          <div className="w-full sm:w-56 space-y-3">
+            <HoursMeter label="Week" used={weekHours} cap={weekCap} />
             {period && (
-              <p className="text-neutral-500">
-                Periode ·{" "}
-                <span
-                  className={cn(
-                    "font-mono",
-                    periodHours > periodCap
-                      ? "text-amber-300"
-                      : "text-neutral-200",
-                  )}
-                >
-                  {periodHours.toFixed(1)} / {periodCap}u
-                </span>
-              </p>
+              <HoursMeter
+                label="Periode"
+                used={periodHours}
+                cap={periodCap}
+              />
             )}
             {period && (
-              <p className="text-neutral-500">
+              <p className="text-xs text-neutral-500 text-right">
                 Deze periode ·{" "}
                 <span className="font-mono text-neutral-200">
                   {formatCurrency(periodInvoice)}
@@ -360,7 +383,7 @@ function RetainerCard({
               </p>
             )}
             {flex && (
-              <p className="text-neutral-500">
+              <p className="text-xs text-neutral-500 text-right">
                 Urenbank ·{" "}
                 <span
                   className={cn(
@@ -373,6 +396,13 @@ function RetainerCard({
                 </span>
               </p>
             )}
+            <Link
+              href={`/retainers/${retainer.id}`}
+              className="flex items-center justify-end gap-1.5 text-xs text-neutral-400 hover:text-[#d4e052] pt-2 mt-2 border-t border-neutral-800/60 transition-colors"
+            >
+              Bekijk details
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
           </div>
         </div>
       </div>
@@ -424,19 +454,22 @@ function RetainerCard({
       )}
 
       <div className="px-4 py-3 space-y-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
           <p className="text-xs text-neutral-500 uppercase tracking-wide">
             Uren loggen · week {formatWeekLabel(weekStart)}
           </p>
-          <p className="text-xs font-mono text-neutral-400">
-            {weekHours.toFixed(1)} / {weekCap}u
-          </p>
+          <HoursMeter
+            label="Deze week"
+            used={weekHours}
+            cap={weekCap}
+            className="sm:w-48"
+          />
         </div>
 
         {canLog ? (
           <form
             onSubmit={(e) => void handleAdd(e)}
-            className="rounded-lg border border-[#d4e052]/25 bg-[#d4e052]/5 p-3 grid grid-cols-1 sm:grid-cols-[5rem_1fr_9rem_8rem_auto] gap-2 items-end"
+            className="rounded-lg border border-[#d4e052]/25 bg-[#d4e052]/5 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[5.5rem_9.5rem_1fr_9rem_8rem_auto] gap-2 items-end"
           >
             <div className="space-y-1">
               <Label className="text-[11px] text-neutral-500">Uren</Label>
@@ -449,6 +482,15 @@ function RetainerCard({
                 placeholder="8"
                 className="bg-neutral-900 border-neutral-700 h-9"
                 required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-neutral-500">Datum</Label>
+              <DatePicker
+                value={workDate}
+                onChange={setWorkDate}
+                placeholder="Kies datum"
+                className="h-9 bg-neutral-900 border-neutral-700 text-neutral-100"
               />
             </div>
             <div className="space-y-1">
@@ -469,10 +511,12 @@ function RetainerCard({
                   setCategory(!v || v === "__none__" ? "" : v)
                 }
               >
-                <SelectTrigger className="bg-neutral-900 border-neutral-700 h-9">
-                  <SelectValue placeholder="Optioneel" />
+                <SelectTrigger className="w-full bg-neutral-900 border-neutral-700 h-9">
+                  <SelectValue placeholder="Optioneel">
+                    {category || "Geen"}
+                  </SelectValue>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent alignItemWithTrigger={false} align="start">
                   <SelectItem value="__none__">Geen</SelectItem>
                   {(retainer.hour_buckets ?? []).map((b) => (
                     <SelectItem key={b.id} value={b.label}>
@@ -488,10 +532,10 @@ function RetainerCard({
                 value={loggedBy}
                 onValueChange={(v) => setLoggedBy(v ?? TASK_ASSIGNEES[0])}
               >
-                <SelectTrigger className="bg-neutral-900 border-neutral-700 h-9">
+                <SelectTrigger className="w-full bg-neutral-900 border-neutral-700 h-9">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent alignItemWithTrigger={false} align="start">
                   {TASK_ASSIGNEES.map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}
@@ -525,11 +569,25 @@ function RetainerCard({
           </p>
         ) : (
           <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
-            {weekEntries.map((entry) => (
+            {[...weekEntries]
+              .sort((a, b) => {
+                const da = a.work_date || a.week_start || "";
+                const db = b.work_date || b.week_start || "";
+                if (da !== db) return da.localeCompare(db);
+                return (a.created_at || "").localeCompare(b.created_at || "");
+              })
+              .map((entry) => (
               <li
                 key={entry.id}
-                className="flex items-start gap-3 px-3 py-2.5 bg-neutral-950/30"
+                className="flex flex-wrap sm:flex-nowrap items-start gap-3 px-3 py-2.5 bg-neutral-950/30"
               >
+                <DatePicker
+                  value={entry.work_date ?? ""}
+                  onChange={(next) => void handleWorkDateChange(entry, next)}
+                  placeholder="Datum"
+                  size="sm"
+                  className="h-8 w-[8.75rem] shrink-0 bg-neutral-900 border-neutral-700 text-neutral-200"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-neutral-200">{entry.activity}</p>
                   <p className="text-[11px] text-neutral-600 mt-0.5">
