@@ -6,6 +6,21 @@ import {
   resolveAssigneeIds,
 } from "@/lib/todos";
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await ensureTables();
+    const { id } = await params;
+    const todo = await fetchTodo(id);
+    if (!todo) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(todo);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Failed to load task" }, { status: 500 });
+  }
+}
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureTables();

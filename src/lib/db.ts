@@ -882,13 +882,22 @@ async function ensureSlaAgreementsTable() {
 async function ensureSlackDueNotificationsTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS slack_due_notifications (
-      item_type TEXT NOT NULL CHECK (item_type IN ('task', 'todo')),
-      item_id UUID NOT NULL,
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
       kind TEXT NOT NULL CHECK (kind IN ('eve', 'morning')),
       due_date DATE NOT NULL,
+      destination TEXT NOT NULL DEFAULT 'channel',
       sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (item_type, item_id, kind, due_date)
+      PRIMARY KEY (item_type, item_id, kind, due_date, destination)
     )
+  `;
+  await sql`ALTER TABLE slack_due_notifications ADD COLUMN IF NOT EXISTS destination TEXT NOT NULL DEFAULT 'channel'`;
+  await sql`ALTER TABLE slack_due_notifications DROP CONSTRAINT IF EXISTS slack_due_notifications_item_type_check`;
+  await sql`ALTER TABLE slack_due_notifications DROP CONSTRAINT IF EXISTS slack_due_notifications_pkey`;
+  await sql`ALTER TABLE slack_due_notifications ALTER COLUMN item_id TYPE TEXT USING item_id::text`;
+  await sql`
+    ALTER TABLE slack_due_notifications
+    ADD PRIMARY KEY (item_type, item_id, kind, due_date, destination)
   `;
 }
 

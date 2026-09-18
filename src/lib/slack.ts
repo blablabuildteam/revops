@@ -186,8 +186,29 @@ async function loadTeamSlack(): Promise<Array<{ name: string; email: string; sla
   return members;
 }
 
+export function assigneeMatchesPerson(
+  assignees: Array<{ name?: string | null; email?: string | null }>,
+  person: { name: string; email: string },
+): boolean {
+  const personEmail = person.email.toLowerCase();
+  const personName = person.name.toLowerCase();
+  return assignees.some((assignee) => {
+    const email = assignee.email?.trim().toLowerCase();
+    const name = assignee.name?.trim().toLowerCase();
+    return (
+      email === personEmail ||
+      name === personName ||
+      Boolean(name?.split(/[+,&]/).some((part) => part.trim() === personName))
+    );
+  });
+}
+
 async function teamMemberSlackIds(): Promise<string[]> {
   return (await loadTeamSlack()).map((person) => person.slackId);
+}
+
+export async function teamSlackMembers(): Promise<Array<{ name: string; email: string; slackId: string }>> {
+  return loadTeamSlack();
 }
 
 /** Slack mention tokens (`<@U…>`) for Kevin / Xennith based on names or emails. */
@@ -195,20 +216,21 @@ export async function slackMentionsForAssignees(
   assignees: Array<{ name?: string | null; email?: string | null }>,
 ): Promise<string[]> {
   const team = await loadTeamSlack();
-  const mentions: string[] = [];
-  for (const person of team) {
-    const matched = assignees.some((assignee) => {
-      const email = assignee.email?.trim().toLowerCase();
-      const name = assignee.name?.trim().toLowerCase();
-      return (
-        email === person.email ||
-        name === person.name.toLowerCase() ||
-        Boolean(name?.split(/[+,&]/).some((part) => part.trim() === person.name.toLowerCase()))
-      );
-    });
-    if (matched) mentions.push(`<@${person.slackId}>`);
+  return team
+    .filter((person) => assigneeMatchesPerson(assignees, person))
+    .map((person) => `<@${person.slackId}>`);
+}
+
+export async function openSlackDm(slackUserId: string): Promise<string> {
+  const json = await slackRequest("conversations.open", {
+    users: slackUserId,
+    return_im: true,
+  });
+  const id = json.channel?.id;
+  if (!id) {
+    throw new SlackError("Could not open a Slack DM.", 502, "dm_open_failed");
   }
-  return mentions;
+  return id;
 }
 
 export async function postSlackMessage(channel: string, text: string): Promise<void> {

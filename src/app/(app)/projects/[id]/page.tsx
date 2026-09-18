@@ -1444,6 +1444,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     getProjects().then(setAllProjects);
   }, [id, applyProjectDetail]);
 
+  const openedTaskFromUrl = useRef(false);
+  useEffect(() => {
+    if (openedTaskFromUrl.current || loading) return;
+    const taskId = new URLSearchParams(window.location.search).get("task");
+    if (!taskId) return;
+    const task = findTaskInState(tasksByMilestone, taskId);
+    if (!task) return;
+    openedTaskFromUrl.current = true;
+    setSelectedTask(task);
+    setDetailOpen(true);
+  }, [loading, tasksByMilestone]);
+
   useEffect(() => {
     return subscribe<ProjectDetail>(cacheKeys.project(id), (detail) => {
       if (!detail?.milestones || draggingRef.current || shouldSkipIncoming()) return;

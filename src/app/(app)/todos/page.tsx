@@ -1476,6 +1476,26 @@ export default function TodosPage() {
     setFormOpen(true);
   }
 
+  const openedTodoFromUrl = useRef(false);
+  useEffect(() => {
+    if (openedTodoFromUrl.current || !filtersReady || loading) return;
+    const todoId = new URLSearchParams(window.location.search).get("todo");
+    if (!todoId) return;
+    const match = todos.find((t) => t.id === todoId);
+    if (match) {
+      openedTodoFromUrl.current = true;
+      openEditTask(match);
+      return;
+    }
+    openedTodoFromUrl.current = true;
+    void fetch(`/api/todos/${todoId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((todo: Todo | null) => {
+        if (todo) openEditTask(todo);
+      })
+      .catch(() => {});
+  }, [todos, loading, filtersReady]);
+
   function closeForm() {
     setFormOpen(false);
     setEditingTodo(null);
