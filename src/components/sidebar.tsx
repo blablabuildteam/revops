@@ -21,17 +21,34 @@ import { useTheme } from "@/components/theme-provider";
 import { UserAvatar } from "@/components/user-avatar";
 import { useSession } from "@/components/session-provider";
 
-export const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/todos", label: "Tasks", icon: CheckSquare },
-  { href: "/opportunities", label: "Opportunities", icon: ListFilter },
-  { href: "/projects", label: "Projects", icon: FolderKanban },
-  { href: "/retainers", label: "Retainers", icon: Repeat },
-  { href: "/capacity", label: "Capacity", icon: Users },
-  { href: "/finance", label: "Finance", icon: Euro },
-  { href: "/companies", label: "Companies", icon: Building2 },
-  { href: "/network", label: "Network", icon: Contact },
-];
+const NAV_SECTIONS = [
+  {
+    label: "Work",
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/todos", label: "Tasks", icon: CheckSquare },
+    ],
+  },
+  {
+    label: "Delivery",
+    items: [
+      { href: "/opportunities", label: "Opportunities", icon: ListFilter },
+      { href: "/projects", label: "Projects", icon: FolderKanban },
+      { href: "/retainers", label: "Retainers", icon: Repeat },
+      { href: "/capacity", label: "Capacity", icon: Users },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { href: "/finance", label: "Finance", icon: Euro },
+      { href: "/companies", label: "Companies", icon: Building2 },
+      { href: "/network", label: "Network", icon: Contact },
+    ],
+  },
+] as const;
+
+export const NAV_ITEMS = NAV_SECTIONS.flatMap((section) => [...section.items]);
 
 export function isNavItemActive(href: string, pathname: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -86,26 +103,33 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = isNavItemActive(href, pathname);
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 px-2.5 py-2.5 lg:py-2 rounded text-sm transition-colors",
-                active
-                  ? "bg-[#d4e052]/10 text-[#d4e052] font-medium"
-                  : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900"
-              )}
-            >
-              <Icon className="w-4 h-4 shrink-0" />
-              {label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.label} className="space-y-0.5">
+            <p className="px-2.5 pb-1.5 text-[10px] font-medium tracking-[0.16em] uppercase text-neutral-600">
+              {section.label}
+            </p>
+            {section.items.map(({ href, label, icon: Icon }) => {
+              const active = isNavItemActive(href, pathname);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  className={cn(
+                    "flex items-center gap-3 px-2.5 py-2.5 lg:py-2 rounded text-sm transition-colors",
+                    active
+                      ? "bg-[#d4e052]/10 text-[#d4e052] font-medium"
+                      : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-900"
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User + logout */}
