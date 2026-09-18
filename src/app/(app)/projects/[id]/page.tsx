@@ -59,7 +59,8 @@ import { TaskFilterBar, useTaskFilters, applyTaskFilters } from "@/components/ta
 import { filterTasksBySearch } from "@/lib/task-search";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getProject, getProjects, createMilestone, createTask, updateTask, updateProject, deleteTask, deleteMilestone, deleteProject, getTaskComments, createTaskComment, getTaskAttachments, uploadTaskAttachment, deleteTaskAttachment, type ProjectWithStats } from "@/lib/api";
-import { getCached, setCached, cacheKeys } from "@/lib/query-cache";
+import { getCached, setCached, cacheKeys, subscribe } from "@/lib/query-cache";
+import { holdLiveSync, shouldSkipIncoming } from "@/lib/live-sync";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
@@ -1360,7 +1361,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
   const tasksRef = useRef<TasksByMilestone>({});
   const dragStartSnapshot = useRef<TasksByMilestone | null>(null);
+  const draggingRef = useRef(false);
   const { begin, end, pushUndo } = useMutationFeedback();
+
+  const applyProjectDetail = useCallback((detail: ProjectDetail) => {
+    setProject(detail);
+    setTasksByMilestone(buildTasksByMilestone(detail.milestones, detail.unassigned_tasks || []));
+    setLoading(false);
+  }, []);
 
   const milestoneIds = [
     ...(project?.milestones.map((m) => m.id) ?? []),
@@ -1378,14 +1386,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   useEffect(() => {
     getProject(id).then((p) => {
-      const detail = p as ProjectDetail;
-      setProject(detail);
-      setTasksByMilestone(buildTasksByMilestone(detail.milestones, detail.unassigned_tasks || []));
-      setLoading(false);
+      applyProjectDetail(p as ProjectDetail);
     });
     getProjects().then(setAllProjects);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, applyProjectDetail]);
+
+  useEffect(() => {
+    return subscribe<ProjectDetail>(cacheKeys.project(id), (detail) => {
+      if (!detail?.milestones || draggingRef.current || shouldSkipIncoming()) return;
+      applyProjectDetail(detail);
+    });
+  }, [id, applyProjectDetail]);
+
+  useEffect(() => {
+    return subscribe<ProjectWithStats[]>(cacheKeys.projects, (list) => {
+      if (list) setAllProjects(list);
+    });
+  }, []);
 
   const persistContainer = useCallback(async (containerId: string, tasks: Task[]) => {
     const approved = sortTasks(tasks.filter(isApprovedTask));
@@ -1738,13 +1755,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   }
 
   function handleDragStart(_event: DragStartEvent) {
+    draggingRef.current = true;
+    holdLiveSync(15_000);
     dragStartSnapshot.current = structuredClone(tasksRef.current);
+  }
+
+  function handleDragCancel() {
+    draggingRef.current = false;
+    holdLiveSync(500);
+    dragStartSnapshot.current = null;
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) {
-      dragStartSnapshot.current = null;
+      handleDragCancel();
       return;
     }
 
@@ -1752,7 +1777,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     const activeContainer = findContainer(String(active.id), current, milestoneIds);
     const overContainer = findContainer(String(over.id), current, milestoneIds);
     if (!activeContainer || !overContainer) {
-      dragStartSnapshot.current = null;
+      handleDragCancel();
       return;
     }
 
@@ -1810,6 +1835,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         });
       }
     } finally {
+      draggingRef.current = false;
+      holdLiveSync(1500);
       end();
     }
   }
@@ -2399,6 +2426,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         collisionDetection={closestCorners}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
+        onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
         <div className="space-y-3 overflow-x-auto">

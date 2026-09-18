@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { MutationProvider } from "@/components/mutation-provider";
 import { SessionProvider } from "@/components/session-provider";
 import { QueryCacheSeed } from "@/components/query-cache-provider";
@@ -28,6 +29,7 @@ export default async function AppLayout({
         <ListDataSeed />
       </Suspense>
       <MutationProvider>
+        <LiveSync />
         <AppShell>{children}</AppShell>
       </MutationProvider>
     </SessionProvider>

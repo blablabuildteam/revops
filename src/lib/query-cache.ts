@@ -71,6 +71,20 @@ export function invalidateCachePrefix(prefix: string) {
   if (keys.length) invalidateCache(...keys);
 }
 
+/** Force-refresh cached keys without dropping the current snapshot. */
+export function refreshCache(...keys: string[]) {
+  for (const key of keys) {
+    const entry = getEntry(key);
+    if (!entry?.fetcher || entry.promise) continue;
+    void cachedFetch(key, entry.fetcher, { force: true });
+  }
+}
+
+export function refreshCachePrefix(prefix: string) {
+  const keys = [...store.keys()].filter((key) => key.startsWith(prefix));
+  if (keys.length) refreshCache(...keys);
+}
+
 /**
  * Stale-while-revalidate fetch.
  * - Cache miss: await network

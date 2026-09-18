@@ -42,6 +42,7 @@ async function req<T>(
     headers: { "Content-Type": "application/json" },
     redirect: "manual",
     ...options,
+    cache: "no-store",
   });
 
   if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
@@ -599,5 +600,29 @@ export function patchCachedOpportunity(id: string, updates: Partial<Opportunity>
   setCached(
     cacheKeys.opportunities,
     list.map((o) => (o.id === id ? { ...o, ...updates } : o))
+  );
+}
+
+export function upsertCachedOpportunity(opp: Opportunity) {
+  const list = getCached<Opportunity[]>(cacheKeys.opportunities) ?? [];
+  const exists = list.some((o) => o.id === opp.id);
+  setCached(
+    cacheKeys.opportunities,
+    exists
+      ? list.map((o) => {
+          if (o.id !== opp.id) return o;
+          const company = opp.company?.name ? opp.company : o.company;
+          return { ...o, ...opp, company };
+        })
+      : [opp, ...list],
+  );
+}
+
+export function removeCachedOpportunity(id: string) {
+  const list = getCached<Opportunity[]>(cacheKeys.opportunities);
+  if (!list) return;
+  setCached(
+    cacheKeys.opportunities,
+    list.filter((o) => o.id !== id),
   );
 }

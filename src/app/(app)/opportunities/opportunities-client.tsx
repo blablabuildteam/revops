@@ -24,7 +24,13 @@ import {
 import { OpportunityForm } from "@/components/opportunity-form";
 import { OpportunityPipelineView } from "@/components/opportunity-pipeline-view";
 import { DealActivationWizard } from "@/components/deal-activation-wizard";
-import { getOpportunities, deleteOpportunity, updateOpportunity, getFinanceDeals } from "@/lib/api";
+import {
+  deleteOpportunity,
+  patchCachedOpportunity,
+  removeCachedOpportunity,
+  updateOpportunity,
+  upsertCachedOpportunity,
+} from "@/lib/api";
 import {
   Opportunity,
   Stage,
@@ -34,7 +40,7 @@ import {
 import { formatCurrency, toMonthInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useMutationFeedback } from "@/components/mutation-provider";
-import { cacheKeys, getCached } from "@/lib/query-cache";
+import { useFinanceDeals, useOpportunities } from "@/hooks/use-api-data";
 
 type SortKey = "name" | "stage" | "expected_value" | "probability" | "updated_at";
 
@@ -250,12 +256,10 @@ export default function OpportunitiesPageClient() {
   const view: ViewMode =
     searchParams.get("view") === "pipeline" ? "pipeline" : "list";
 
-  const [opps, setOpps] = useState<Opportunity[]>(
-    () => getCached<Opportunity[]>(cacheKeys.opportunities) ?? []
-  );
-  const [loading, setLoading] = useState(
-    () => getCached<Opportunity[]>(cacheKeys.opportunities) === undefined
-  );
+  const { data: cachedOpps, isLoading } = useOpportunities();
+  const { data: deals = [] } = useFinanceDeals();
+  const opps = cachedOpps ?? [];
+  const loading = isLoading && opps.length === 0;
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<Stage | "all">("all");
   const [sortKey, setSortKey] = useState<SortKey>("stage");
@@ -264,39 +268,27 @@ export default function OpportunitiesPageClient() {
   const [editingOpp, setEditingOpp] = useState<Opportunity | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [activatingOpp, setActivatingOpp] = useState<Opportunity | null>(null);
-  const [activatedOpportunityIds, setActivatedOpportunityIds] = useState<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
   const patchQueues = useRef(new Map<string, Promise<void>>());
   const { begin, end, pushUndo } = useMutationFeedback();
 
-  async function load() {
-    const hadCache = getCached(cacheKeys.opportunities) !== undefined;
-    if (!hadCache) setLoading(true);
-    const [data, deals] = await Promise.all([
-      getOpportunities(),
-      getFinanceDeals(),
-    ]);
-    setOpps(data);
-    setActivatedOpportunityIds(
-      new Set(deals.map((d) => d.opportunity_id).filter((id): id is string => Boolean(id)))
-    );
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
+  const activatedOpportunityIds = useMemo(
+    () =>
+      new Set(
+        deals
+          .map((d) => d.opportunity_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [deals],
+  );
 
   const patchOpp = useCallback(async (
     id: string,
     updates: Partial<Opportunity>,
     opts?: { skipUndo?: boolean },
   ) => {
-    let snapshot: Opportunity | undefined;
-    setOpps((prev) => {
-      snapshot = prev.find((o) => o.id === id);
-      return prev.map((o) => (o.id === id ? { ...o, ...updates } : o));
-    });
+    const snapshot = opps.find((o) => o.id === id);
+    patchCachedOpportunity(id, updates);
     setEditingOpp((prev) => (prev?.id === id ? { ...prev, ...updates } : prev));
 
     if (updates.stage && stageFilter !== "all" && updates.stage !== stageFilter) {
@@ -308,13 +300,7 @@ export default function OpportunitiesPageClient() {
     );
 
     const applyServer = (updated: Opportunity) => {
-      setOpps((prev) =>
-        prev.map((o) => {
-          if (o.id !== id) return o;
-          const company = updated.company?.name ? updated.company : o.company;
-          return { ...o, ...updated, company };
-        })
-      );
+      upsertCachedOpportunity(updated);
       setEditingOpp((prev) => {
         if (!prev || prev.id !== id) return prev;
         const company = updated.company?.name ? updated.company : prev.company;
@@ -325,8 +311,8 @@ export default function OpportunitiesPageClient() {
 
     const rollback = () => {
       if (snapshot) {
-        setOpps((prev) => prev.map((o) => (o.id === id ? snapshot! : o)));
-        setEditingOpp((prev) => (prev?.id === id ? snapshot! : prev));
+        upsertCachedOpportunity(snapshot);
+        setEditingOpp((prev) => (prev?.id === id ? snapshot : prev));
       }
     };
 
@@ -359,7 +345,7 @@ export default function OpportunitiesPageClient() {
 
     patchQueues.current.set(id, next);
     await next;
-  }, [stageFilter, begin, end, pushUndo]);
+  }, [opps, stageFilter, begin, end, pushUndo]);
 
   async function handleStageChange(id: string, stage: Stage) {
     await patchOpp(id, { stage, probability: STAGE_PROBABILITY[stage] });
@@ -413,7 +399,7 @@ export default function OpportunitiesPageClient() {
 
   async function handleDelete(id: string) {
     await deleteOpportunity(id);
-    setOpps((prev) => prev.filter((o) => o.id !== id));
+    removeCachedOpportunity(id);
   }
 
   function openEdit(opp: Opportunity) {
@@ -705,11 +691,7 @@ export default function OpportunitiesPageClient() {
         initial={editingOpp}
         onDelete={handleDelete}
         onSave={(opp) => {
-          setOpps((prev) => {
-            const exists = prev.find((o) => o.id === opp.id);
-            if (exists) return prev.map((o) => (o.id === opp.id ? opp : o));
-            return [opp, ...prev];
-          });
+          upsertCachedOpportunity(opp);
         }}
       />
 
@@ -722,8 +704,7 @@ export default function OpportunitiesPageClient() {
         opportunity={activatingOpp}
         onComplete={() => {
           if (activatingOpp) {
-            setActivatedOpportunityIds((prev) => new Set([...prev, activatingOpp.id]));
-            setOpps((prev) => prev.filter((o) => o.id !== activatingOpp.id));
+            removeCachedOpportunity(activatingOpp.id);
           }
         }}
       />
