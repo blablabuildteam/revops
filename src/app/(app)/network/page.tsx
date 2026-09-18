@@ -528,7 +528,7 @@ export default function NetworkPage() {
           </SelectContent>
         </Select>
         {allTags.length > 0 && (
-          <Select value={filterTag} onValueChange={setFilterTag}>
+          <Select value={filterTag} onValueChange={(v) => { if (v) setFilterTag(v); }}>
             <SelectTrigger className="w-full sm:w-36 bg-neutral-800 border-neutral-700 text-neutral-100">
               <SelectValue placeholder="Tag" />
             </SelectTrigger>

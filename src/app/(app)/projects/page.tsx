@@ -271,6 +271,7 @@ function NewProjectDialog({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<Project | null>(null);
   const [slackDraft, setSlackDraft] = useState<SlackChannelDraft>({
     action: "create",
     name: "",
