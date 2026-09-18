@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cron/slack-due",
+      "schedule": "0 9,10,14,15 * * *"
+    }
+  ]
 }

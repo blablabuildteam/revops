@@ -7,6 +7,8 @@ import Link from "next/link";
 import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RetainerHoursReport } from "@/components/retainer-hours-report";
+import { SlackChannelBinder } from "@/components/slack-channel-picker";
+import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import { useRetainers } from "@/hooks/use-api-data";
 import { toPublicRetainer } from "@/lib/retainers";
 
@@ -67,6 +69,14 @@ export default function RetainerDetailPage({
           Retainers
         </Link>
         <div className="flex flex-wrap items-center gap-2">
+          <SlackChannelBinder
+            kind="retainer"
+            id={retainer.id}
+            channelId={retainer.slack_channel_id}
+            channelName={retainer.slack_channel_name}
+            suggestedName={suggestedSlackChannelName(retainer.client_name, "retainer")}
+            compact
+          />
           <Button
             type="button"
             variant="outline"

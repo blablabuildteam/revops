@@ -3,9 +3,9 @@
 export const dynamic = "force-dynamic";
 
 import { useEffect, useState, useMemo } from "react";
-import { Plus, AlertCircle, FolderKanban, ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { Plus, AlertCircle, FolderKanban, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createProject, getCompanies, updateProject, type ProjectWithStats } from "@/lib/api";
+import { createProject, getCompanies, updateProject, bindProjectSlack, type ProjectWithStats } from "@/lib/api";
 import { useProjects } from "@/hooks/use-api-data";
 import {
   Company,
@@ -31,6 +31,13 @@ import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  SlackChannelBinder,
+  SlackChannelPicker,
+  isSlackDraftReady,
+  type SlackChannelDraft,
+} from "@/components/slack-channel-picker";
+import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import {
   Select,
   SelectContent,
@@ -263,6 +270,23 @@ function NewProjectDialog({
     lead: "",
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [slackDraft, setSlackDraft] = useState<SlackChannelDraft>({
+    action: "create",
+    name: "",
+    isPrivate: true,
+  });
+  const selectedCompanyName =
+    companies.find((c) => c.id === form.company_id)?.name ?? "";
+  const slackSuggested = suggestedSlackChannelName(selectedCompanyName, form.name);
+
+  function updateCreateChannelName(client: string, project: string) {
+    setSlackDraft((prev) =>
+      prev.action === "create"
+        ? { ...prev, name: suggestedSlackChannelName(client, project) }
+        : prev,
+    );
+  }
 
   useEffect(() => {
     getCompanies().then(setCompanies);
@@ -270,16 +294,28 @@ function NewProjectDialog({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isSlackDraftReady(slackDraft)) {
+      setError("Pick or create a Slack channel");
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
-      const project = await createProject({
-        ...form,
-        company_id: form.company_id || undefined,
-        start_date: form.start_date || undefined,
-        end_date: form.end_date || undefined,
-        lead: form.lead || undefined,
-      });
-      onSave(project);
+      let project = created;
+      if (!project) {
+        project = await createProject({
+          ...form,
+          company_id: form.company_id || undefined,
+          start_date: form.start_date || undefined,
+          end_date: form.end_date || undefined,
+          lead: form.lead || undefined,
+        });
+        setCreated(project);
+      }
+      const linked = project.slack_channel_id
+        ? project
+        : await bindProjectSlack(project.id, slackDraft);
+      onSave(linked);
       onClose();
       setForm({
         name: "",
@@ -292,6 +328,10 @@ function NewProjectDialog({
         priority: "low",
         lead: "",
       });
+      setSlackDraft({ action: "create", name: "", isPrivate: true });
+      setCreated(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setLoading(false);
     }
@@ -306,14 +346,27 @@ function NewProjectDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Project name *</Label>
-            <Input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            <Input required value={form.name} onChange={(e) => {
+              const name = e.target.value;
+              setForm((f) => ({ ...f, name }));
+              updateCreateChannelName(selectedCompanyName, name);
+            }}
               placeholder="e.g. Heatnest — Website Redesign"
               className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Company</Label>
-              <Select value={form.company_id || "none"} onValueChange={(v) => setForm((f) => ({ ...f, company_id: v === "none" ? "" : (v ?? "") }))}>
+              <Select
+                value={form.company_id || "none"}
+                onValueChange={(v) => {
+                  const companyId = v === "none" ? "" : (v ?? "");
+                  setForm((f) => ({ ...f, company_id: companyId }));
+                  const client =
+                    companies.find((c) => c.id === companyId)?.name ?? "";
+                  updateCreateChannelName(client, form.name);
+                }}
+              >
                 <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
                   <SelectValue placeholder="Select company" />
                 </SelectTrigger>
@@ -333,6 +386,15 @@ function NewProjectDialog({
               />
             </div>
           </div>
+          <SlackChannelPicker
+            draft={slackDraft}
+            onChange={setSlackDraft}
+            suggestedName={slackSuggested}
+            required
+          />
+          {error && (
+            <p className="text-red-400 text-xs bg-red-950/50 px-3 py-2 rounded">{error}</p>
+          )}
           <div className="space-y-1.5">
             <Label className="text-neutral-400 text-xs">Lead</Label>
             <ProjectLeadSelect
@@ -382,7 +444,7 @@ function NewProjectDialog({
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}
               className="text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800">Cancel</Button>
-            <Button type="submit" disabled={loading}
+            <Button type="submit" disabled={loading || !form.name.trim() || !isSlackDraftReady(slackDraft)}
               className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium">
               {loading ? "Creating..." : "Create project"}
             </Button>
@@ -403,6 +465,7 @@ function ProjectRow({
   const patchProject = useUndoablePatch<Project>();
   const pendingReqs = Number(project.pending_requests);
   const progress = projectScheduleProgress(project.start_date, project.end_date);
+  const isCompleted = project.status === "completed";
   const overdue =
     progress === 100 &&
     (project.status === "active" || project.status === "on_hold");
@@ -411,7 +474,7 @@ function ProjectRow({
   const companyId = project.company_id ?? company?.id;
 
   return (
-    <div className={`${PROJECT_LIST_GRID} py-2.5 bg-neutral-900/40 hover:bg-neutral-900/70 transition-colors group`}>
+    <div className={`${PROJECT_LIST_GRID} py-2.5 bg-neutral-900/40 hover:bg-neutral-900/70 transition-colors group ${isCompleted ? "opacity-70" : ""}`}>
       <div className="flex items-center gap-3 min-w-0">
         {company?.name && companyId ? (
           <CompanyAvatar
@@ -426,16 +489,21 @@ function ProjectRow({
           <div className="w-8 h-8 rounded-md bg-neutral-800 border border-neutral-700 shrink-0" />
         )}
         <Link href={`/projects/${project.id}`} className="flex items-center min-w-0 flex-1">
-        <p className="min-w-0 text-sm text-neutral-200 group-hover:text-white transition-colors truncate flex items-center gap-1.5">
+        <p className={`min-w-0 text-sm transition-colors truncate flex items-center gap-1.5 ${
+          isCompleted ? "text-neutral-500 group-hover:text-neutral-300" : "text-neutral-200 group-hover:text-white"
+        }`}>
           <span className="truncate">
             {company?.name ? (
               <>
-                <span className="text-neutral-400">{company.name}</span>
+                <span className={isCompleted ? "text-neutral-600" : "text-neutral-400"}>{company.name}</span>
                 <span className="text-neutral-600"> · </span>
               </>
             ) : null}
             {project.name}
           </span>
+          {isCompleted && (
+            <CheckCircle2 className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+          )}
           {pendingReqs > 0 && (
             <span className="hidden sm:flex items-center gap-1 text-[11px] text-neutral-400 shrink-0">
               <AlertCircle className="w-3 h-3" />
@@ -444,6 +512,21 @@ function ProjectRow({
           )}
         </p>
         </Link>
+        <div
+          className="shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <SlackChannelBinder
+            kind="project"
+            id={project.id}
+            channelId={project.slack_channel_id}
+            channelName={project.slack_channel_name}
+            suggestedName={suggestedSlackChannelName(company?.name, project.name)}
+            compact
+            onBound={(bound) => onUpdate({ ...project, ...bound })}
+          />
+        </div>
       </div>
       <div className="flex justify-center">
         <PrioritySelect
@@ -544,7 +627,7 @@ export default function ProjectsPage() {
 
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
-      if (statusFilter === "active" && p.status !== "active" && p.status !== "on_hold") {
+      if (statusFilter === "active" && p.status !== "active" && p.status !== "on_hold" && p.status !== "completed") {
         return false;
       }
       if (statusFilter === "completed" && p.status !== "completed") return false;
@@ -560,6 +643,19 @@ export default function ProjectsPage() {
     () => sortProjects(filteredProjects, sortKey, sortAsc),
     [filteredProjects, sortKey, sortAsc],
   );
+
+  const { openProjects, completedProjects } = useMemo(() => {
+    const open: ProjectWithStats[] = [];
+    const completed: ProjectWithStats[] = [];
+    for (const project of sortedProjects) {
+      if (project.status === "completed") completed.push(project);
+      else open.push(project);
+    }
+    return { openProjects: open, completedProjects: completed };
+  }, [sortedProjects]);
+
+  const showCompletedSeparator =
+    statusFilter !== "completed" && openProjects.length > 0 && completedProjects.length > 0;
 
   function toggleSort(column: ProjectSortKey) {
     if (sortKey === column) setSortAsc((current) => !current);
@@ -594,7 +690,7 @@ export default function ProjectsPage() {
         <div>
           <h1 className="text-lg sm:text-xl font-semibold text-neutral-100">Projects</h1>
           <p className="text-[13px] sm:text-sm text-neutral-500 mt-0.5">
-            {active.length} active · {totalDone}/{totalTasks} tasks done
+            {active.length} active{completedProjects.length > 0 ? ` · ${completedProjects.length} completed` : ""} · {totalDone}/{totalTasks} tasks done
             {(companyFilter !== "all" || statusFilter !== "all") && (
               <span className="text-neutral-600">
                 {" "}
@@ -709,15 +805,37 @@ export default function ProjectsPage() {
             <ProjectSortHeader label="Progress" column="progress" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden xl:inline-flex" />
             <ProjectSortHeader label="End" column="end_date" sortKey={sortKey} sortAsc={sortAsc} onToggle={toggleSort} className="hidden md:inline-flex" />
           </div>
-          <div className="divide-y divide-neutral-800/60">
-            {sortedProjects.map((project) => (
-              <ProjectRow
-                key={project.id}
-                project={project}
-                onUpdate={upsertProjectInCache}
-              />
-            ))}
-          </div>
+          {openProjects.length > 0 && (
+            <div className="divide-y divide-neutral-800/60">
+              {openProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  onUpdate={upsertProjectInCache}
+                />
+              ))}
+            </div>
+          )}
+          {showCompletedSeparator && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-neutral-950/80">
+              <div className="flex-1 border-t border-neutral-800/60" />
+              <span className="text-[10px] text-neutral-600 uppercase tracking-widest shrink-0">
+                Completed
+              </span>
+              <div className="flex-1 border-t border-neutral-800/60" />
+            </div>
+          )}
+          {completedProjects.length > 0 && (
+            <div className="divide-y divide-neutral-800/60">
+              {completedProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  onUpdate={upsertProjectInCache}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 import { applyDeadlineDefaultPriority } from "@/lib/project-deadline-priority";
+import { markProjectTasksDone } from "@/lib/project-complete";
 
 export async function GET(
   _req: NextRequest,
@@ -73,6 +74,13 @@ export async function PUT(
       ? Boolean(priority_manual)
       : "priority" in body;
 
+    const { rows: currentRows } = await sql`
+      SELECT status FROM projects WHERE id = ${id}
+    `;
+    if (!currentRows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const becomingCompleted =
+      "status" in body && status === "completed" && currentRows[0].status !== "completed";
+
     // Only touch fields present in the body so partial updates (e.g. rename)
     // do not wipe description, company, dates, or other columns.
     const { rows } = await sql`
@@ -93,6 +101,10 @@ export async function PUT(
       WHERE id = ${id}
       RETURNING *
     `;
+    if (!rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (becomingCompleted) {
+      await markProjectTasksDone(id);
+    }
     return NextResponse.json(await applyDeadlineDefaultPriority(rows[0]));
   } catch (err) {
     console.error(err);

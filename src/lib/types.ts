@@ -110,6 +110,8 @@ export interface RetainerAgreement {
   /** Unguessable token for the public client hours page. */
   share_token: string;
   notes?: string | null;
+  slack_channel_id?: string | null;
+  slack_channel_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -304,6 +306,9 @@ export interface Project {
   end_date?: string | null;
   /** Delivery lead — Kevin, Xennith, or both. */
   lead?: string | null;
+  /** Slack channel linked to this project. */
+  slack_channel_id?: string | null;
+  slack_channel_name?: string | null;
   milestones?: Milestone[];
   created_at: string;
   updated_at: string;

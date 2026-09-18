@@ -25,8 +25,10 @@ import {
   getCached,
   invalidateCache,
   invalidateCachePrefix,
+  invalidateTaskLists,
   setCached,
 } from "./query-cache";
+import type { SlackBindInput, SlackChannelOption } from "./slack-channel-name";
 
 function invalidateFinanceCaches() {
   invalidateCache(cacheKeys.financeDeals());
@@ -324,6 +326,7 @@ export function updateProject(id: string, data: Partial<Project>): Promise<Proje
   }).then((updated) => {
     invalidateCache(cacheKeys.projects);
     invalidateProjectDetail(id);
+    invalidateTaskLists();
     return updated;
   });
 }
@@ -332,6 +335,41 @@ export function deleteProject(id: string): Promise<void> {
   return req<void>(`/projects/${id}`, { method: "DELETE" }).then(() => {
     invalidateCache(cacheKeys.projects);
     invalidateProjectDetail(id);
+  });
+}
+
+export function getSlackChannels(): Promise<{
+  configured: boolean;
+  channels: SlackChannelOption[];
+}> {
+  return req("/slack/channels");
+}
+
+export function bindProjectSlack(id: string, data: SlackBindInput): Promise<Project> {
+  return req<Project>(`/projects/${id}/slack`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    invalidateCache(cacheKeys.projects);
+    invalidateProjectDetail(id);
+    return updated;
+  });
+}
+
+export function bindRetainerSlack(
+  id: string,
+  data: SlackBindInput,
+): Promise<RetainerWithEntries> {
+  return req<RetainerWithEntries>(`/retainers/${id}/slack`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    patchRetainersCache((list) =>
+      list.map((r) =>
+        r.id === updated.id ? { ...r, ...updated, entries: r.entries } : r,
+      ),
+    );
+    return updated;
   });
 }
 

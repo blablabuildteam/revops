@@ -21,7 +21,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/retainer/") || // public client retainer hours
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/api/setup-users") ||
-    pathname.startsWith("/api/seed-sample-data");
+    pathname.startsWith("/api/seed-sample-data") ||
+    pathname.startsWith("/api/cron");
 
   const token = req.cookies.get(COOKIE)?.value;
 

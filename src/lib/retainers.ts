@@ -455,6 +455,8 @@ export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement 
     linked_repos: linkedRepos,
     share_token: String(row.share_token ?? ""),
     notes: (row.notes as string | null) ?? null,
+    slack_channel_id: (row.slack_channel_id as string | null) ?? null,
+    slack_channel_name: (row.slack_channel_name as string | null) ?? null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };

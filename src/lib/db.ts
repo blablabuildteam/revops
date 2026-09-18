@@ -383,6 +383,8 @@ async function _init() {
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'low'`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS priority_manual BOOLEAN DEFAULT false`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS lead TEXT`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
+      await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_name TEXT`;
       const { rows: urgentFlag } = await sql`
         SELECT value FROM finance_settings WHERE key = 'priority_urgent'
       `;
@@ -423,6 +425,7 @@ async function _init() {
       await ensureSlaAgreementsTable();
       await ensureRetainersTable();
       await ensureTodoAssigneesTable();
+      await ensureSlackDueNotificationsTable();
       await ensureNetworkContactsTable();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
@@ -511,6 +514,8 @@ async function _init() {
         CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
       priority_manual BOOLEAN DEFAULT false,
       lead TEXT,
+      slack_channel_id TEXT,
+      slack_channel_name TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
@@ -681,6 +686,7 @@ async function _init() {
   await ensureSlaAgreementsTable();
   await ensureRetainersTable();
   await ensureTodoAssigneesTable();
+  await ensureSlackDueNotificationsTable();
   await ensureNetworkContactsTable();
 
   await sql`
@@ -873,6 +879,19 @@ async function ensureSlaAgreementsTable() {
   `;
 }
 
+async function ensureSlackDueNotificationsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS slack_due_notifications (
+      item_type TEXT NOT NULL CHECK (item_type IN ('task', 'todo')),
+      item_id UUID NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('eve', 'morning')),
+      due_date DATE NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (item_type, item_id, kind, due_date)
+    )
+  `;
+}
+
 async function ensureTodoAssigneesTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS todo_assignees (
@@ -915,6 +934,8 @@ async function ensureRetainersTable() {
       hour_buckets JSONB NOT NULL DEFAULT '[]'::jsonb,
       linked_repos JSONB NOT NULL DEFAULT '[]'::jsonb,
       notes TEXT,
+      slack_channel_id TEXT,
+      slack_channel_name TEXT,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now()
     )
@@ -926,6 +947,8 @@ async function ensureRetainersTable() {
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS hour_buckets JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS linked_repos JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS share_token TEXT`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS slack_channel_name TEXT`;
   await sql`
     UPDATE retainer_agreements
     SET share_token = encode(gen_random_bytes(16), 'hex')

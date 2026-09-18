@@ -26,10 +26,16 @@ import {
   PaymentScheduleEntry,
   Project,
 } from "@/lib/types";
-import { createFinanceDeal, createProject, updateProject, getCompanies, createCompany } from "@/lib/api";
+import { createFinanceDeal, createProject, updateProject, getCompanies, createCompany, bindProjectSlack } from "@/lib/api";
 import { addVat } from "@/lib/vat";
 import { VatAmountPair } from "@/components/vat-amount-pair";
 import { cn } from "@/lib/utils";
+import {
+  SlackChannelPicker,
+  isSlackDraftReady,
+  type SlackChannelDraft,
+} from "@/components/slack-channel-picker";
+import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 
 interface DealActivationWizardProps {
   open: boolean;
@@ -81,6 +87,11 @@ export function DealActivationWizard({
     { month: "", percentage: 50 },
     { month: "", percentage: 50 },
   ]);
+  const [slackDraft, setSlackDraft] = useState<SlackChannelDraft>({
+    action: "create",
+    name: "",
+    isPrivate: true,
+  });
 
   useEffect(() => {
     if (open) getCompanies().then(setCompanies);
@@ -111,6 +122,14 @@ export function DealActivationWizard({
         { month: monthInputValue(opportunity.start_date), percentage: 50 },
         { month: monthInputValue(opportunity.end_date ?? opportunity.close_date), percentage: 50 },
       ]);
+      setSlackDraft({
+        action: "create",
+        name: suggestedSlackChannelName(
+          opportunity.company?.name,
+          defaultProjectName(opportunity),
+        ),
+        isPrivate: true,
+      });
     } else {
       setStep(2);
       setProjectName("");
@@ -129,6 +148,7 @@ export function DealActivationWizard({
         { month: "", percentage: 50 },
         { month: "", percentage: 50 },
       ]);
+      setSlackDraft({ action: "create", name: "", isPrivate: true });
     }
   }, [open, opportunity]);
 
@@ -174,18 +194,32 @@ export function DealActivationWizard({
 
   async function handleCreateProject() {
     if (!projectName.trim()) return;
+    if (!isSlackDraftReady(slackDraft)) {
+      setError("Pick or create a Slack channel");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const created = await createProject({
-        name: projectName.trim(),
-        company_id: opportunity?.company_id ?? companyId,
-        opportunity_id: opportunity?.id,
-        status: "active",
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-      });
-      setProject(created);
+      let created = project;
+      if (!created) {
+        created = await createProject({
+          name: projectName.trim(),
+          company_id: opportunity?.company_id ?? companyId,
+          opportunity_id: opportunity?.id,
+          status: "active",
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        });
+        setProject(created);
+      } else if (created.name !== projectName.trim()) {
+        created = await updateProject(created.id, { name: projectName.trim() });
+        setProject(created);
+      }
+      if (!created.slack_channel_id) {
+        created = await bindProjectSlack(created.id, slackDraft);
+        setProject(created);
+      }
       setStep(2);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create project");
@@ -295,10 +329,24 @@ export function DealActivationWizard({
                 <Label className="text-neutral-400 text-xs">Project name</Label>
                 <Input
                   value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setProjectName(next);
+                    setSlackDraft((prev) =>
+                      prev.action === "create"
+                        ? { ...prev, name: suggestedSlackChannelName(companyName, next) }
+                        : prev,
+                    );
+                  }}
                   className={fc}
                 />
               </div>
+              <SlackChannelPicker
+                draft={slackDraft}
+                onChange={setSlackDraft}
+                suggestedName={suggestedSlackChannelName(companyName, projectName)}
+                required
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-neutral-400 text-xs">Start date</Label>
@@ -538,7 +586,7 @@ export function DealActivationWizard({
             type="button"
             disabled={
               loading ||
-              (step === 1 && !projectName.trim()) ||
+              (step === 1 && (!projectName.trim() || !isSlackDraftReady(slackDraft))) ||
               (step === 2 && (!projectName.trim() || !companyName.trim()))
             }
             onClick={step === 1 ? handleCreateProject : handleCreateDeal}

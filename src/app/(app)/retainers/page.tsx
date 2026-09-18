@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { HoursMeter } from "@/components/hours-meter";
+import { SlackChannelBinder } from "@/components/slack-channel-picker";
+import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -309,6 +311,16 @@ function RetainerCard({
             {retainer.notes && (
               <p className="text-[11px] text-neutral-600 mt-1">{retainer.notes}</p>
             )}
+            <div className="mt-3">
+              <SlackChannelBinder
+                kind="retainer"
+                id={retainer.id}
+                channelId={retainer.slack_channel_id}
+                channelName={retainer.slack_channel_name}
+                suggestedName={suggestedSlackChannelName(retainer.client_name, "retainer")}
+                compact
+              />
+            </div>
             <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
               <p className="text-[11px] text-neutral-500">Gekoppelde repos</p>
               <div className="flex flex-wrap gap-1.5 items-center">
