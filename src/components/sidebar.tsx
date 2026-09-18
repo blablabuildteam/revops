@@ -23,11 +23,11 @@ import { useSession } from "@/components/session-provider";
 
 export const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/todos", label: "Tasks", icon: CheckSquare },
   { href: "/opportunities", label: "Opportunities", icon: ListFilter },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/retainers", label: "Retainers", icon: Repeat },
   { href: "/capacity", label: "Capacity", icon: Users },
-  { href: "/todos", label: "Tasks", icon: CheckSquare },
   { href: "/finance", label: "Finance", icon: Euro },
   { href: "/companies", label: "Companies", icon: Building2 },
   { href: "/network", label: "Network", icon: Contact },
