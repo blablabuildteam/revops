@@ -6,7 +6,7 @@ import { useEffect, useState, use, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Check, X, Trash2, Users, Calendar, FolderKanban, Pencil, FolderInput, Filter, Link2, UserX,
-  ChevronDown, ChevronRight, Search, MoreHorizontal,
+  ChevronDown, ChevronRight, Search, MoreHorizontal, CheckCircle2, Undo2,
 } from "lucide-react";
 import { PrioritySelect } from "@/components/priority-select";
 import { projectStatusTone } from "@/lib/project-status";
@@ -37,12 +37,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectSeparator, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { BinaryText } from "@/components/binary-text";
 import { BoardLinkChips } from "@/components/linkified-text";
 import { extractLinks } from "@/lib/linkify";
 import { CompanyAvatar } from "@/components/company-avatar";
+import { SlackChannelBinder } from "@/components/slack-channel-picker";
+import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskRowIndicators } from "@/components/task-row-indicators";
@@ -932,6 +934,33 @@ function findTaskInState(tasksByMilestone: TasksByMilestone, taskId: string): Ta
   return null;
 }
 
+function projectClientName(project: Project): string {
+  return project.company?.name?.trim() || project.client_name?.trim() || "";
+}
+
+function formatProjectDestination(project: Project): string {
+  const client = projectClientName(project);
+  return client ? `${client} · ${project.name}` : project.name;
+}
+
+function groupProjectsByClient(projects: Project[]): [string, Project[]][] {
+  const groups = new Map<string, Project[]>();
+  for (const project of projects) {
+    const client = projectClientName(project) || "No client";
+    const list = groups.get(client);
+    if (list) list.push(project);
+    else groups.set(client, [project]);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }
+  return [...groups.entries()].sort(([a], [b]) => {
+    if (a === "No client") return 1;
+    if (b === "No client") return -1;
+    return a.localeCompare(b, undefined, { sensitivity: "base" });
+  });
+}
+
 function BulkActionsBar({
   count,
   milestones,
@@ -960,6 +989,8 @@ function BulkActionsBar({
   if (count === 0) return null;
 
   const otherProjects = projects.filter((p) => p.id !== currentProjectId);
+  const projectsByClient = groupProjectsByClient(otherProjects);
+  const pendingProject = otherProjects.find((p) => p.id === pendingProjectId) ?? null;
 
   async function confirmProjectMove() {
     if (!pendingProjectId || moving) return;
@@ -978,112 +1009,134 @@ function BulkActionsBar({
   }
 
   return (
-    <div className="fixed bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+0.75rem))] left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-4 py-3 sm:px-5 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
-      <span className="text-sm font-medium text-[#d4e052] tabular-nums whitespace-nowrap">
+    <div className="fixed z-50 bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 right-3 flex items-center gap-2 sm:gap-3 bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2.5 sm:px-4 shadow-2xl shadow-black/60 animate-in slide-in-from-bottom-4 fade-in duration-200">
+      <span className="text-sm font-medium text-[#d4e052] tabular-nums whitespace-nowrap shrink-0">
         {count} task{count !== 1 ? "s" : ""} selected
       </span>
 
-      <div className="w-px h-5 bg-neutral-700" />
+      <div className="w-px h-5 bg-neutral-700 shrink-0" />
 
-      <Select onValueChange={(v: string | null) => { if (v) onBulkPhaseChange(v); }}>
-        <SelectTrigger
-          size="sm"
-          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
-          onPointerDown={cancelDrag}
-        >
-          <FolderKanban className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-          <SelectValue placeholder="Phase" />
-        </SelectTrigger>
-        <SelectContent className="bg-neutral-800 border-neutral-700">
-          {milestones.map((m) => {
-            const color = resolvePhaseColor(m.name, m.color);
-            return (
-              <SelectItem key={m.id} value={m.id} className="text-xs">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                  <span style={{ color }}>{m.name}</span>
-                </span>
-              </SelectItem>
-            );
-          })}
-        </SelectContent>
-      </Select>
-
-      {otherProjects.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          <Select
-            value={pendingProjectId ?? undefined}
-            onValueChange={(v: string | null) => setPendingProjectId(v || null)}
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+        <Select onValueChange={(v: string | null) => { if (v) onBulkPhaseChange(v); }}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-auto shrink-0 text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+            onPointerDown={cancelDrag}
           >
-            <SelectTrigger
-              size="sm"
-              className="h-8 w-auto min-w-[160px] max-w-[220px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
-              onPointerDown={cancelDrag}
-            >
-              <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-              <SelectValue placeholder="Move to project" />
-            </SelectTrigger>
-            <SelectContent
-              alignItemWithTrigger={false}
-              align="start"
-              className="bg-neutral-800 border-neutral-700 max-h-60 min-w-[min(360px,90vw)] w-max"
-            >
-              {otherProjects.map((p) => (
-                <SelectItem key={p.id} value={p.id} className="text-xs text-neutral-100">
-                  <span className="whitespace-normal">{p.name}</span>
+            <FolderKanban className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+            <SelectValue placeholder="Phase" />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            {milestones.map((m) => {
+              const color = resolvePhaseColor(m.name, m.color);
+              return (
+                <SelectItem key={m.id} value={m.id} className="text-xs">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span style={{ color }}>{m.name}</span>
+                  </span>
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {pendingProjectId && (
-            <Button
-              type="button"
-              size="sm"
-              disabled={moving}
-              className="h-8 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium px-3 shrink-0"
-              onClick={confirmProjectMove}
+              );
+            })}
+          </SelectContent>
+        </Select>
+
+        {otherProjects.length > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Select
+              value={pendingProjectId ?? ""}
+              onValueChange={(v: string | null) => setPendingProjectId(v || null)}
             >
-              {moving ? "Moving…" : "Move"}
-            </Button>
-          )}
-        </div>
-      )}
+              <SelectTrigger
+                size="sm"
+                className="h-8 w-auto min-w-[9rem] max-w-[16rem] sm:max-w-[20rem] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+                onPointerDown={cancelDrag}
+              >
+                <FolderInput className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                {pendingProject ? (
+                  <span className="min-w-0 truncate">
+                    {formatProjectDestination(pendingProject)}
+                  </span>
+                ) : (
+                  <SelectValue placeholder="Move to project" />
+                )}
+              </SelectTrigger>
+              <SelectContent
+                alignItemWithTrigger={false}
+                align="start"
+                className="bg-neutral-800 border-neutral-700 max-h-72 min-w-[min(360px,90vw)] w-max"
+              >
+                {projectsByClient.map(([client, clientProjects], groupIndex) => (
+                  <SelectGroup key={client} className="p-0">
+                    {groupIndex > 0 ? <SelectSeparator className="bg-neutral-700/80" /> : null}
+                    {clientProjects.map((p) => (
+                      <SelectItem
+                        key={p.id}
+                        value={p.id}
+                        className="items-start py-1.5 text-xs text-neutral-100"
+                      >
+                        <span className="flex min-w-0 flex-col items-start gap-0.5 whitespace-normal">
+                          {client !== "No client" ? (
+                            <span className="text-[11px] leading-none text-neutral-400">{client}</span>
+                          ) : null}
+                          <span className="leading-snug text-neutral-100">{p.name}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+            {pendingProjectId && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={moving}
+                className="h-8 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium px-3 shrink-0"
+                onClick={confirmProjectMove}
+              >
+                {moving ? "Moving…" : "Move"}
+              </Button>
+            )}
+          </div>
+        )}
 
-      <Select onValueChange={handleAssigneeChange}>
-        <SelectTrigger
-          size="sm"
-          className="h-8 w-auto min-w-[120px] text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
-          onPointerDown={cancelDrag}
-        >
-          <Users className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-          <SelectValue placeholder="Assignee" />
-        </SelectTrigger>
-        <SelectContent className="bg-neutral-800 border-neutral-700">
-          <AssigneeSelectItems
-            users={assigneeUsers}
-            names={assigneeNames}
-            noneLabel="Nobody"
+        <Select onValueChange={handleAssigneeChange}>
+          <SelectTrigger
+            size="sm"
+            className="h-8 w-auto shrink-0 text-xs bg-neutral-800 border-neutral-700 text-neutral-300 gap-1.5"
+            onPointerDown={cancelDrag}
+          >
+            <Users className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+            <SelectValue placeholder="Assignee" />
+          </SelectTrigger>
+          <SelectContent className="bg-neutral-800 border-neutral-700">
+            <AssigneeSelectItems
+              users={assigneeUsers}
+              names={assigneeNames}
+              noneLabel="Nobody"
+            />
+          </SelectContent>
+        </Select>
+        {addUserDialog}
+
+        <div className="flex items-center h-8 px-2.5 rounded-md bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors shrink-0">
+          <DatePicker
+            placeholder="Set date"
+            size="sm"
+            onChange={(v) => {
+              if (v) onBulkUpdate({ due_date: v });
+            }}
+            className="h-auto min-w-[6.5rem] border-0 bg-transparent px-0 text-xs text-neutral-300 shadow-none hover:bg-transparent"
           />
-        </SelectContent>
-      </Select>
-      {addUserDialog}
-
-      <div className="flex items-center h-8 px-2.5 rounded-md bg-neutral-800 border border-neutral-700 hover:border-neutral-600 transition-colors">
-        <DatePicker
-          placeholder="Set date"
-          size="sm"
-          onChange={(v) => {
-            if (v) onBulkUpdate({ due_date: v });
-          }}
-          className="h-auto min-w-[110px] border-0 bg-transparent px-0 text-xs text-neutral-300 shadow-none hover:bg-transparent"
-        />
+        </div>
       </div>
 
-      <div className="w-px h-5 bg-neutral-700" />
+      <div className="w-px h-5 bg-neutral-700 shrink-0" />
 
       <button
         onClick={handleClear}
-        className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors px-2 py-1.5 rounded hover:bg-neutral-800"
+        className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-200 transition-colors px-2 py-1.5 rounded hover:bg-neutral-800 shrink-0"
       >
         <X className="w-3.5 h-3.5" />
         Clear
@@ -1967,6 +2020,65 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  async function handleToggleCompleted() {
+    if (!project) return;
+    const completing = project.status !== "completed";
+    const nextStatus = completing ? "completed" : "active";
+    const previousStatus = project.status;
+
+    setProject((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+    if (completing) {
+      const done = project.milestones.find((m) => m.name.toLowerCase() === "done");
+      if (done) {
+        setTasksByMilestone((prev) => {
+          const all = Object.values(prev).flat().map((t) => ({
+            ...t,
+            milestone_id: done.id,
+            status: "done" as Task["status"],
+            approved: true,
+          }));
+          return { [done.id]: all };
+        });
+      }
+    }
+    begin();
+    try {
+      const updated = await updateProject(project.id, { status: nextStatus });
+      setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+      const list = getCached<ProjectWithStats[]>(cacheKeys.projects);
+      if (list) {
+        setCached(
+          cacheKeys.projects,
+          list.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+        );
+      }
+      if (completing) {
+        const detail = await getProject(project.id);
+        if ((detail as ProjectDetail).milestones) {
+          applyProjectDetail(detail as ProjectDetail);
+        }
+      }
+      pushUndo({
+        label: completing ? "Marked as completed" : "Reopened",
+        revert: async () => {
+          const reverted = await updateProject(project.id, { status: previousStatus });
+          setProject((prev) => (prev ? { ...prev, ...reverted } : prev));
+          const prevList = getCached<ProjectWithStats[]>(cacheKeys.projects);
+          if (prevList) {
+            setCached(
+              cacheKeys.projects,
+              prevList.map((p) => (p.id === reverted.id ? { ...p, ...reverted } : p)),
+            );
+          }
+        },
+      });
+    } catch {
+      setProject((prev) => (prev ? { ...prev, status: previousStatus } : prev));
+    } finally {
+      end();
+    }
+  }
+
   function requestDeleteProject() {
     if (!project) return;
     requestDelete({
@@ -2257,6 +2369,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   External
                 </span>
               )}
+              {project.status === "completed" && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-stone-800/80 border border-stone-600/50 text-stone-300">
+                  Completed
+                </span>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <DatePicker
@@ -2297,6 +2414,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 className="h-7 w-auto bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
               />
             </div>
+            <SlackChannelBinder
+              kind="project"
+              id={project.id}
+              channelId={project.slack_channel_id}
+              channelName={project.slack_channel_name}
+              suggestedName={suggestedSlackChannelName(
+                (project.company as { name?: string } | undefined)?.name,
+                project.name,
+              )}
+              compact
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full min-[480px]:w-52">
@@ -2308,6 +2436,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 className="pl-8 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-xs"
               />
             </div>
+            <button
+              type="button"
+              onClick={handleToggleCompleted}
+              aria-pressed={project.status === "completed"}
+              className={`inline-flex h-8 items-center gap-2 text-xs border px-3 rounded-lg transition-colors ${
+                project.status === "completed"
+                  ? "border-stone-600/40 bg-stone-800/50 text-stone-300 hover:border-stone-500 hover:text-stone-200"
+                  : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+              }`}
+            >
+              {project.status === "completed" ? (
+                <Undo2 className="w-3.5 h-3.5" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              )}
+              {project.status === "completed" ? "Reopen" : "Mark complete"}
+            </button>
             <Button
               type="button"
               onClick={openNewTask}
@@ -2354,6 +2499,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </PopoverTrigger>
               <PopoverContent align="end" className="w-48 p-1">
+                <button
+                  onClick={handleToggleCompleted}
+                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
+                >
+                  {project.status === "completed" ? (
+                    <>
+                      <Undo2 className="w-3.5 h-3.5" />
+                      Reopen project
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Mark as completed
+                    </>
+                  )}
+                </button>
                 <button
                   onClick={() => setEditStatusesOpen(true)}
                   className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
