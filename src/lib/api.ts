@@ -4,10 +4,13 @@ import {
   FinanceDeal,
   NewFinanceDeal,
   UpdateFinanceDeal,
+  NetworkContact,
+  NewNetworkContact,
   NewOpportunity,
   Opportunity,
   Project,
   Milestone,
+  PublicRetainer,
   RetainerTimeEntry,
   RetainerWithEntries,
   SlaAgreement,
@@ -448,6 +451,10 @@ export function getPublicProject(token: string): Promise<Project> {
   return req(`/project/${token}`);
 }
 
+export function getPublicRetainer(token: string): Promise<PublicRetainer> {
+  return req(`/retainer/${token}`);
+}
+
 export function submitClientTask(token: string, data: { title: string; description?: string; milestone_id?: string }): Promise<Task> {
   return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
 }
@@ -625,4 +632,73 @@ export function removeCachedOpportunity(id: string) {
     cacheKeys.opportunities,
     list.filter((o) => o.id !== id),
   );
+}
+
+// Network contacts
+export function getNetworkContacts(): Promise<NetworkContact[]> {
+  return cachedFetch(cacheKeys.networkContacts, () => req("/network"));
+}
+
+function patchNetworkCache(updated: NetworkContact) {
+  const current = getCached<NetworkContact[]>(cacheKeys.networkContacts);
+  if (!current) {
+    invalidateCache(cacheKeys.networkContacts);
+    return;
+  }
+  setCached(
+    cacheKeys.networkContacts,
+    current.map((row) => (row.id === updated.id ? updated : row)),
+  );
+}
+
+function removeNetworkFromCache(id: string) {
+  const current = getCached<NetworkContact[]>(cacheKeys.networkContacts);
+  if (!current) {
+    invalidateCache(cacheKeys.networkContacts);
+    return;
+  }
+  setCached(
+    cacheKeys.networkContacts,
+    current.filter((row) => row.id !== id),
+  );
+}
+
+function addNetworkToCache(created: NetworkContact) {
+  const current = getCached<NetworkContact[]>(cacheKeys.networkContacts);
+  if (!current) {
+    invalidateCache(cacheKeys.networkContacts);
+    return;
+  }
+  setCached(cacheKeys.networkContacts, [created, ...current]);
+}
+
+export function createNetworkContact(
+  data: Partial<NewNetworkContact>,
+): Promise<NetworkContact> {
+  return req<NetworkContact>("/network", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    addNetworkToCache(created);
+    return created;
+  });
+}
+
+export function updateNetworkContact(
+  id: string,
+  data: Partial<NewNetworkContact>,
+): Promise<NetworkContact> {
+  return req<NetworkContact>(`/network/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    patchNetworkCache(updated);
+    return updated;
+  });
+}
+
+export function deleteNetworkContact(id: string): Promise<void> {
+  return req<void>(`/network/${id}`, { method: "DELETE" }).then(() => {
+    removeNetworkFromCache(id);
+  });
 }

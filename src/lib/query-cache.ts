@@ -172,4 +172,5 @@ export const cacheKeys = {
   bunqAccounts: "bunq-accounts",
   slaAgreements: "sla-agreements",
   retainers: "retainers",
+  networkContacts: "network-contacts",
 } as const;

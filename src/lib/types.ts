@@ -41,6 +41,32 @@ export type ActivityType =
 
 export type RetainerType = "none" | "fixed" | "commission";
 
+export type NetworkContactStatus = "active" | "dormant" | "archived";
+
+export interface NetworkContact {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  role?: string | null;
+  linkedin_url?: string | null;
+  notes?: string | null;
+  tags: string[];
+  last_contacted?: string | null;
+  status: NetworkContactStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type NewNetworkContact = Omit<NetworkContact, "id" | "created_at" | "updated_at">;
+
+export const NETWORK_STATUS_LABELS: Record<NetworkContactStatus, string> = {
+  active: "Active",
+  dormant: "Dormant",
+  archived: "Archived",
+};
+
 export type SlaBillingFrequency = "monthly" | "quarterly";
 export type SlaStatus = "active" | "upcoming" | "paused" | "ended";
 
@@ -81,6 +107,8 @@ export interface RetainerAgreement {
   hour_buckets: RetainerHourBucket[];
   /** Local repo folder names that bill to this retainer (future auto-log). */
   linked_repos: string[];
+  /** Unguessable token for the public client hours page. */
+  share_token: string;
   notes?: string | null;
   created_at: string;
   updated_at: string;
@@ -104,6 +132,27 @@ export interface RetainerTimeEntry {
 
 export interface RetainerWithEntries extends RetainerAgreement {
   entries: RetainerTimeEntry[];
+}
+
+/** Client-facing retainer payload — no rates, invoices, or internal notes. */
+export interface PublicRetainerEntry {
+  id: string;
+  hours: number;
+  activity: string;
+  category: string | null;
+  work_date: string | null;
+  week_start: string;
+}
+
+export interface PublicRetainer {
+  client_name: string;
+  status: RetainerStatus;
+  hours_cadence: RetainerHoursCadence;
+  hours_included: number;
+  start_date: string;
+  period_anchor: RetainerPeriodAnchor;
+  hour_buckets: Pick<RetainerHourBucket, "id" | "label">[];
+  entries: PublicRetainerEntry[];
 }
 
 export interface SlaAgreement {

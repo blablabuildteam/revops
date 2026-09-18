@@ -422,6 +422,8 @@ async function _init() {
       `;
       await ensureSlaAgreementsTable();
       await ensureRetainersTable();
+      await ensureTodoAssigneesTable();
+      await ensureNetworkContactsTable();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -678,6 +680,8 @@ async function _init() {
   await ensureAllocationsTable();
   await ensureSlaAgreementsTable();
   await ensureRetainersTable();
+  await ensureTodoAssigneesTable();
+  await ensureNetworkContactsTable();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
@@ -869,6 +873,23 @@ async function ensureSlaAgreementsTable() {
   `;
 }
 
+async function ensureTodoAssigneesTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS todo_assignees (
+      todo_id UUID NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (todo_id, user_id)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS todo_assignees_user_id ON todo_assignees (user_id)`;
+  await sql`
+    INSERT INTO todo_assignees (todo_id, user_id)
+    SELECT id, assignee_id FROM todos
+    WHERE assignee_id IS NOT NULL
+    ON CONFLICT DO NOTHING
+  `;
+}
+
 async function ensureRetainersTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS retainer_agreements (
@@ -904,6 +925,20 @@ async function ensureRetainersTable() {
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS hour_buckets JSONB NOT NULL DEFAULT '[]'::jsonb`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS linked_repos JSONB NOT NULL DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS share_token TEXT`;
+  await sql`
+    UPDATE retainer_agreements
+    SET share_token = encode(gen_random_bytes(16), 'hex')
+    WHERE share_token IS NULL
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS retainer_agreements_share_token_idx
+    ON retainer_agreements (share_token)
+  `;
+  await sql`
+    ALTER TABLE retainer_agreements
+    ALTER COLUMN share_token SET DEFAULT encode(gen_random_bytes(16), 'hex')
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS retainer_time_entries (
@@ -1299,5 +1334,28 @@ async function ensureRetainersTable() {
     VALUES ('retainers_seeded_v1', 'true', now())
     ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
   `;
+}
+
+async function ensureNetworkContactsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS network_contacts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      company TEXT,
+      role TEXT,
+      linkedin_url TEXT,
+      notes TEXT,
+      tags TEXT[] DEFAULT '{}',
+      last_contacted DATE,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'dormant', 'archived')),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS network_contacts_status ON network_contacts (status)`;
+  await sql`CREATE INDEX IF NOT EXISTS network_contacts_name ON network_contacts (name)`;
 }
 

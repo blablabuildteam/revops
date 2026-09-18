@@ -9,6 +9,7 @@ import {
   getCompanies,
   getFinanceDeals,
   getFinanceSummary,
+  getNetworkContacts,
   getOpportunities,
   getProjects,
   getRetainers,
@@ -26,6 +27,7 @@ import type {
   Allocation,
   Company,
   FinanceDeal,
+  NetworkContact,
   Opportunity,
   RetainerWithEntries,
   SlaAgreement,
@@ -92,4 +94,8 @@ export function useBunqTotals() {
 
 export function useBunqPots() {
   return useCachedQuery<BunqPots>(cacheKeys.bunqAccounts, getBunqPots);
+}
+
+export function useNetworkContacts() {
+  return useCachedQuery<NetworkContact[]>(cacheKeys.networkContacts, getNetworkContacts);
 }
