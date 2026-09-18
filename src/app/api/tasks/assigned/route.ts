@@ -45,7 +45,13 @@ export async function GET(req: NextRequest) {
       LEFT JOIN milestones m ON m.id = t.milestone_id
       WHERE
         t.approved = true
-        AND (COALESCE(${assigneeName}, '') = '' OR t.assignee = ${assigneeName})
+        AND (
+          COALESCE(${assigneeName}, '') = ''
+          OR t.assignee = ${assigneeName}
+          OR t.assignee LIKE ${`${assigneeName ?? ""} +%`}
+          OR t.assignee LIKE ${`%+ ${assigneeName ?? ""}`}
+          OR t.assignee LIKE ${`%+ ${assigneeName ?? ""} +%`}
+        )
         AND (COALESCE(${company}, '') = '' OR c.id::text = ${company})
         AND (
           COALESCE(${status}, '') = ''

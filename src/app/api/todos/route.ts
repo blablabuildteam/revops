@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 import { resolveSessionUser } from "@/lib/auth";
-
-async function fetchTodo(id: string) {
-  const { rows } = await sql`
-    SELECT
-      t.*,
-      u.name AS assignee_name, u.email AS assignee_email,
-      c.name AS company_name, c.logo_url AS company_logo_url,
-      p.name AS project_name,
-      pc.name AS project_company_name, pc.logo_url AS project_company_logo_url
-    FROM todos t
-    LEFT JOIN users u ON u.id = t.assignee_id
-    LEFT JOIN companies c ON c.id = t.company_id
-    LEFT JOIN projects p ON p.id = t.project_id
-    LEFT JOIN companies pc ON pc.id = p.company_id
-    WHERE t.id = ${id}
-  `;
-  return rows[0] ?? null;
-}
+import {
+  fetchTodo,
+  listTodos,
+  replaceTodoAssignees,
+  resolveAssigneeIds,
+} from "@/lib/todos";
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,27 +16,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") || null;
     const company = searchParams.get("company") || null;
 
-    const { rows } = await sql`
-      SELECT
-        t.*,
-        u.name AS assignee_name, u.email AS assignee_email,
-        c.name AS company_name, c.logo_url AS company_logo_url,
-        p.name AS project_name,
-        pc.name AS project_company_name, pc.logo_url AS project_company_logo_url
-      FROM todos t
-      LEFT JOIN users u ON u.id = t.assignee_id
-      LEFT JOIN companies c ON c.id = t.company_id
-      LEFT JOIN projects p ON p.id = t.project_id
-      LEFT JOIN companies pc ON pc.id = p.company_id
-      WHERE
-        (COALESCE(${assignee}, '') = '' OR u.id::text = ${assignee})
-        AND (COALESCE(${status}, '') = '' OR t.status = ${status})
-        AND (COALESCE(${company}, '') = '' OR t.company_id::text = ${company})
-      ORDER BY
-        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-        t.due_date ASC NULLS LAST,
-        t.created_at DESC
-    `;
+    const rows = await listTodos({ assignee, status, company });
     return NextResponse.json(rows);
   } catch (err) {
     console.error(err);
@@ -71,6 +39,7 @@ export async function POST(req: NextRequest) {
       status,
       priority,
       assignee_id,
+      assignee_ids,
       company_id,
       project_id,
       due_date,
@@ -80,8 +49,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
 
-    const resolvedAssignee =
-      assignee_id === null ? null : (assignee_id || user.id);
+    const resolvedAssignees = Array.isArray(assignee_ids)
+      ? await resolveAssigneeIds(assignee_ids)
+      : assignee_id === null
+        ? []
+        : await resolveAssigneeIds([assignee_id || user.id]);
     const resolvedStatus =
       status === "backlog" || status === "in_progress" || status === "done"
         ? status
@@ -96,7 +68,7 @@ export async function POST(req: NextRequest) {
         ${description?.trim() || null},
         ${resolvedStatus},
         ${priority ?? "low"},
-        ${resolvedAssignee},
+        ${resolvedAssignees[0] ?? null},
         ${company_id ?? null},
         ${project_id ?? null},
         ${due_date ?? null},
@@ -104,6 +76,8 @@ export async function POST(req: NextRequest) {
       )
       RETURNING id
     `;
+
+    await replaceTodoAssignees(rows[0].id, resolvedAssignees);
 
     const todo = await fetchTodo(rows[0].id);
     return NextResponse.json(todo, { status: 201 });

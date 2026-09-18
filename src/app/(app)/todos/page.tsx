@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Plus, CheckCircle2, Trash2,
-  User, Building2, FolderKanban, ArrowUpDown,
+  Building2, FolderKanban, ArrowUpDown,
   ChevronDown, ChevronRight, ListTodo, ArrowLeft, Search,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,17 +28,20 @@ import { createCompany, createTask, getCompanies, getProject, getProjects, getUs
 import { Company, Milestone, Project, Task } from "@/lib/types";
 import { toDateInputValue } from "@/lib/format";
 import { matchesTaskSearch, normalizeTaskSearchQuery } from "@/lib/task-search";
+import { formatAssigneeNames, todoAssigneeIds } from "@/lib/todo-assignees";
 import {
   sortTodos, todoSortToBoardSortKey, TODO_SORT_LABELS, type TodoSortKey,
 } from "@/lib/todo-sort";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { ProjectTaskBoardPanel } from "@/components/project-task-board";
+import { TodoAssigneePicker, TodoAssigneeSelect } from "@/components/todo-assignee-picker";
 import { useSession } from "@/components/session-provider";
 import { cacheKeys, getCached, invalidateTaskLists, setCached } from "@/lib/query-cache";
 import { useMutationFeedback, useUndoToast } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
+import { useUsers } from "@/hooks/use-api-data";
 
-interface TodoUser { id: string; email: string; name: string }
+interface TodoUser { id: string; email: string; name: string; avatar_url?: string | null }
 interface Todo {
   id: string;
   title: string;
@@ -47,6 +50,8 @@ interface Todo {
   priority: Priority;
   assignee_id?: string;
   assignee_name?: string;
+  assignee_ids?: string[];
+  assignees?: { id: string; name: string; email?: string; avatar_url?: string | null }[];
   company_id?: string;
   company_name?: string;
   company_logo_url?: string;
@@ -227,7 +232,7 @@ function TodoFormDialog({
   const boardMode = !!defaultProjectId;
   const [form, setForm] = useState({
     title: "", description: "", status: "open" as TodoStatus, priority: "low",
-    assignee_id: "",
+    assignee_ids: [] as string[],
     company_id: "",
     project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
   });
@@ -285,7 +290,7 @@ function TodoFormDialog({
         description: todo.description ?? "",
         status: todo.status,
         priority: todo.priority,
-        assignee_id: todo.assignee_id ?? "",
+        assignee_ids: todoAssigneeIds(todo),
         company_id: todo.company_id ?? "",
         project_id: "",
         milestone_id: "",
@@ -295,7 +300,7 @@ function TodoFormDialog({
     }
     setForm({
       title: "", description: "", status: "open", priority: "low",
-      assignee_id: currentUser?.id ?? "",
+      assignee_ids: currentUser?.id ? [currentUser.id] : [],
       company_id: defaultCompanyId ?? "",
       project_id: defaultProjectId ?? "", milestone_id: "", due_date: "",
     });
@@ -355,10 +360,14 @@ function TodoFormDialog({
     setLoading(true);
     setError("");
     try {
-      const assigneeName = form.assignee_id
-        ? (people.find((u) => u.id === form.assignee_id)?.name
-          ?? (currentUser?.id === form.assignee_id ? currentUser.name : null))
-        : null;
+      const assigneeName = formatAssigneeNames(
+        form.assignee_ids.map((id) => {
+          const person = people.find((u) => u.id === id);
+          if (person) return person;
+          if (currentUser?.id === id) return currentUser;
+          return { name: "" };
+        }),
+      ) || null;
 
       // Project group “Add task” still lands on the project board.
       if (boardMode && form.project_id) {
@@ -388,10 +397,8 @@ function TodoFormDialog({
         description: form.description,
         status: form.status,
         priority: form.priority,
-        assignee_id:
-          form.assignee_id === ""
-            ? null
-            : (form.assignee_id || currentUser?.id || null),
+        assignee_ids: form.assignee_ids,
+        assignee_id: form.assignee_ids[0] ?? null,
         company_id: form.company_id || null,
         project_id: null,
         due_date: form.due_date || null,
@@ -419,6 +426,7 @@ function TodoFormDialog({
               description: todo.description ?? null,
               status: todo.status,
               priority: todo.priority,
+              assignee_ids: todoAssigneeIds(todo),
               assignee_id: todo.assignee_id ?? null,
               company_id: todo.company_id ?? null,
               project_id: null,
@@ -459,7 +467,7 @@ function TodoFormDialog({
               placeholder="Optional details..."
               rows={2} className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 resize-none" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Priority</Label>
               <Select value={form.priority} onValueChange={(v) => s("priority", v ?? "low")}>
@@ -476,19 +484,11 @@ function TodoFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-neutral-400 text-xs">Assigned to</Label>
-              <Select value={form.assignee_id || "none"} onValueChange={(v) => s("assignee_id", v === "none" ? "" : (v ?? ""))}>
-                <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100">
-                  <SelectValue placeholder="Choose person">
-                    {assigneeLabel(people, form.assignee_id, currentUser)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent className="bg-neutral-800 border-neutral-700">
-                  <SelectItem value="none" className="text-neutral-400">Nobody</SelectItem>
-                  {people.map((u) => (
-                    <SelectItem key={u.id} value={u.id} className="text-neutral-100">{u.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TodoAssigneePicker
+                people={people}
+                selectedIds={form.assignee_ids}
+                onChange={(ids) => setForm((f) => ({ ...f, assignee_ids: ids }))}
+              />
             </div>
           </div>
           {boardMode ? (
@@ -751,6 +751,75 @@ function useTodoStatusChange(todo: Todo, onUpdate: (t: Todo) => void) {
   return { changeStatus };
 }
 
+/** Shared inline assignee control for both to-do row variants. */
+function TodoAssignees({
+  todo,
+  onUpdate,
+  className,
+}: {
+  todo: Todo;
+  onUpdate: (t: Todo) => void;
+  className?: string;
+}) {
+  const { data: users = [] } = useUsers();
+  const patchTodo = useUndoablePatch<Todo>();
+  const selectedIds = todoAssigneeIds(todo);
+  const people = assigneeOptions(
+    users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      avatar_url: u.avatar_url,
+    })),
+    null,
+  );
+  for (const assignee of todo.assignees ?? []) {
+    if (!people.some((person) => person.id === assignee.id)) {
+      people.push({
+        id: assignee.id,
+        email: assignee.email ?? "",
+        name: assignee.name,
+        avatar_url: assignee.avatar_url,
+      });
+    }
+  }
+
+  function commit(ids: string[]) {
+    const assignees = ids.map((id) => {
+      const person =
+        people.find((u) => u.id === id) ??
+        todo.assignees?.find((a) => a.id === id);
+      return {
+        id,
+        name: person?.name ?? "",
+        email: person && "email" in person ? person.email : undefined,
+        avatar_url: person?.avatar_url,
+      };
+    });
+    void patchTodo({
+      item: { ...todo, assignee_ids: selectedIds },
+      patch: {
+        assignee_ids: ids,
+        assignees,
+        assignee_id: ids[0] ?? undefined,
+        assignee_name: formatAssigneeNames(assignees) || undefined,
+      },
+      apply: (id, patch) => putTodo(id, { assignee_ids: patch.assignee_ids ?? [] }),
+      onSuccess: onUpdate,
+    });
+  }
+
+  return (
+    <TodoAssigneeSelect
+      people={people}
+      selectedIds={selectedIds}
+      label={todo.assignee_name}
+      onChange={commit}
+      className={className}
+    />
+  );
+}
+
 /** Shared inline due-date control for both to-do row variants. */
 function TodoDueDate({
   todo,
@@ -835,11 +904,7 @@ function TodoRow({ todo, onUpdate, onDelete, onEdit }: {
           )}
         </p>
       </button>
-      {todo.assignee_name && (
-        <span className="hidden lg:flex items-center gap-1 text-xs text-neutral-500 shrink-0 max-w-32 truncate">
-          <User className="w-3 h-3 shrink-0" /> {todo.assignee_name}
-        </span>
-      )}
+      <TodoAssignees todo={todo} onUpdate={onUpdate} className="shrink-0" />
       <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[104px] sm:w-[126px]" />
       <PrioritySelect
         priority={todo.priority}
@@ -910,20 +975,14 @@ function TodoCard({ todo, onUpdate, onDelete, onEdit }: {
             <BinaryText text={todo.description} id={`${todo.id}-desc`} />
           </p>
         )}
-        {(todo.assignee_name || todo.company_name) && (
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            {todo.assignee_name && (
-              <span className="flex items-center gap-1 text-xs text-neutral-500">
-                <User className="w-3 h-3" /> {todo.assignee_name}
-              </span>
-            )}
-            {todo.company_name && (
-              <span className="flex items-center gap-1 text-xs text-neutral-500">
-                <Building2 className="w-3 h-3" /> {todo.company_name}
-              </span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <TodoAssignees todo={todo} onUpdate={onUpdate} />
+          {todo.company_name && (
+            <span className="flex items-center gap-1 text-xs text-neutral-500">
+              <Building2 className="w-3 h-3" /> {todo.company_name}
+            </span>
+          )}
+        </div>
       </div>
       <TodoDueDate todo={todo} onUpdate={onUpdate} className="w-[104px] sm:w-[126px]" />
       <PrioritySelect
@@ -1188,6 +1247,7 @@ export default function TodosPage() {
         id: sessionUser.id,
         email: sessionUser.email,
         name: sessionUser.name,
+        avatar_url: sessionUser.avatar_url,
       });
       setFilterAssignee(sessionUser.id);
     }
