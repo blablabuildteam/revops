@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronRight, Search, MoreHorizontal,
 } from "lucide-react";
 import { PrioritySelect } from "@/components/priority-select";
-import { ProjectStatusSelect } from "@/components/project-status-select";
+import { projectStatusTone } from "@/lib/project-status";
 import { TaskSortHeaderButton } from "@/components/task-sort-header-button";
 import { sortTasks, type TaskBoardSortKey } from "@/lib/task-sort";
 import Link from "next/link";
@@ -2175,240 +2175,214 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   return (
     <AssigneeNamesProvider names={boardAssigneeNames}>
     <div className="w-full page-shell space-y-6">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
-        <div className="flex items-center gap-3 min-w-0 sm:gap-4">
-        <Link href="/projects" className="text-neutral-600 hover:text-neutral-300 transition-colors shrink-0">
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
-        {(project.company as { id?: string; logo_url?: string; name?: string })?.name && (
-          <CompanyAvatar
-            id={project.company_id ?? (project.company as { id?: string }).id}
-            name={(project.company as { name?: string }).name!}
-            logoUrl={(project.company as { logo_url?: string }).logo_url}
-            size="lg"
-            uploadable
-            onLogoChange={(logoUrl) => {
-              setProject((prev) =>
-                prev?.company ? { ...prev, company: { ...prev.company, logo_url: logoUrl } } : prev,
-              );
-              const companyId = project.company_id ?? (project.company as { id?: string }).id;
-              if (!companyId) return;
-              const prev = getCached<ProjectWithStats[]>(cacheKeys.projects);
-              if (!prev) return;
-              setCached(
-                cacheKeys.projects,
-                prev.map((p) => {
-                  const id = p.company_id ?? p.company?.id;
-                  if (id !== companyId) return p;
-                  return {
-                    ...p,
-                    company: p.company ? { ...p.company, logo_url: logoUrl } : p.company,
-                  };
-                }),
-              );
-            }}
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold text-neutral-100 flex items-center gap-2 flex-wrap">
-            {editingName ? (
-              <Input
-                ref={nameInputRef}
-                autoFocus
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-                onBlur={() => { void commitProjectName(); }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void commitProjectName();
-                  }
-                  if (e.key === "Escape") {
-                    setNameValue(project.name);
-                    setEditingName(false);
-                  }
+      <header className="sticky top-0 z-20 -mx-4 -mt-5 border-b border-neutral-800/80 bg-neutral-950/90 px-4 pt-5 pb-3 backdrop-blur-md sm:-mx-6 sm:-mt-6 sm:px-6 sm:pt-6 lg:-mx-8 lg:-mt-8 lg:px-8 lg:pt-8">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <Link
+              href="/projects"
+              aria-label="Back to projects"
+              className="shrink-0 text-neutral-600 transition-colors hover:text-neutral-300"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            {(project.company as { id?: string; logo_url?: string; name?: string })?.name && (
+              <CompanyAvatar
+                id={project.company_id ?? (project.company as { id?: string }).id}
+                name={(project.company as { name?: string }).name!}
+                logoUrl={(project.company as { logo_url?: string }).logo_url}
+                size="lg"
+                uploadable
+                onLogoChange={(logoUrl) => {
+                  setProject((prev) =>
+                    prev?.company ? { ...prev, company: { ...prev.company, logo_url: logoUrl } } : prev,
+                  );
+                  const companyId = project.company_id ?? (project.company as { id?: string }).id;
+                  if (!companyId) return;
+                  const prev = getCached<ProjectWithStats[]>(cacheKeys.projects);
+                  if (!prev) return;
+                  setCached(
+                    cacheKeys.projects,
+                    prev.map((p) => {
+                      const id = p.company_id ?? p.company?.id;
+                      if (id !== companyId) return p;
+                      return {
+                        ...p,
+                        company: p.company ? { ...p.company, logo_url: logoUrl } : p.company,
+                      };
+                    }),
+                  );
                 }}
-                className="h-8 max-w-md text-xl font-semibold bg-neutral-800 border-neutral-600 text-neutral-100"
               />
-            ) : (
-              <button
-                type="button"
-                onClick={startEditingName}
-                className="text-left hover:text-white transition-colors rounded px-1 -mx-1 cursor-text"
-                title="Click to rename"
-              >
-                {project.name}
-              </button>
             )}
-            {project.edit_token && (
-              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-neutral-300">
-                External
-              </span>
-            )}
-          </h1>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <p className="text-sm text-neutral-600">
-              {(project.company as { name?: string })?.name || "—"}
-              {project.client_name && ` · ${project.client_name}`}
-            </p>
-            <PrioritySelect
-              priority={project.priority ?? "low"}
-              onChange={(next) => {
-                void patchProject({
-                  item: project,
-                  patch: { priority: next },
-                  apply: (id, patch) => updateProject(id, patch),
-                  onSuccess: (updated) => {
-                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
-                  },
-                });
-              }}
-              className="w-[100px]"
-            />
-            <ProjectStatusSelect
-              status={project.status}
-              startDate={project.start_date}
-              endDate={project.end_date}
-              onChange={(next) => {
-                void patchProject({
-                  item: project,
-                  patch: { status: next },
-                  apply: (id, patch) => updateProject(id, patch),
-                  onSuccess: (updated) => {
-                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
-                  },
-                });
-              }}
-              className="w-[10.5rem]"
-            />
-            <div className="flex items-center gap-1">
-            <DatePicker
-              value={toDateInputValue(project.start_date)}
-              placeholder="Start date"
-              size="sm"
-              onChange={(v) => {
-                void patchProject({
-                  item: project,
-                  patch: { start_date: v || null },
-                  apply: (id, patch) => updateProject(id, patch),
-                  onSuccess: (updated) => {
-                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
-                  },
-                });
-              }}
-              className="h-7 w-[8.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
-            />
-            <span className="text-neutral-600 text-xs">–</span>
-            <DatePicker
-              value={toDateInputValue(project.end_date)}
-              placeholder="End date"
-              size="sm"
-              overdue={
-                !!project.end_date &&
-                project.status !== "completed" &&
-                project.status !== "cancelled" &&
-                new Date(project.end_date) < new Date()
-              }
-              onChange={(v) => {
-                void patchProject({
-                  item: project,
-                  patch: { end_date: v || null },
-                  apply: (id, patch) => updateProject(id, patch),
-                  onSuccess: (updated) => {
-                    setProject((prev) => (prev ? { ...prev, ...updated } : prev));
-                  },
-                });
-              }}
-              className="h-7 w-[8.5rem] bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
-            />
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="flex min-w-0 items-baseline gap-2 text-lg font-semibold text-neutral-100 sm:text-xl">
+                {editingName ? (
+                  <Input
+                    ref={nameInputRef}
+                    autoFocus
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    onBlur={() => { void commitProjectName(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void commitProjectName();
+                      }
+                      if (e.key === "Escape") {
+                        setNameValue(project.name);
+                        setEditingName(false);
+                      }
+                    }}
+                    className="h-8 max-w-md text-xl font-semibold bg-neutral-800 border-neutral-600 text-neutral-100"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startEditingName}
+                    className="min-w-0 truncate rounded px-1 -mx-1 text-left cursor-text transition-colors hover:text-white"
+                    title="Click to rename"
+                  >
+                    {project.name}
+                  </button>
+                )}
+                {(project.company as { name?: string })?.name && (
+                  <span className="min-w-0 truncate text-sm font-normal text-neutral-500">
+                    {(project.company as { name?: string }).name}
+                    {project.client_name && ` · ${project.client_name}`}
+                  </span>
+                )}
+              </h1>
+              {project.edit_token && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded bg-neutral-800 border border-neutral-600 text-neutral-300">
+                  External
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <DatePicker
+                value={toDateInputValue(project.start_date)}
+                placeholder="Start date"
+                size="sm"
+                onChange={(v) => {
+                  void patchProject({
+                    item: project,
+                    patch: { start_date: v || null },
+                    apply: (id, patch) => updateProject(id, patch),
+                    onSuccess: (updated) => {
+                      setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                    },
+                  });
+                }}
+                className="h-7 w-auto bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+              />
+              <span className="text-neutral-600 text-xs">–</span>
+              <DatePicker
+                value={toDateInputValue(project.end_date)}
+                placeholder="End date"
+                size="sm"
+                showIcon={false}
+                overdue={
+                  projectStatusTone(project.status, project.start_date, project.end_date) === "overdue"
+                }
+                onChange={(v) => {
+                  void patchProject({
+                    item: project,
+                    patch: { end_date: v || null },
+                    apply: (id, patch) => updateProject(id, patch),
+                    onSuccess: (updated) => {
+                      setProject((prev) => (prev ? { ...prev, ...updated } : prev));
+                    },
+                  });
+                }}
+                className="h-7 w-auto bg-neutral-800/50 border-neutral-700/50 text-neutral-400"
+              />
             </div>
           </div>
-        </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
-          <div className="relative w-full sm:w-52">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search tasks..."
-              className="pl-8 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-xs"
-            />
-          </div>
-          <Button
-            type="button"
-            onClick={openNewTask}
-            className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add task
-          </Button>
-          <Popover>
-            <PopoverTrigger
-              className={`flex items-center gap-2 text-xs border px-3 py-2 rounded-lg transition-colors cursor-pointer ${
-                filters.length > 0
-                  ? "border-[#d4e052]/30 text-[#d4e052] hover:border-[#d4e052]/50"
-                  : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto min-w-[320px] p-3">
-              <TaskFilterBar
-                filters={filters}
-                milestones={project.milestones}
-                onAddFilter={addFilter}
-                onUpdateFilter={updateFilter}
-                onRemoveFilter={removeFilter}
-                onClearFilters={clearFilters}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full min-[480px]:w-52">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-600" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search tasks..."
+                className="pl-8 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-xs"
               />
-            </PopoverContent>
-          </Popover>
-          <button
-            onClick={shareEditAccess}
-            disabled={sharingEdit}
-            className="flex items-center gap-2 text-xs border border-[#d4e052]/30 px-3 py-2 rounded-lg text-[#d4e052] hover:border-[#d4e052]/50 transition-colors disabled:opacity-50"
-          >
-            {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-            {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share"}
-          </button>
-          <Popover>
-            <PopoverTrigger
-              className="flex items-center justify-center text-xs border border-neutral-700 p-2 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors cursor-pointer"
-              aria-label="More actions"
+            </div>
+            <Button
+              type="button"
+              onClick={openNewTask}
+              className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 font-medium gap-2 h-8 text-xs px-3"
             >
-              <MoreHorizontal className="w-3.5 h-3.5" />
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-48 p-1">
-              <button
-                onClick={() => setEditStatusesOpen(true)}
-                className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
+              <Plus className="w-3.5 h-3.5" />
+              Add task
+            </Button>
+            <Popover>
+              <PopoverTrigger
+                className={`inline-flex h-8 items-center gap-2 text-xs border px-3 rounded-lg transition-colors cursor-pointer ${
+                  filters.length > 0
+                    ? "border-[#d4e052]/30 text-[#d4e052] hover:border-[#d4e052]/50"
+                    : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
+                }`}
               >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit statuses
-              </button>
-              {project.edit_token && (
+                <Filter className="w-3.5 h-3.5" />
+                Filter{filters.filter((f) => f.value).length > 0 && ` (${filters.filter((f) => f.value).length})`}
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto min-w-[320px] p-3">
+                <TaskFilterBar
+                  filters={filters}
+                  milestones={project.milestones}
+                  onAddFilter={addFilter}
+                  onUpdateFilter={updateFilter}
+                  onRemoveFilter={removeFilter}
+                  onClearFilters={clearFilters}
+                />
+              </PopoverContent>
+            </Popover>
+            <button
+              onClick={shareEditAccess}
+              disabled={sharingEdit}
+              className="inline-flex h-8 items-center gap-2 text-xs border border-[#d4e052]/30 px-3 rounded-lg text-[#d4e052] hover:border-[#d4e052]/50 transition-colors disabled:opacity-50"
+            >
+              {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+              {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share"}
+            </button>
+            <Popover>
+              <PopoverTrigger
+                className="inline-flex h-8 w-8 items-center justify-center text-xs border border-neutral-700 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors cursor-pointer"
+                aria-label="More actions"
+              >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-1">
                 <button
-                  onClick={removeEditAccess}
-                  disabled={revokingEdit}
-                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-red-400 hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                  onClick={() => setEditStatusesOpen(true)}
+                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
                 >
-                  <UserX className="w-3.5 h-3.5" />
-                  {revokingEdit ? "Removing..." : "Remove board access"}
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit statuses
                 </button>
-              )}
-              <button
-                onClick={requestDeleteProject}
-                className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-red-400 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete project
-              </button>
-            </PopoverContent>
-          </Popover>
+                {project.edit_token && (
+                  <button
+                    onClick={removeEditAccess}
+                    disabled={revokingEdit}
+                    className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-red-400 hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                    {revokingEdit ? "Removing..." : "Remove board access"}
+                  </button>
+                )}
+                <button
+                  onClick={requestDeleteProject}
+                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete project
+                </button>
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
-      </div>
+      </header>
 
       {confirmDialog}
 
