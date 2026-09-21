@@ -39,11 +39,17 @@ export async function PUT(
         ? String(body.week_start).slice(0, 10)
         : null;
 
+    const category =
+      body.category !== undefined
+        ? body.category?.trim() || null
+        : existing.category;
+
     const { rows } = await sql`
       UPDATE retainer_time_entries SET
         week_start = COALESCE(${weekStart}, week_start),
         hours = ${hours},
         activity = COALESCE(${body.activity?.trim() ?? null}, activity),
+        category = ${category},
         logged_by = ${body.logged_by !== undefined ? (body.logged_by?.trim() || null) : existing.logged_by},
         work_date = ${workDate !== undefined ? workDate : existing.work_date},
         updated_at = now()

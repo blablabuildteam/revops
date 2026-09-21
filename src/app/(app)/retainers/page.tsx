@@ -9,24 +9,16 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Pencil,
   Plus,
   Repeat,
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/date-picker";
 import { HoursMeter } from "@/components/hours-meter";
+import { RetainerLogForm } from "@/components/retainer-log-form";
 import { SlackChannelBinder } from "@/components/slack-channel-picker";
 import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useUndoToast } from "@/components/mutation-provider";
 import { useRetainers } from "@/hooks/use-api-data";
 import {
@@ -38,20 +30,26 @@ import {
 import { formatCurrency } from "@/lib/format";
 import {
   addDays,
+  addMonths,
   currentBillingPeriod,
   defaultWorkDateForWeek,
+  entryInMonth,
   entryInPeriod,
   entryInWeek,
   estimateInvoiceAmount,
   flexHoursBalance,
+  formatDayLabel,
+  formatMonthLabel,
   formatWeekLabel,
   hoursInBillingPeriod,
   includedHoursForPeriod,
   includedHoursForWeek,
   listRetainerBillingPeriods,
+  monthKeyOf,
   sumHours,
   weekStartFromDateOnly,
   weekStartOf,
+  weeksInMonth,
 } from "@/lib/retainers";
 import {
   RetainerTimeEntry,
@@ -69,20 +67,28 @@ const STATUS_LABELS = {
 
 function RetainerCard({
   retainer,
-  weekStart,
+  monthKey,
 }: {
   retainer: RetainerWithEntries;
-  weekStart: string;
+  monthKey: string;
 }) {
   const withUndo = useUndoToast();
+  const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [hours, setHours] = useState("");
   const [activity, setActivity] = useState("");
   const [workDate, setWorkDate] = useState(() =>
-    defaultWorkDateForWeek(weekStart),
+    defaultWorkDateForWeek(weekStartOf()),
   );
   const [category, setCategory] = useState<string>("");
   const [loggedBy, setLoggedBy] = useState<string>(TASK_ASSIGNEES[0]);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState("");
+  const [editActivity, setEditActivity] = useState("");
+  const [editWorkDate, setEditWorkDate] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editLoggedBy, setEditLoggedBy] = useState<string>(TASK_ASSIGNEES[0]);
+  const [editSaving, setEditSaving] = useState(false);
   const [newRepo, setNewRepo] = useState("");
   const [repoBusy, setRepoBusy] = useState(false);
 
@@ -95,10 +101,15 @@ function RetainerCard({
     [retainer],
   );
 
-  const weekEntries = useMemo(
-    () => (retainer.entries ?? []).filter((e) => entryInWeek(e, weekStart)),
-    [retainer.entries, weekStart],
+  // Get all weeks that overlap this month
+  const weeks = useMemo(() => weeksInMonth(monthKey), [monthKey]);
+
+  // Entries for this month
+  const monthEntries = useMemo(
+    () => (retainer.entries ?? []).filter((e) => entryInMonth(e, monthKey)),
+    [retainer.entries, monthKey],
   );
+
   const periodEntries = useMemo(
     () =>
       period
@@ -107,7 +118,7 @@ function RetainerCard({
     [retainer.entries, period],
   );
 
-  const weekHours = sumHours(weekEntries);
+  const monthHours = sumHours(monthEntries);
   const periodHours = sumHours(periodEntries);
   const weekCap = includedHoursForWeek(retainer);
   const periodCap = includedHoursForPeriod(retainer);
@@ -116,23 +127,35 @@ function RetainerCard({
   const invoiced = new Set(retainer.invoiced_periods ?? []);
 
   useEffect(() => {
-    setWorkDate(defaultWorkDateForWeek(weekStart));
-  }, [weekStart]);
+    setEditingId(null);
+    // Auto-expand current week if it's in this month
+    const currentWeek = weekStartOf();
+    if (weeks.includes(currentWeek)) {
+      setExpandedWeek(currentWeek);
+    } else {
+      setExpandedWeek(weeks[weeks.length - 1] ?? null);
+    }
+  }, [monthKey, weeks]);
 
-  // Allow logging in any week that overlaps/starts after the retainer start
-  // (not vs week Monday — mid-week starts like Adsomnia 15th broke that).
-  const weekEnd = addDays(weekStart, 6);
+  // Update workDate when expanded week changes
+  useEffect(() => {
+    if (expandedWeek) {
+      setWorkDate(defaultWorkDateForWeek(expandedWeek));
+    }
+  }, [expandedWeek]);
+
+  // Check if logging is allowed for the current retainer
   const startOk = /^\d{4}-\d{2}-\d{2}$/.test(retainer.start_date);
-  const canLog =
+  const canLogAny =
     retainer.status !== "ended" &&
-    retainer.status !== "paused" &&
-    (!startOk || retainer.start_date <= weekEnd);
+    retainer.status !== "paused";
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (!expandedWeek) return;
     const h = parseFloat(hours);
     if (!activity.trim() || !Number.isFinite(h) || h <= 0) return;
-    const date = workDate || defaultWorkDateForWeek(weekStart);
+    const date = workDate || defaultWorkDateForWeek(expandedWeek);
     setSaving(true);
     let createdId: string | null = null;
     try {
@@ -162,32 +185,58 @@ function RetainerCard({
     }
   }
 
-  async function handleWorkDateChange(
-    entry: RetainerTimeEntry,
-    next: string,
-  ) {
-    if ((entry.work_date ?? "") === next) return;
-    await withUndo({
-      label: next ? "Datum bijgewerkt" : "Datum verwijderd",
-      run: async () => {
-        await updateRetainerTimeEntry(entry.id, {
-          work_date: next || null,
-          week_start: next
-            ? weekStartFromDateOnly(next)
-            : entry.week_start,
-        });
-      },
-      undo: async () => {
-        await updateRetainerTimeEntry(entry.id, {
-          work_date: entry.work_date ?? null,
-          week_start: entry.week_start,
-        });
-      },
-    });
+  function startEdit(entry: RetainerTimeEntry, weekStart: string) {
+    setEditingId(entry.id);
+    setEditHours(String(entry.hours));
+    setEditActivity(entry.activity);
+    setEditWorkDate(entry.work_date || defaultWorkDateForWeek(weekStart));
+    setEditCategory(entry.category ?? "");
+    setEditLoggedBy(entry.logged_by || TASK_ASSIGNEES[0]);
+  }
+
+  async function handleUpdate(e: React.FormEvent, weekStart: string) {
+    e.preventDefault();
+    if (!editingId) return;
+    const allEntries = retainer.entries ?? [];
+    const entry = allEntries.find((item) => item.id === editingId);
+    if (!entry) return;
+    const h = parseFloat(editHours);
+    if (!editActivity.trim() || !Number.isFinite(h) || h <= 0) return;
+    const date = editWorkDate || defaultWorkDateForWeek(weekStart);
+    setEditSaving(true);
+    try {
+      await withUndo({
+        label: "Uren bijgewerkt",
+        run: async () => {
+          await updateRetainerTimeEntry(entry.id, {
+            hours: h,
+            activity: editActivity.trim(),
+            category: editCategory || null,
+            logged_by: editLoggedBy,
+            work_date: date,
+            week_start: weekStartFromDateOnly(date),
+          });
+          setEditingId(null);
+        },
+        undo: async () => {
+          await updateRetainerTimeEntry(entry.id, {
+            hours: entry.hours,
+            activity: entry.activity,
+            category: entry.category,
+            logged_by: entry.logged_by,
+            work_date: entry.work_date ?? null,
+            week_start: entry.week_start,
+          });
+        },
+      });
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   async function handleDelete(entryId: string) {
-    const snapshot = weekEntries.find((e) => e.id === entryId);
+    const allEntries = retainer.entries ?? [];
+    const snapshot = allEntries.find((e) => e.id === entryId);
     await withUndo({
       label: "Regel verwijderd",
       run: async () => {
@@ -205,6 +254,15 @@ function RetainerCard({
         });
       },
     });
+  }
+
+  function getWeekEntries(weekStart: string) {
+    return (retainer.entries ?? []).filter((e) => entryInWeek(e, weekStart));
+  }
+
+  function canLogForWeek(weekStart: string) {
+    const weekEnd = addDays(weekStart, 6);
+    return canLogAny && (!startOk || retainer.start_date <= weekEnd);
   }
 
   async function togglePeriodInvoiced(periodKey: string) {
@@ -303,10 +361,6 @@ function RetainerCard({
                 : `${retainer.hours_included}u / maand`}
               {" · "}
               {formatCurrency(retainer.hourly_rate)} / uur
-              {" · "}
-              {retainer.period_anchor === "start_day"
-                ? "rolling vanaf startdag"
-                : "kalendermaand"}
             </p>
             {retainer.notes && (
               <p className="text-[11px] text-neutral-600 mt-1">{retainer.notes}</p>
@@ -378,7 +432,7 @@ function RetainerCard({
             )}
           </div>
           <div className="w-full sm:w-56 space-y-3">
-            <HoursMeter label="Week" used={weekHours} cap={weekCap} />
+            <HoursMeter label="Deze maand" used={monthHours} cap={periodCap} />
             {period && (
               <HoursMeter
                 label="Periode"
@@ -465,163 +519,203 @@ function RetainerCard({
         </div>
       )}
 
+      {/* Weekly breakdowns */}
       <div className="px-4 py-3 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-          <p className="text-xs text-neutral-500 uppercase tracking-wide">
-            Uren loggen · week {formatWeekLabel(weekStart)}
-          </p>
-          <HoursMeter
-            label="Deze week"
-            used={weekHours}
-            cap={weekCap}
-            className="sm:w-48"
-          />
-        </div>
+        <p className="text-xs text-neutral-500 uppercase tracking-wide">
+          Weken in {formatMonthLabel(monthKey)}
+        </p>
 
-        {canLog ? (
-          <form
-            onSubmit={(e) => void handleAdd(e)}
-            className="rounded-lg border border-[#d4e052]/25 bg-[#d4e052]/5 p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[5.5rem_9.5rem_1fr_9rem_8rem_auto] gap-2 items-end"
-          >
-            <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Uren</Label>
-              <Input
-                type="number"
-                step="0.25"
-                min="0.25"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-                placeholder="8"
-                className="bg-neutral-900 border-neutral-700 h-9"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Datum</Label>
-              <DatePicker
-                value={workDate}
-                onChange={setWorkDate}
-                placeholder="Kies datum"
-                className="h-9 bg-neutral-900 border-neutral-700 text-neutral-100"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Wat gedaan?</Label>
-              <Input
-                value={activity}
-                onChange={(e) => setActivity(e.target.value)}
-                placeholder="bijv. deleted-users kickoff"
-                className="bg-neutral-900 border-neutral-700 h-9"
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Bucket</Label>
-              <Select
-                value={category || "__none__"}
-                onValueChange={(v) =>
-                  setCategory(!v || v === "__none__" ? "" : v)
-                }
-              >
-                <SelectTrigger className="w-full bg-neutral-900 border-neutral-700 h-9">
-                  <SelectValue placeholder="Optioneel">
-                    {category || "Geen"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false} align="start">
-                  <SelectItem value="__none__">Geen</SelectItem>
-                  {(retainer.hour_buckets ?? []).map((b) => (
-                    <SelectItem key={b.id} value={b.label}>
-                      {b.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px] text-neutral-500">Door</Label>
-              <Select
-                value={loggedBy}
-                onValueChange={(v) => setLoggedBy(v ?? TASK_ASSIGNEES[0])}
-              >
-                <SelectTrigger className="w-full bg-neutral-900 border-neutral-700 h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent alignItemWithTrigger={false} align="start">
-                  {TASK_ASSIGNEES.map((name) => (
-                    <SelectItem key={name} value={name}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="submit"
-              disabled={saving}
-              className="h-9 bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Log uren
-            </Button>
-          </form>
-        ) : (
-          <p className="text-xs text-neutral-600">
-            {retainer.status === "paused" || retainer.status === "ended"
-              ? "Deze retainer is niet actief."
-              : startOk && retainer.start_date > weekEnd
-                ? `Logging start vanaf ${retainer.start_date}.`
-                : "Logging niet beschikbaar voor deze week."}
-          </p>
-        )}
+        <div className="space-y-2">
+          {weeks.map((weekStart) => {
+            const weekEntries = getWeekEntries(weekStart);
+            const weekHours = sumHours(weekEntries);
+            const isExpanded = expandedWeek === weekStart;
+            const canLog = canLogForWeek(weekStart);
+            const isCurrentWeek = weekStart === weekStartOf();
 
-        {weekEntries.length === 0 ? (
-          <p className="text-sm text-neutral-600 py-1">
-            Nog geen uren deze week — vul hierboven in en klik Log uren.
-          </p>
-        ) : (
-          <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
-            {[...weekEntries]
-              .sort((a, b) => {
-                const da = a.work_date || a.week_start || "";
-                const db = b.work_date || b.week_start || "";
-                if (da !== db) return da.localeCompare(db);
-                return (a.created_at || "").localeCompare(b.created_at || "");
-              })
-              .map((entry) => (
-              <li
-                key={entry.id}
-                className="flex flex-wrap sm:flex-nowrap items-start gap-3 px-3 py-2.5 bg-neutral-950/30"
+            return (
+              <div
+                key={weekStart}
+                className="border border-neutral-800 rounded-lg overflow-hidden"
               >
-                <DatePicker
-                  value={entry.work_date ?? ""}
-                  onChange={(next) => void handleWorkDateChange(entry, next)}
-                  placeholder="Datum"
-                  size="sm"
-                  className="h-8 w-[8.75rem] shrink-0 bg-neutral-900 border-neutral-700 text-neutral-200"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-neutral-200">{entry.activity}</p>
-                  <p className="text-[11px] text-neutral-600 mt-0.5">
-                    {entry.logged_by ?? "—"}
-                    {entry.category ? ` · ${entry.category}` : ""}
-                  </p>
-                </div>
-                <span className="font-mono text-sm text-neutral-300 shrink-0">
-                  {Number(entry.hours).toFixed(1)}u
-                </span>
+                {/* Week header - clickable to expand */}
                 <button
                   type="button"
-                  onClick={() => void handleDelete(entry.id)}
-                  className="p-1 text-neutral-700 hover:text-red-400"
-                  title="Verwijderen"
+                  onClick={() => setExpandedWeek(isExpanded ? null : weekStart)}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors",
+                    isExpanded
+                      ? "bg-neutral-800/50"
+                      : "bg-neutral-900/30 hover:bg-neutral-900/50",
+                  )}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2">
+                    <ChevronRight
+                      className={cn(
+                        "w-4 h-4 text-neutral-500 transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                    <span className="text-sm text-neutral-200">
+                      {formatWeekLabel(weekStart)}
+                    </span>
+                    {isCurrentWeek && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#d4e052]/20 text-[#d4e052]">
+                        Nu
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={cn(
+                        "font-mono text-sm tabular-nums",
+                        weekHours > weekCap
+                          ? "text-amber-300"
+                          : weekHours > 0
+                            ? "text-neutral-200"
+                            : "text-neutral-600",
+                      )}
+                    >
+                      {weekHours.toFixed(1)}u
+                    </span>
+                    <span className="text-xs text-neutral-600">
+                      / {weekCap}u
+                    </span>
+                  </div>
                 </button>
-              </li>
-            ))}
-          </ul>
-        )}
+
+                {/* Expanded content */}
+                {isExpanded && (
+                  <div className="border-t border-neutral-800/80 px-3 py-3 space-y-3">
+                    {canLog ? (
+                      <RetainerLogForm
+                        values={{ hours, workDate, activity, category, loggedBy }}
+                        onChange={(patch) => {
+                          if (patch.hours !== undefined) setHours(patch.hours);
+                          if (patch.workDate !== undefined) setWorkDate(patch.workDate);
+                          if (patch.activity !== undefined) setActivity(patch.activity);
+                          if (patch.category !== undefined) setCategory(patch.category);
+                          if (patch.loggedBy !== undefined) setLoggedBy(patch.loggedBy);
+                        }}
+                        buckets={retainer.hour_buckets ?? []}
+                        saving={saving}
+                        submitLabel="Log uren"
+                        submitIcon={Plus}
+                        onSubmit={(e) => void handleAdd(e)}
+                      />
+                    ) : (
+                      <p className="text-xs text-neutral-600">
+                        {retainer.status === "paused" || retainer.status === "ended"
+                          ? "Deze retainer is niet actief."
+                          : `Logging start vanaf ${retainer.start_date}.`}
+                      </p>
+                    )}
+
+                    {weekEntries.length === 0 ? (
+                      <p className="text-sm text-neutral-600 py-1">
+                        Nog geen uren deze week.
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
+                        {[...weekEntries]
+                          .sort((a, b) => {
+                            const da = a.work_date || a.week_start || "";
+                            const db = b.work_date || b.week_start || "";
+                            if (da !== db) return da.localeCompare(db);
+                            return (a.created_at || "").localeCompare(b.created_at || "");
+                          })
+                          .map((entry) => (
+                          <li
+                            key={entry.id}
+                            className="bg-neutral-950/30"
+                          >
+                            {editingId === entry.id ? (
+                              <div className="p-2.5">
+                                <RetainerLogForm
+                                  values={{
+                                    hours: editHours,
+                                    workDate: editWorkDate,
+                                    activity: editActivity,
+                                    category: editCategory,
+                                    loggedBy: editLoggedBy,
+                                  }}
+                                  onChange={(patch) => {
+                                    if (patch.hours !== undefined) setEditHours(patch.hours);
+                                    if (patch.workDate !== undefined) {
+                                      setEditWorkDate(patch.workDate);
+                                    }
+                                    if (patch.activity !== undefined) {
+                                      setEditActivity(patch.activity);
+                                    }
+                                    if (patch.category !== undefined) {
+                                      setEditCategory(patch.category);
+                                    }
+                                    if (patch.loggedBy !== undefined) {
+                                      setEditLoggedBy(patch.loggedBy);
+                                    }
+                                  }}
+                                  buckets={retainer.hour_buckets ?? []}
+                                  saving={editSaving}
+                                  submitLabel="Opslaan"
+                                  submitIcon={Check}
+                                  onSubmit={(e) => void handleUpdate(e, weekStart)}
+                                  onCancel={() => setEditingId(null)}
+                                  autoFocus
+                                  extraActions={
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => setEditingId(null)}
+                                      className="h-9 border-neutral-700 bg-neutral-900 text-neutral-200 hover:bg-neutral-800"
+                                    >
+                                      Annuleren
+                                    </Button>
+                                  }
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap sm:flex-nowrap items-start gap-3 px-3 py-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => startEdit(entry, weekStart)}
+                                  title="Klik om te bewerken"
+                                  className="flex-1 min-w-0 flex flex-wrap sm:flex-nowrap items-start gap-3 text-left rounded-md -m-1 p-1 hover:bg-neutral-900/50 transition-colors group"
+                                >
+                                  <span className="text-xs text-neutral-500 font-mono w-[8.75rem] shrink-0 pt-1">
+                                    {formatDayLabel(entry.work_date || entry.week_start)}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-neutral-200">{entry.activity}</p>
+                                    <p className="text-[11px] text-neutral-600 mt-0.5">
+                                      {entry.logged_by ?? "—"}
+                                      {entry.category ? ` · ${entry.category}` : ""}
+                                    </p>
+                                  </div>
+                                  <span className="font-mono text-sm text-neutral-300 shrink-0 pt-0.5">
+                                    {Number(entry.hours).toFixed(1)}u
+                                  </span>
+                                  <Pencil className="w-3.5 h-3.5 text-neutral-700 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 mt-1 shrink-0" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDelete(entry.id)}
+                                  className="p-1 text-neutral-700 hover:text-red-400"
+                                  title="Verwijderen"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -630,7 +724,7 @@ function RetainerCard({
 export default function RetainersPage() {
   const { data: retainers = [], isLoading } = useRetainers();
   const loading = isLoading && retainers.length === 0;
-  const [weekStart, setWeekStart] = useState(() => weekStartOf());
+  const [monthKey, setMonthKey] = useState(() => monthKeyOf());
 
   return (
     <div className="page-shell space-y-6">
@@ -640,32 +734,32 @@ export default function RetainersPage() {
             Retainers
           </h1>
           <p className="text-sm text-neutral-500 mt-0.5">
-            Uren per week · activiteiten · factuur achteraf afvinken
+            Maandoverzicht met wekelijkse breakdown
           </p>
         </div>
         <div className="flex items-center gap-1 border border-neutral-800 rounded-lg bg-neutral-900/40 px-1">
           <button
             type="button"
-            onClick={() => setWeekStart((w) => addDays(w, -7))}
+            onClick={() => setMonthKey((m) => addMonths(m, -1))}
             className="p-2 text-neutral-500 hover:text-neutral-200"
-            aria-label="Vorige week"
+            aria-label="Vorige maand"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm text-neutral-200 min-w-[10rem] text-center px-2">
-            {formatWeekLabel(weekStart)}
+          <span className="text-sm text-neutral-200 min-w-[10rem] text-center px-2 capitalize">
+            {formatMonthLabel(monthKey)}
           </span>
           <button
             type="button"
-            onClick={() => setWeekStart((w) => addDays(w, 7))}
+            onClick={() => setMonthKey((m) => addMonths(m, 1))}
             className="p-2 text-neutral-500 hover:text-neutral-200"
-            aria-label="Volgende week"
+            aria-label="Volgende maand"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
           <button
             type="button"
-            onClick={() => setWeekStart(weekStartOf())}
+            onClick={() => setMonthKey(monthKeyOf())}
             className="text-[11px] text-neutral-500 hover:text-neutral-300 px-2 py-1"
           >
             Nu
@@ -717,7 +811,7 @@ export default function RetainersPage() {
             <RetainerCard
               key={retainer.id}
               retainer={retainer}
-              weekStart={weekStart}
+              monthKey={monthKey}
             />
           ))}
         </div>

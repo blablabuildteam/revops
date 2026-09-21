@@ -6,10 +6,12 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useUndoToast } from "@/components/mutation-provider";
 import { RetainerHoursReport } from "@/components/retainer-hours-report";
 import { SlackChannelBinder } from "@/components/slack-channel-picker";
 import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import { useRetainers } from "@/hooks/use-api-data";
+import { updateRetainerTimeEntry } from "@/lib/api";
 import { toPublicRetainer } from "@/lib/retainers";
 
 export default function RetainerDetailPage({
@@ -22,6 +24,7 @@ export default function RetainerDetailPage({
   const retainer = retainers.find((r) => r.id === id);
   const loading = isLoading && !retainer;
   const [copied, setCopied] = useState(false);
+  const withUndo = useUndoToast();
 
   async function copyClientLink() {
     if (!retainer?.share_token) return;
@@ -105,7 +108,29 @@ export default function RetainerDetailPage({
       </div>
 
       <div className="max-w-3xl">
-        <RetainerHoursReport retainer={toPublicRetainer(retainer)} />
+        <RetainerHoursReport
+          retainer={toPublicRetainer(retainer)}
+          onUpdateEntry={async (entry, next) => {
+            const original = retainer.entries.find((item) => item.id === entry.id);
+            await withUndo({
+              label: "Uren bijgewerkt",
+              run: async () => {
+                await updateRetainerTimeEntry(entry.id, next);
+              },
+              undo: async () => {
+                if (!original) return;
+                await updateRetainerTimeEntry(entry.id, {
+                  hours: original.hours,
+                  activity: original.activity,
+                  category: original.category,
+                  logged_by: original.logged_by,
+                  work_date: original.work_date ?? null,
+                  week_start: original.week_start,
+                });
+              },
+            });
+          }}
+        />
       </div>
     </div>
   );

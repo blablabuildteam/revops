@@ -1,17 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Calendar,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   Layers,
+  Pencil,
   TrendingUp,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { RetainerLogForm } from "@/components/retainer-log-form";
 import {
   currentBillingPeriod,
+  defaultWorkDateForWeek,
   entryInPeriod,
   formatDayLabel,
   formatWeekLabel,
@@ -20,9 +25,10 @@ import {
   includedHoursForWeek,
   listRetainerBillingPeriods,
   sumHours,
-  type RetainerBillingPeriod,
+  weekStartFromDateOnly,
 } from "@/lib/retainers";
-import type { PublicRetainer } from "@/lib/types";
+import type { PublicRetainer, PublicRetainerEntry } from "@/lib/types";
+import { TASK_ASSIGNEES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CircularProgress({
@@ -163,11 +169,25 @@ const BUCKET_COLORS = [
   "#52e098",
 ];
 
+export type RetainerEntryUpdate = {
+  hours: number;
+  activity: string;
+  category: string | null;
+  work_date: string;
+  week_start: string;
+};
+
 export function RetainerHoursReport({
   retainer,
+  onUpdateEntry,
 }: {
   retainer: PublicRetainer;
+  onUpdateEntry?: (
+    entry: PublicRetainerEntry,
+    next: RetainerEntryUpdate,
+  ) => Promise<void>;
 }) {
+  const editable = Boolean(onUpdateEntry);
   const entries = retainer.entries ?? [];
   const currentPeriod = currentBillingPeriod(retainer);
   const allPeriods = listRetainerBillingPeriods(retainer).slice().reverse();
@@ -175,6 +195,16 @@ export function RetainerHoursReport({
     currentPeriod?.key ?? null
   );
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editHours, setEditHours] = useState("");
+  const [editActivity, setEditActivity] = useState("");
+  const [editWorkDate, setEditWorkDate] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(() => {
+    setEditingId(null);
+  }, [selectedPeriodKey]);
 
   const selectedPeriod =
     allPeriods.find((p) => p.key === selectedPeriodKey) ?? currentPeriod;
@@ -213,6 +243,40 @@ export function RetainerHoursReport({
         )
       )
     : 0;
+
+  function startEdit(entry: PublicRetainerEntry) {
+    setEditingId(entry.id);
+    setEditHours(String(entry.hours));
+    setEditActivity(entry.activity);
+    setEditWorkDate(
+      entry.work_date || defaultWorkDateForWeek(entry.week_start),
+    );
+    setEditCategory(entry.category ?? "");
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId || !onUpdateEntry) return;
+    const entry = entries.find((item) => item.id === editingId);
+    if (!entry) return;
+    const h = parseFloat(editHours);
+    if (!editActivity.trim() || !Number.isFinite(h) || h <= 0) return;
+    const date =
+      editWorkDate || entry.work_date || defaultWorkDateForWeek(entry.week_start);
+    setEditSaving(true);
+    try {
+      await onUpdateEntry(entry, {
+        hours: h,
+        activity: editActivity.trim(),
+        category: editCategory || null,
+        work_date: date,
+        week_start: weekStartFromDateOnly(date),
+      });
+      setEditingId(null);
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -456,7 +520,9 @@ export function RetainerHoursReport({
             Gelogde activiteiten
           </h2>
           <span className="text-xs text-neutral-600">
-            {periodEntries.length} item{periodEntries.length !== 1 ? "s" : ""}
+            {editable
+              ? "Klik een regel om te bewerken"
+              : `${periodEntries.length} item${periodEntries.length !== 1 ? "s" : ""}`}
           </span>
         </div>
 
@@ -497,10 +563,74 @@ export function RetainerHoursReport({
                   </div>
 
                   <div className="border border-neutral-800 rounded-lg overflow-hidden divide-y divide-neutral-800/80">
-                    {weekEntries.map((entry) => (
+                    {weekEntries.map((entry) =>
+                      editable && editingId === entry.id ? (
+                        <div key={entry.id} className="p-2.5 bg-neutral-950/30">
+                          <RetainerLogForm
+                            values={{
+                              hours: editHours,
+                              workDate: editWorkDate,
+                              activity: editActivity,
+                              category: editCategory,
+                              loggedBy: TASK_ASSIGNEES[0],
+                            }}
+                            onChange={(patch) => {
+                              if (patch.hours !== undefined) {
+                                setEditHours(patch.hours);
+                              }
+                              if (patch.workDate !== undefined) {
+                                setEditWorkDate(patch.workDate);
+                              }
+                              if (patch.activity !== undefined) {
+                                setEditActivity(patch.activity);
+                              }
+                              if (patch.category !== undefined) {
+                                setEditCategory(patch.category);
+                              }
+                            }}
+                            buckets={retainer.hour_buckets ?? []}
+                            saving={editSaving}
+                            submitLabel="Opslaan"
+                            submitIcon={Check}
+                            showLoggedBy={false}
+                            onSubmit={(e) => void handleUpdate(e)}
+                            onCancel={() => setEditingId(null)}
+                            autoFocus
+                            extraActions={
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingId(null)}
+                                className="h-9 border-neutral-700 bg-neutral-900 text-neutral-200 hover:bg-neutral-800"
+                              >
+                                Annuleren
+                              </Button>
+                            }
+                          />
+                        </div>
+                      ) : (
                       <div
                         key={entry.id}
-                        className="flex items-start gap-4 px-4 py-3 bg-neutral-950/30 hover:bg-neutral-900/30 transition-colors"
+                        className={cn(
+                          "flex items-start gap-4 px-4 py-3 bg-neutral-950/30 transition-colors",
+                          editable &&
+                            "hover:bg-neutral-900/50 cursor-pointer group",
+                          !editable && "hover:bg-neutral-900/30",
+                        )}
+                        {...(editable
+                          ? {
+                              role: "button",
+                              tabIndex: 0,
+                              title: "Klik om te bewerken",
+                              onClick: () => startEdit(entry),
+                              onKeyDown: (e: React.KeyboardEvent) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  startEdit(entry);
+                                }
+                              },
+                            }
+                          : {})}
                       >
                         <div className="w-20 shrink-0">
                           <span className="text-xs text-neutral-500 font-mono">
@@ -535,8 +665,12 @@ export function RetainerHoursReport({
                         <span className="font-mono text-sm text-neutral-300 tabular-nums shrink-0">
                           {Number(entry.hours).toFixed(1)}u
                         </span>
+                        {editable && (
+                          <Pencil className="w-3.5 h-3.5 text-neutral-700 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 mt-0.5 shrink-0" />
+                        )}
                       </div>
-                    ))}
+                      ),
+                    )}
                   </div>
                 </div>
               );

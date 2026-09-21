@@ -70,6 +70,36 @@ export function formatMonthLabel(monthKey: string): string {
   });
 }
 
+/** Add or subtract months from a YYYY-MM key. */
+export function addMonths(monthKey: string, delta: number): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return monthKeyOf(d);
+}
+
+/** All week-start Mondays that overlap a calendar month. */
+export function weeksInMonth(monthKey: string): string[] {
+  const [y, m] = monthKey.split("-").map(Number);
+  const firstOfMonth = new Date(y, m - 1, 1);
+  const lastOfMonth = new Date(y, m, 0);
+  const weeks: string[] = [];
+  let cursor = parseDateOnly(weekStartOf(firstOfMonth));
+  while (cursor <= lastOfMonth) {
+    weeks.push(toDateOnly(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return weeks;
+}
+
+/** Check if an entry's work_date or week_start falls within a YYYY-MM month. */
+export function entryInMonth(
+  entry: Pick<RetainerTimeEntry, "work_date" | "week_start">,
+  monthKey: string,
+): boolean {
+  const ref = (entry.work_date || entry.week_start || "").slice(0, 7);
+  return ref === monthKey;
+}
+
 export type RetainerBillingPeriod = {
   /** Stable key stored in invoiced_periods. */
   key: string;
@@ -88,11 +118,10 @@ function invoiceMonthForPeriodEnd(periodEnd: string): string {
 
 /**
  * Billing periods from retainer start through `through` (inclusive of current open period).
- * - calendar: full calendar months (Solero)
- * - start_day: rolling windows anchored on start_date day-of-month (Adsomnia 15→14)
+ * All retainers use calendar month billing (1st to end of month).
  */
 export function listRetainerBillingPeriods(
-  retainer: Pick<RetainerAgreement, "start_date" | "period_anchor">,
+  retainer: Pick<RetainerAgreement, "start_date">,
   through = new Date(),
 ): RetainerBillingPeriod[] {
   if (!retainer.start_date) return [];
@@ -105,62 +134,39 @@ export function listRetainerBillingPeriods(
   if (throughDate < start) return [];
 
   const periods: RetainerBillingPeriod[] = [];
-  const anchor = retainer.period_anchor ?? "calendar";
 
-  if (anchor === "calendar") {
-    let y = start.getFullYear();
-    let m = start.getMonth();
-    const endY = throughDate.getFullYear();
-    const endM = throughDate.getMonth();
-    while (y < endY || (y === endY && m <= endM)) {
-      const pStart = new Date(y, m, 1);
-      const pEnd = new Date(y, m + 1, 0);
-      // First month may start mid-month
-      const periodStart =
-        y === start.getFullYear() && m === start.getMonth()
-          ? toDateOnly(start)
-          : toDateOnly(pStart);
-      const periodEnd = toDateOnly(pEnd);
-      const key = `${y}-${String(m + 1).padStart(2, "0")}`;
-      periods.push({
-        key,
-        start: periodStart,
-        end: periodEnd,
-        label: formatMonthLabel(key),
-        invoiceMonth: invoiceMonthForPeriodEnd(periodEnd),
-      });
-      m += 1;
-      if (m > 11) {
-        m = 0;
-        y += 1;
-      }
-    }
-    return periods;
-  }
-
-  // Rolling from start day-of-month
-  const day = start.getDate();
-  let cursor = new Date(start.getFullYear(), start.getMonth(), day);
-  while (cursor <= throughDate) {
-    const pStart = toDateOnly(cursor);
-    const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, day);
-    const pEnd = addDays(toDateOnly(next), -1);
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  const endY = throughDate.getFullYear();
+  const endM = throughDate.getMonth();
+  while (y < endY || (y === endY && m <= endM)) {
+    const pStart = new Date(y, m, 1);
+    const pEnd = new Date(y, m + 1, 0);
+    // First month may start mid-month
+    const periodStart =
+      y === start.getFullYear() && m === start.getMonth()
+        ? toDateOnly(start)
+        : toDateOnly(pStart);
+    const periodEnd = toDateOnly(pEnd);
+    const key = `${y}-${String(m + 1).padStart(2, "0")}`;
     periods.push({
-      key: pStart,
-      start: pStart,
-      end: pEnd,
-      label: `${parseDateOnly(pStart).toLocaleDateString("nl-NL", { day: "numeric", month: "short" })} – ${parseDateOnly(pEnd).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" })}`,
-      invoiceMonth: invoiceMonthForPeriodEnd(pEnd),
+      key,
+      start: periodStart,
+      end: periodEnd,
+      label: formatMonthLabel(key),
+      invoiceMonth: invoiceMonthForPeriodEnd(periodEnd),
     });
-    cursor = next;
-    // Safety
-    if (periods.length > 120) break;
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
   }
   return periods;
 }
 
 export function currentBillingPeriod(
-  retainer: Pick<RetainerAgreement, "start_date" | "period_anchor">,
+  retainer: Pick<RetainerAgreement, "start_date">,
   date = new Date(),
 ): RetainerBillingPeriod | null {
   const dateOnly = toDateOnly(date);
