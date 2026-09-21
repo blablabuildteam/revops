@@ -42,12 +42,13 @@ import {
 import {
   Milestone, Task, resolvePhaseColor,
 } from "@/lib/types";
-import { formatDate, toDateInputValue } from "@/lib/format";
+import { toDateInputValue } from "@/lib/format";
+import { TaskEnteredDate } from "@/components/task-entered-date";
 import { useMutationFeedbackOptional } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 export const TASK_ROW_GRID =
-  "grid min-w-[46rem] grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid min-w-[52rem] grid-cols-[minmax(0,1fr)_36px_32px_140px_150px_150px_110px_32px] items-center gap-x-3 gap-y-2";
 
 const UNASSIGNED_ID = "unassigned";
 
@@ -175,6 +176,13 @@ function TaskColumnHeader({
         onToggle={onToggleSort}
       />
       <span>Phase</span>
+      <TaskSortHeaderButton
+        label="Entered"
+        sortKey="created_at"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span />
     </div>
   );
@@ -489,6 +497,7 @@ function TaskRow({
           onPhaseChange={onPhaseChange}
         />
       )}
+      <TaskEnteredDate createdAt={task.created_at} />
       <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
         onPointerDown={cancelDrag}
         className="opacity-0 group-hover:opacity-100 text-neutral-700 hover:text-red-400 transition-all p-1.5 rounded justify-self-end cursor-pointer">
@@ -586,7 +595,7 @@ function TaskWithSubtasks({
             onPointerDown={cancelDrag}
             className="h-7 text-xs bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 ml-5 flex-1 min-w-0"
           />
-          <span /><span /><span /><span />
+          <span /><span /><span /><span /><span /><span />
           <div className="flex items-center gap-1 justify-self-end">
             <Button type="submit" size="sm" className="h-7 text-xs bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950 px-2">
               <Check className="w-3 h-3" />

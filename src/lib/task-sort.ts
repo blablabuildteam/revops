@@ -1,6 +1,12 @@
 import type { Task } from "@/lib/types";
 
-export type TaskBoardSortKey = "title" | "priority" | "assignee" | "due_date" | "status";
+export type TaskBoardSortKey =
+  | "title"
+  | "priority"
+  | "assignee"
+  | "due_date"
+  | "created_at"
+  | "status";
 
 export const PRIORITY_RANK: Record<string, number> = {
   urgent: 0,
@@ -51,6 +57,9 @@ export function compareTasks(
     if (cmp !== 0) return cmp;
   } else if (sortKey === "due_date") {
     const cmp = compareNullableString(a.due_date ?? "", b.due_date ?? "", sortAsc);
+    if (cmp !== 0) return cmp;
+  } else if (sortKey === "created_at") {
+    const cmp = compareNullableString(a.created_at ?? "", b.created_at ?? "", sortAsc);
     if (cmp !== 0) return cmp;
   } else if (sortKey === "status") {
     const sa = STATUS_RANK[a.status ?? "open"] ?? 1;

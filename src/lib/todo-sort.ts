@@ -79,5 +79,6 @@ export function sortTodos<T extends SortableTodo>(todos: T[], key: TodoSortKey =
 export function todoSortToBoardSortKey(key: TodoSortKey): TaskBoardSortKey {
   if (key === "due_date") return "due_date";
   if (key === "title") return "title";
+  if (key === "created") return "created_at";
   return "priority";
 }

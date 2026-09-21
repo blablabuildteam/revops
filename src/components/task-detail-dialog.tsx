@@ -247,7 +247,7 @@ export function TaskDetailDialog({
                     className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
                   />
                 </div>
-                <div className={`grid grid-cols-1 gap-4 ${isCreate && milestones.length > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
+                <div className={`grid grid-cols-1 gap-4 ${!isCreate || milestones.length > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
                   {isCreate && milestones.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-neutral-400 text-xs">Phase</Label>
@@ -325,6 +325,14 @@ export function TaskDetailDialog({
                       </SelectContent>
                     </Select>
                   </div>
+                  {!isCreate && task?.created_at ? (
+                    <div className="space-y-2">
+                      <Label className="text-neutral-400 text-xs">Entered</Label>
+                      <div className="h-9 flex items-center px-3 rounded-md bg-neutral-800/50 border border-neutral-700 text-sm text-neutral-300 font-mono tabular-nums">
+                        <time dateTime={task.created_at}>{formatDateTime(task.created_at)}</time>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-neutral-400 text-xs">URL</Label>

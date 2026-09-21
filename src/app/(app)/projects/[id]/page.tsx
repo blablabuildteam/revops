@@ -66,11 +66,12 @@ import { holdLiveSync, shouldSkipIncoming } from "@/lib/live-sync";
 import { grantEditAccess, revokeEditAccess } from "@/lib/edit-board-api";
 import { Project, Milestone, Task, resolvePhaseColor, defaultColorForPhaseName, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
 import { formatDate, toDateInputValue } from "@/lib/format";
+import { TaskEnteredDate } from "@/components/task-entered-date";
 import { useMutationFeedback } from "@/components/mutation-provider";
 import { useUndoablePatch } from "@/hooks/use-undoable-patch";
 
 const TASK_ROW_GRID =
-  "grid min-w-[48rem] grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_32px] items-center gap-x-3 gap-y-2";
+  "grid min-w-[54rem] grid-cols-[20px_minmax(0,1fr)_36px_32px_140px_150px_150px_110px_32px] items-center gap-x-3 gap-y-2";
 
 const baseTaskDetailApi = {
   updateTask,
@@ -260,6 +261,13 @@ function TaskColumnHeader({
         onToggle={onToggleSort}
       />
       <span>Phase</span>
+      <TaskSortHeaderButton
+        label="Entered"
+        sortKey="created_at"
+        activeKey={sortKey}
+        sortAsc={sortAsc}
+        onToggle={onToggleSort}
+      />
       <span />
     </div>
   );
@@ -656,6 +664,7 @@ function SubtaskRow({
       <InlineAssigneeSelect task={task} onUpdate={onUpdate} />
       <InlineDateInput task={task} onUpdate={onUpdate} isDone={isDone} />
       <span className="text-xs text-neutral-700">—</span>
+      <TaskEnteredDate createdAt={task.created_at} />
 
       <button
         type="button"
@@ -791,6 +800,7 @@ function SortableTaskRow({
         milestones={milestones}
         onPhaseChange={onPhaseChange}
       />
+      <TaskEnteredDate createdAt={task.created_at} />
 
       <button
         type="button"
@@ -2448,23 +2458,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 className="pl-8 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-600 h-8 text-xs"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleToggleCompleted}
-              aria-pressed={project.status === "completed"}
-              className={`inline-flex h-8 items-center gap-2 text-xs border px-3 rounded-lg transition-colors ${
-                project.status === "completed"
-                  ? "border-stone-600/40 bg-stone-800/50 text-stone-300 hover:border-stone-500 hover:text-stone-200"
-                  : "border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-600"
-              }`}
-            >
-              {project.status === "completed" ? (
-                <Undo2 className="w-3.5 h-3.5" />
-              ) : (
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              )}
-              {project.status === "completed" ? "Reopen" : "Mark complete"}
-            </button>
             <Button
               type="button"
               onClick={openNewTask}
@@ -2495,14 +2488,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 />
               </PopoverContent>
             </Popover>
-            <button
-              onClick={shareEditAccess}
-              disabled={sharingEdit}
-              className="inline-flex h-8 items-center gap-2 text-xs border border-[#d4e052]/30 px-3 rounded-lg text-[#d4e052] hover:border-[#d4e052]/50 transition-colors disabled:opacity-50"
-            >
-              {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-              {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share"}
-            </button>
             <Popover>
               <PopoverTrigger
                 className="inline-flex h-8 w-8 items-center justify-center text-xs border border-neutral-700 rounded-lg text-neutral-400 hover:text-neutral-200 hover:border-neutral-600 transition-colors cursor-pointer"
@@ -2512,6 +2497,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </PopoverTrigger>
               <PopoverContent align="end" className="w-48 p-1">
                 <button
+                  type="button"
                   onClick={handleToggleCompleted}
                   className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors"
                 >
@@ -2526,6 +2512,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       Mark as completed
                     </>
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={shareEditAccess}
+                  disabled={sharingEdit}
+                  className="flex w-full items-center gap-2 text-xs px-2.5 py-2 rounded-md text-neutral-300 hover:bg-neutral-800 hover:text-neutral-100 transition-colors disabled:opacity-50"
+                >
+                  {copiedEdit ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+                  {copiedEdit ? "Copied!" : sharingEdit ? "Sharing..." : "Share"}
                 </button>
                 <button
                   onClick={() => setEditStatusesOpen(true)}
