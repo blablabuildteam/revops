@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { resolveSessionUser } from "@/lib/auth";
 import { resolveEditToken } from "@/lib/edit-token";
 
 export async function POST(
@@ -17,6 +18,8 @@ export async function POST(
     const {
       title, description, milestone_id, parent_id, assignee, due_date, url, priority, position,
     } = await req.json();
+    const user = await resolveSessionUser();
+    const enteredBy = user?.name?.trim() || "External";
 
     let resolvedMilestoneId = milestone_id ?? null;
     if (parent_id) {
@@ -32,11 +35,11 @@ export async function POST(
     const { rows } = await sql`
       INSERT INTO tasks (
         project_id, milestone_id, parent_id, title, description, assignee, due_date, url,
-        created_by, approved, priority, position
+        created_by, entered_by, approved, priority, position
       )
       VALUES (
         ${project.id}, ${resolvedMilestoneId}, ${parent_id ?? null}, ${title}, ${description ?? null},
-        ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, 'external', true,
+        ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, 'external', ${enteredBy}, true,
         ${priority ?? "low"}, ${position ?? 0}
       )
       RETURNING *

@@ -337,6 +337,8 @@ export interface Task {
   description?: string | null;
   status: TaskStatus;
   created_by: "team" | "client" | "external";
+  /** Display name of the person (or Client/External) who created the task. */
+  entered_by?: string | null;
   approved: boolean;
   assignee?: string | null;
   due_date?: string | null;

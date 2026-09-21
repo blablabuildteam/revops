@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { resolveSessionUser } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
@@ -10,6 +11,9 @@ export async function POST(
     await ensureTables();
     const { title, description, milestone_id, parent_id, assignee, due_date, url, created_by, priority, position } = await req.json();
     const isClient = created_by === "client";
+    const user = await resolveSessionUser();
+    const enteredBy = user?.name?.trim()
+      || (isClient ? "Client" : created_by === "external" ? "External" : null);
 
     let resolvedMilestoneId = milestone_id ?? null;
     if (parent_id) {
@@ -21,10 +25,10 @@ export async function POST(
     }
 
     const { rows } = await sql`
-      INSERT INTO tasks (project_id, milestone_id, parent_id, title, description, assignee, due_date, url, created_by, approved, priority, position)
+      INSERT INTO tasks (project_id, milestone_id, parent_id, title, description, assignee, due_date, url, created_by, entered_by, approved, priority, position)
       VALUES (
         ${project_id}, ${resolvedMilestoneId}, ${parent_id ?? null}, ${title}, ${description ?? null},
-        ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, ${created_by ?? "team"},
+        ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, ${created_by ?? "team"}, ${enteredBy},
         ${!isClient}, ${priority ?? "low"}, ${position ?? 0}
       )
       RETURNING *

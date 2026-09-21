@@ -95,6 +95,8 @@ interface ProjectBoardTask {
   parent_id?: string | null;
   position?: number;
   approved?: boolean;
+  created_by?: "team" | "client" | "external";
+  entered_by?: string | null;
   url?: string | null;
   created_at: string;
   updated_at?: string;
@@ -116,7 +118,8 @@ function boardTaskToTask(t: ProjectBoardTask): Task {
     title: t.title,
     description: t.description ?? null,
     status: t.status,
-    created_by: "team",
+    created_by: t.created_by ?? "team",
+    entered_by: t.entered_by ?? null,
     approved: t.approved !== false,
     assignee: t.assignee ?? null,
     due_date: t.due_date ?? null,

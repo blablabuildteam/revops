@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         t.id, t.title, t.description, t.status, t.assignee,
         t.due_date, t.priority, t.position, t.created_at, t.updated_at,
         t.project_id, t.milestone_id, t.parent_id, t.approved, t.url,
-        t.created_by,
+        t.created_by, t.entered_by,
         p.name AS project_name,
         c.name AS company_name,
         c.id AS company_id,

@@ -43,6 +43,14 @@ function isDonePhase(name: string) {
   return name.toLowerCase() === "done";
 }
 
+function enteredByLabel(task: Task): string | null {
+  const named = task.entered_by?.trim();
+  if (named) return named;
+  if (task.created_by === "client") return "Client";
+  if (task.created_by === "external") return "External";
+  return null;
+}
+
 function defaultMilestoneId(milestones: Milestone[]) {
   return milestones.find((m) => m.name.toLowerCase() === "open")?.id
     ?? milestones.find((m) => !isDonePhase(m.name))?.id
@@ -224,15 +232,32 @@ export function TaskDetailDialog({
 
   if (!open) return null;
 
+  const enteredBy = !isCreate && task ? enteredByLabel(task) : null;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="bg-neutral-900 border-neutral-700 text-neutral-100 max-w-5xl w-[95vw] p-0 gap-0 overflow-hidden">
         <div className="flex flex-col md:flex-row h-[min(85vh,760px)] min-h-[520px]">
           <div className="flex-1 min-w-0 flex flex-col min-h-0 overflow-hidden">
             <DialogHeader className="px-8 pt-8 pb-5 border-b border-neutral-800 shrink-0">
-              <DialogTitle className="text-neutral-100 pr-8">
-                {isCreate ? "New task" : "Edit task"}
-              </DialogTitle>
+              <div className="flex items-center justify-between gap-3 min-w-0 pr-8 md:pr-0">
+                <DialogTitle className="text-neutral-100 shrink-0">
+                  {isCreate ? "New task" : "Edit task"}
+                </DialogTitle>
+                {!isCreate && task?.created_at ? (
+                  <p className="text-xs text-neutral-500 min-w-0 truncate text-right">
+                    {enteredBy ? (
+                      <>
+                        <span className="text-neutral-400">{enteredBy}</span>
+                        <span className="text-neutral-600"> · </span>
+                      </>
+                    ) : null}
+                    <time dateTime={task.created_at} title={formatDateTime(task.created_at)}>
+                      {formatDateTime(task.created_at)}
+                    </time>
+                  </p>
+                ) : null}
+              </div>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="flex-1 overflow-y-auto overscroll-contain px-8 py-6 space-y-5 min-h-0">
@@ -247,7 +272,7 @@ export function TaskDetailDialog({
                     className="bg-neutral-800 border-neutral-700 text-neutral-100 placeholder:text-neutral-600"
                   />
                 </div>
-                <div className={`grid grid-cols-1 gap-4 ${!isCreate || milestones.length > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
+                <div className={`grid grid-cols-1 gap-4 ${isCreate && milestones.length > 0 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
                   {isCreate && milestones.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-neutral-400 text-xs">Phase</Label>
@@ -325,14 +350,6 @@ export function TaskDetailDialog({
                       </SelectContent>
                     </Select>
                   </div>
-                  {!isCreate && task?.created_at ? (
-                    <div className="space-y-2">
-                      <Label className="text-neutral-400 text-xs">Entered</Label>
-                      <div className="h-9 flex items-center px-3 rounded-md bg-neutral-800/50 border border-neutral-700 text-sm text-neutral-300 font-mono tabular-nums">
-                        <time dateTime={task.created_at}>{formatDateTime(task.created_at)}</time>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-neutral-400 text-xs">URL</Label>
@@ -367,27 +384,39 @@ export function TaskDetailDialog({
                   />
                 ) : null}
               </div>
-              <DialogFooter className="bg-transparent border-t border-neutral-800 px-8 py-5 mt-auto shrink-0 mx-0 mb-0 rounded-none">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={onClose}
-                  disabled={loading}
-                  className="text-neutral-400 hover:text-neutral-200"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={loading || !form.title.trim() || (isCreate && !api.createTask)}
-                  className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950"
-                >
-                  {loading
-                    ? (isCreate
-                      ? (pendingFiles.length > 0 ? "Adding & uploading..." : "Adding...")
-                      : "Saving...")
-                    : (isCreate ? "Add task" : "Save")}
-                </Button>
+              <DialogFooter className="bg-transparent border-t border-neutral-800 px-8 py-5 mt-auto shrink-0 mx-0 mb-0 rounded-none flex-row items-center justify-between gap-4">
+                {!isCreate && task?.updated_at ? (
+                  <p className="text-xs text-neutral-600 min-w-0 truncate mr-auto">
+                    Last edited{" "}
+                    <time dateTime={task.updated_at} title={formatDateTime(task.updated_at)}>
+                      {formatDateTime(task.updated_at)}
+                    </time>
+                  </p>
+                ) : (
+                  <span className="mr-auto" />
+                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={onClose}
+                    disabled={loading}
+                    className="text-neutral-400 hover:text-neutral-200"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading || !form.title.trim() || (isCreate && !api.createTask)}
+                    className="bg-[#d4e052] hover:bg-[#c2ce45] text-neutral-950"
+                  >
+                    {loading
+                      ? (isCreate
+                        ? (pendingFiles.length > 0 ? "Adding & uploading..." : "Adding...")
+                        : "Saving...")
+                      : (isCreate ? "Add task" : "Save")}
+                  </Button>
+                </div>
               </DialogFooter>
             </form>
           </div>

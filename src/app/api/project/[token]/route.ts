@@ -28,7 +28,7 @@ export async function GET(
     // Client sees: approved tasks + their own pending requests
     const { rows: tasks } = await sql`
       SELECT id, project_id, milestone_id, title, description, status,
-             created_by, approved, assignee, due_date, created_at
+             created_by, entered_by, approved, assignee, due_date, created_at
       FROM tasks
       WHERE project_id = ${project.id}
         AND (approved = true OR created_by = 'client')
@@ -60,11 +60,12 @@ export async function POST(
   try {
     await ensureTables();
     const { rows: projectRows } = await sql`
-      SELECT id FROM projects WHERE share_token = ${token}
+      SELECT id, client_name FROM projects WHERE share_token = ${token}
     `;
     if (!projectRows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const project_id = projectRows[0].id;
+    const clientName = (projectRows[0].client_name as string | null)?.trim() || "Client";
     const { title, description, milestone_id } = await req.json();
 
     if (!title?.trim()) {
@@ -72,9 +73,9 @@ export async function POST(
     }
 
     const { rows } = await sql`
-      INSERT INTO tasks (project_id, milestone_id, title, description, created_by, approved)
-      VALUES (${project_id}, ${milestone_id ?? null}, ${title.trim()}, ${description ?? null}, 'client', false)
-      RETURNING id, title, description, status, created_by, approved, created_at
+      INSERT INTO tasks (project_id, milestone_id, title, description, created_by, entered_by, approved)
+      VALUES (${project_id}, ${milestone_id ?? null}, ${title.trim()}, ${description ?? null}, 'client', ${clientName}, false)
+      RETURNING id, title, description, status, created_by, entered_by, approved, created_at
     `;
     return NextResponse.json(rows[0], { status: 201 });
   } catch (err) {

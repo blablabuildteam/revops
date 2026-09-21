@@ -115,6 +115,7 @@ async function runSchemaMigrations() {
   await sql`ALTER TABLE todos ADD CONSTRAINT todos_status_check CHECK (status IN ('backlog', 'open', 'in_progress', 'done'))`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT`;
   await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES tasks(id) ON DELETE CASCADE`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS entered_by TEXT`;
   await sql`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS color TEXT`;
   await sql`UPDATE milestones SET color = '#9ca3af' WHERE name = 'Backlog' AND color IS NULL`;
   await sql`UPDATE milestones SET color = '#60a5fa' WHERE name = 'Open' AND color IS NULL`;
@@ -385,6 +386,7 @@ async function _init() {
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS lead TEXT`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_name TEXT`;
+      await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS entered_by TEXT`;
       const { rows: urgentFlag } = await sql`
         SELECT value FROM finance_settings WHERE key = 'priority_urgent'
       `;
@@ -549,6 +551,7 @@ async function _init() {
         CHECK (status IN ('open', 'in_progress', 'done')),
       created_by TEXT DEFAULT 'team'
         CHECK (created_by IN ('team', 'client', 'external')),
+      entered_by TEXT,
       approved BOOLEAN DEFAULT true,
       assignee TEXT,
       due_date DATE,
