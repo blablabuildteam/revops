@@ -41,7 +41,7 @@ export default function LoginPage() {
             blablabuild
           </p>
           <p className="text-neutral-600 text-xs tracking-widest uppercase">
-            Revenue ops
+            Workspace
           </p>
         </div>
 
