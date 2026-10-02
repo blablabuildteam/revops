@@ -3,6 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import { use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Clock, RefreshCw } from "lucide-react";
 import { RetainerHoursReport } from "@/components/retainer-hours-report";
 import { getPublicRetainer } from "@/lib/api";
@@ -14,6 +15,8 @@ export default function ClientRetainerPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = use(params);
+  const searchParams = useSearchParams();
+  const periodParam = searchParams.get("period");
   const [retainer, setRetainer] = useState<PublicRetainer | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -105,7 +108,10 @@ export default function ClientRetainerPage({
 
       {/* Content */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-6 py-10">
-        <RetainerHoursReport retainer={retainer} />
+        <RetainerHoursReport
+          retainer={retainer}
+          initialPeriodKey={periodParam}
+        />
       </main>
 
       {/* Footer */}

@@ -180,19 +180,26 @@ export type RetainerEntryUpdate = {
 export function RetainerHoursReport({
   retainer,
   onUpdateEntry,
+  initialPeriodKey,
 }: {
   retainer: PublicRetainer;
   onUpdateEntry?: (
     entry: PublicRetainerEntry,
     next: RetainerEntryUpdate,
   ) => Promise<void>;
+  /** Optional period key (YYYY-MM) to open on, e.g. from ?period=2026-09 */
+  initialPeriodKey?: string | null;
 }) {
   const editable = Boolean(onUpdateEntry);
   const entries = retainer.entries ?? [];
   const currentPeriod = currentBillingPeriod(retainer);
   const allPeriods = listRetainerBillingPeriods(retainer).slice().reverse();
+  const initialFromProp =
+    initialPeriodKey && allPeriods.some((p) => p.key === initialPeriodKey)
+      ? initialPeriodKey
+      : null;
   const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(
-    currentPeriod?.key ?? null
+    initialFromProp ?? currentPeriod?.key ?? null
   );
   const [periodDropdownOpen, setPeriodDropdownOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
