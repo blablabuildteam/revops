@@ -2,14 +2,23 @@
 
 export const dynamic = "force-dynamic";
 
-import { use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Clock, RefreshCw } from "lucide-react";
 import { RetainerHoursReport } from "@/components/retainer-hours-report";
 import { getPublicRetainer } from "@/lib/api";
 import type { PublicRetainer } from "@/lib/types";
 
-export default function ClientRetainerPage({
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-4">
+      <div className="w-8 h-8 border-2 border-[#d4e052]/30 border-t-[#d4e052] rounded-full animate-spin" />
+      <p className="text-sm text-neutral-600">Laden...</p>
+    </div>
+  );
+}
+
+function ClientRetainerPageInner({
   params,
 }: {
   params: Promise<{ token: string }>;
@@ -50,12 +59,7 @@ export default function ClientRetainerPage({
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-neutral-950 flex flex-col items-center justify-center gap-4">
-        <div className="w-8 h-8 border-2 border-[#d4e052]/30 border-t-[#d4e052] rounded-full animate-spin" />
-        <p className="text-sm text-neutral-600">Laden...</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (notFound || !retainer) {
@@ -84,7 +88,6 @@ export default function ClientRetainerPage({
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col">
-      {/* Header */}
       <header className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between sticky top-0 bg-neutral-950/95 backdrop-blur-sm z-20">
         <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#d4e052]">
           blablabuild
@@ -106,7 +109,6 @@ export default function ClientRetainerPage({
         </div>
       </header>
 
-      {/* Content */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-6 py-10">
         <RetainerHoursReport
           retainer={retainer}
@@ -114,7 +116,6 @@ export default function ClientRetainerPage({
         />
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-neutral-800 px-6 py-6 mt-auto">
         <div className="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div>
@@ -136,5 +137,17 @@ export default function ClientRetainerPage({
         </div>
       </footer>
     </div>
+  );
+}
+
+export default function ClientRetainerPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <ClientRetainerPageInner params={params} />
+    </Suspense>
   );
 }
