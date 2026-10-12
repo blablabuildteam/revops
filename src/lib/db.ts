@@ -1437,6 +1437,8 @@ async function ensureToolsTable() {
     )
   `;
 
+  await sql`ALTER TABLE tool_subscriptions ADD COLUMN IF NOT EXISTS logo_url TEXT`;
+
   await sql`CREATE INDEX IF NOT EXISTS tool_subscriptions_status ON tool_subscriptions (status)`;
   await sql`CREATE INDEX IF NOT EXISTS tool_subscriptions_bill_to ON tool_subscriptions (bill_to_company_id)`;
   await sql`CREATE INDEX IF NOT EXISTS tool_usage_entries_tool_month ON tool_usage_entries (tool_id, month DESC)`;
@@ -1444,53 +1446,193 @@ async function ensureToolsTable() {
   const { rows: seedFlag } = await sql`
     SELECT value FROM finance_settings WHERE key = 'tools_seeded_v1'
   `;
-  if (seedFlag[0]?.value === "true") return;
-
-  const { rows: existing } = await sql`
-    SELECT COUNT(*)::int AS c FROM tool_subscriptions
-  `;
-  if (Number(existing[0]?.c) === 0) {
+  if (seedFlag[0]?.value !== "true") {
+    const { rows: existing } = await sql`
+      SELECT COUNT(*)::int AS c FROM tool_subscriptions
+    `;
+    if (Number(existing[0]?.c) === 0) {
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost, status, notes, logo_url, login_url
+        ) VALUES
+          (
+            'Cursor', 'Anysphere', 'software', 'fixed', 'monthly', 0, 'active',
+            'IDE / coding — vul maandbedrag in', '/tools/cursor.png', 'https://cursor.com'
+          ),
+          (
+            'ChatGPT API', 'OpenAI', 'ai', 'usage', 'monthly', 0, 'active',
+            'OpenAI API usage — per maand invullen; koppel klant voor doorbelasten',
+            '/tools/openai.png', 'https://platform.openai.com'
+          ),
+          (
+            'Vercel', 'Vercel', 'hosting', 'hybrid', 'monthly', 0, 'active',
+            'Hosting — vast plan + usage', '/tools/vercel.png', 'https://vercel.com'
+          )
+      `;
+    }
     await sql`
-      INSERT INTO tool_subscriptions (
-        name, vendor, category, cost_type, billing_frequency, our_cost, status, notes
-      ) VALUES
-        (
-          'Cursor',
-          'Anysphere',
-          'software',
-          'fixed',
-          'monthly',
-          0,
-          'active',
-          'Voorbeeld — vul jullie echte bedrag in'
-        ),
-        (
-          'OpenAI',
-          'OpenAI',
-          'ai',
-          'usage',
-          'monthly',
-          0,
-          'active',
-          'Voorbeeld — usage per maand invullen; optioneel koppelen aan klant'
-        ),
-        (
-          'Vercel',
-          'Vercel',
-          'hosting',
-          'hybrid',
-          'monthly',
-          0,
-          'active',
-          'Voorbeeld — vast plan + usage overage'
-        )
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v1', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
 
-  await sql`
-    INSERT INTO finance_settings (key, value, updated_at)
-    VALUES ('tools_seeded_v1', 'true', now())
-    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  // Real blablabuild stack + logos. Upserts by name; leaves bill_to_company_id alone.
+  const { rows: v2Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v2_stack'
   `;
+  if (v2Flag[0]?.value !== "true") {
+    const stack: Array<{
+      name: string;
+      vendor: string;
+      category: string;
+      cost_type: string;
+      billing_frequency: string;
+      notes: string;
+      logo_url: string;
+      login_url: string;
+    }> = [
+      {
+        name: "Neon",
+        vendor: "Neon",
+        category: "hosting",
+        cost_type: "hybrid",
+        billing_frequency: "monthly",
+        notes: "Postgres database — vast + compute/usage",
+        logo_url: "/tools/neon.png",
+        login_url: "https://console.neon.tech",
+      },
+      {
+        name: "Cursor",
+        vendor: "Anysphere",
+        category: "software",
+        cost_type: "fixed",
+        billing_frequency: "monthly",
+        notes: "IDE / coding seats — vul maandbedrag in",
+        logo_url: "/tools/cursor.png",
+        login_url: "https://cursor.com",
+      },
+      {
+        name: "Claude API",
+        vendor: "Anthropic",
+        category: "ai",
+        cost_type: "usage",
+        billing_frequency: "monthly",
+        notes: "Anthropic API — usage per maand; koppel klant om door te belasten",
+        logo_url: "/tools/anthropic.png",
+        login_url: "https://console.anthropic.com",
+      },
+      {
+        name: "Gemini API",
+        vendor: "Google",
+        category: "ai",
+        cost_type: "usage",
+        billing_frequency: "monthly",
+        notes: "Google Gemini API — usage per maand",
+        logo_url: "/tools/gemini.png",
+        login_url: "https://aistudio.google.com",
+      },
+      {
+        name: "Apollo",
+        vendor: "Apollo.io",
+        category: "software",
+        cost_type: "fixed",
+        billing_frequency: "monthly",
+        notes: "Sales intelligence / enrichment",
+        logo_url: "/tools/apollo.png",
+        login_url: "https://app.apollo.io",
+      },
+      {
+        name: "Hunter",
+        vendor: "Hunter.io",
+        category: "software",
+        cost_type: "fixed",
+        billing_frequency: "monthly",
+        notes: "Email finder / verifier",
+        logo_url: "/tools/hunter.png",
+        login_url: "https://hunter.io",
+      },
+      {
+        name: "ChatGPT API",
+        vendor: "OpenAI",
+        category: "ai",
+        cost_type: "usage",
+        billing_frequency: "monthly",
+        notes: "OpenAI API (ChatGPT) — usage per maand; koppel klant voor doorbelasten",
+        logo_url: "/tools/openai.png",
+        login_url: "https://platform.openai.com",
+      },
+      {
+        name: "Vercel",
+        vendor: "Vercel",
+        category: "hosting",
+        cost_type: "hybrid",
+        billing_frequency: "monthly",
+        notes: "Hosting / deployments — ontdekt via workspace stack",
+        logo_url: "/tools/vercel.png",
+        login_url: "https://vercel.com",
+      },
+      {
+        name: "Slack",
+        vendor: "Slack",
+        category: "comms",
+        cost_type: "fixed",
+        billing_frequency: "monthly",
+        notes: "Team chat — ontdekt via workspace integraties",
+        logo_url: "/tools/slack.png",
+        login_url: "https://slack.com",
+      },
+    ];
+
+    for (const tool of stack) {
+      const { rows: existing } = await sql`
+        SELECT id FROM tool_subscriptions
+        WHERE name ILIKE ${tool.name}
+           OR (name ILIKE 'OpenAI' AND ${tool.name} = 'ChatGPT API')
+        LIMIT 1
+      `;
+      if (existing[0]?.id) {
+        await sql`
+          UPDATE tool_subscriptions SET
+            vendor = ${tool.vendor},
+            category = ${tool.category},
+            cost_type = ${tool.cost_type},
+            billing_frequency = ${tool.billing_frequency},
+            notes = ${tool.notes},
+            logo_url = ${tool.logo_url},
+            login_url = ${tool.login_url},
+            name = ${tool.name},
+            status = 'active',
+            updated_at = now()
+          WHERE id = ${existing[0].id}
+        `;
+      } else {
+        await sql`
+          INSERT INTO tool_subscriptions (
+            name, vendor, category, cost_type, billing_frequency, our_cost,
+            status, notes, logo_url, login_url, pass_through
+          ) VALUES (
+            ${tool.name},
+            ${tool.vendor},
+            ${tool.category},
+            ${tool.cost_type},
+            ${tool.billing_frequency},
+            0,
+            'active',
+            ${tool.notes},
+            ${tool.logo_url},
+            ${tool.login_url},
+            false
+          )
+        `;
+      }
+    }
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v2_stack', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 

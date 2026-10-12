@@ -166,6 +166,7 @@ export interface ToolSubscription {
   pass_through: boolean;
   notes?: string | null;
   login_url?: string | null;
+  logo_url?: string | null;
   invoiced_periods: string[];
   created_at: string;
   updated_at: string;

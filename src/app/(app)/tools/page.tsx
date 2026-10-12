@@ -75,6 +75,7 @@ type FormState = {
   pass_through: boolean;
   notes: string;
   login_url: string;
+  logo_url: string;
 };
 
 const blankForm = (): FormState => ({
@@ -91,6 +92,7 @@ const blankForm = (): FormState => ({
   pass_through: true,
   notes: "",
   login_url: "",
+  logo_url: "",
 });
 
 function ToolForm({
@@ -124,6 +126,7 @@ function ToolForm({
         pass_through: initial.pass_through,
         notes: initial.notes ?? "",
         login_url: initial.login_url ?? "",
+        logo_url: initial.logo_url ?? "",
       });
     } else {
       setForm(blankForm());
@@ -151,6 +154,7 @@ function ToolForm({
       pass_through: form.bill_to_company_id ? form.pass_through : false,
       notes: form.notes.trim() || null,
       login_url: form.login_url.trim() || null,
+      logo_url: form.logo_url.trim() || null,
     };
     try {
       if (initial) {
@@ -175,6 +179,7 @@ function ToolForm({
               pass_through: snapshot.pass_through,
               notes: snapshot.notes,
               login_url: snapshot.login_url,
+              logo_url: snapshot.logo_url,
             });
           },
         });
@@ -375,6 +380,15 @@ function ToolForm({
               onChange={(e) => set("login_url", e.target.value)}
               placeholder="https://"
               className="bg-neutral-950 border-neutral-700"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-neutral-500">Logo URL</Label>
+            <Input
+              value={form.logo_url}
+              onChange={(e) => set("logo_url", e.target.value)}
+              placeholder="/tools/cursor.png"
+              className="bg-neutral-950 border-neutral-700 font-mono text-xs"
             />
           </div>
           <div className="space-y-1.5">
@@ -580,6 +594,7 @@ export default function ToolsPage() {
           pass_through: snapshot.pass_through,
           notes: snapshot.notes,
           login_url: snapshot.login_url,
+          logo_url: snapshot.logo_url,
         });
       },
     });
@@ -704,8 +719,21 @@ export default function ToolsPage() {
                           setEditing(tool);
                           setFormOpen(true);
                         }}
-                        className="flex-1 min-w-0 text-left"
+                        className="flex-1 min-w-0 text-left flex items-start gap-3"
                       >
+                        <span className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center shrink-0 overflow-hidden border border-neutral-700/80">
+                          {tool.logo_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={tool.logo_url}
+                              alt=""
+                              className="w-full h-full object-contain p-1"
+                            />
+                          ) : (
+                            <Wrench className="w-3.5 h-3.5 text-neutral-500" />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-medium text-neutral-100">
                             {tool.name}
@@ -729,6 +757,7 @@ export default function ToolsPage() {
                           )}
                           {tool.notes ? ` · ${tool.notes}` : ""}
                         </p>
+                        </span>
                       </button>
 
                       <div className="flex flex-wrap items-center gap-3 sm:gap-4 shrink-0">

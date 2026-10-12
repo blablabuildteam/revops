@@ -80,6 +80,11 @@ export async function PUT(
             ? body.login_url?.trim() || null
             : existing.login_url
         },
+        logo_url = ${
+          body.logo_url !== undefined
+            ? body.logo_url?.trim() || null
+            : existing.logo_url
+        },
         invoiced_periods = ${JSON.stringify(periods)}::jsonb,
         updated_at = now()
       WHERE id = ${id}

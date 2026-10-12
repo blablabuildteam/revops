@@ -147,6 +147,7 @@ export function mapToolRow(row: Record<string, unknown>): ToolSubscription {
     pass_through: row.pass_through !== false && row.pass_through !== "false",
     notes: (row.notes as string | null) ?? null,
     login_url: (row.login_url as string | null) ?? null,
+    logo_url: (row.logo_url as string | null) ?? null,
     invoiced_periods: normalizeInvoicedPeriods(row.invoiced_periods),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),

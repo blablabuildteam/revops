@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       INSERT INTO tool_subscriptions (
         name, vendor, category, cost_type, billing_frequency, our_cost,
         currency, status, start_date, end_date, bill_to_company_id,
-        pass_through, notes, login_url
+        pass_through, notes, login_url, logo_url
       ) VALUES (
         ${body.name.trim()},
         ${body.vendor?.trim() || null},
@@ -90,7 +90,8 @@ export async function POST(req: NextRequest) {
         ${body.bill_to_company_id || null},
         ${passThrough},
         ${body.notes?.trim() || null},
-        ${body.login_url?.trim() || null}
+        ${body.login_url?.trim() || null},
+        ${body.logo_url?.trim() || null}
       )
       RETURNING *
     `;
