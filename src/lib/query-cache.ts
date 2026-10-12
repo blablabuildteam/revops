@@ -173,4 +173,5 @@ export const cacheKeys = {
   slaAgreements: "sla-agreements",
   retainers: "retainers",
   networkContacts: "network-contacts",
+  tools: "tools",
 } as const;

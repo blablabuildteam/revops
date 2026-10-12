@@ -7,6 +7,7 @@ import {
   NetworkContact,
   NewNetworkContact,
   NewOpportunity,
+  NewToolSubscription,
   Opportunity,
   Project,
   Milestone,
@@ -17,6 +18,8 @@ import {
   Task,
   TaskComment,
   TaskAttachment,
+  ToolUsageEntry,
+  ToolWithUsage,
 } from "./types";
 import type { TaxSettings } from "./tax-settings";
 import {
@@ -738,5 +741,71 @@ export function updateNetworkContact(
 export function deleteNetworkContact(id: string): Promise<void> {
   return req<void>(`/network/${id}`, { method: "DELETE" }).then(() => {
     removeNetworkFromCache(id);
+  });
+}
+
+// Tools / licenses
+export function getTools(): Promise<ToolWithUsage[]> {
+  return cachedFetch(cacheKeys.tools, () => req("/tools"));
+}
+
+function patchToolsCache(updater: (list: ToolWithUsage[]) => ToolWithUsage[]) {
+  const current = getCached<ToolWithUsage[]>(cacheKeys.tools);
+  if (!current) {
+    invalidateCache(cacheKeys.tools);
+    return;
+  }
+  setCached(cacheKeys.tools, updater(current));
+}
+
+export function createTool(
+  data: Partial<NewToolSubscription>,
+): Promise<ToolWithUsage> {
+  return req<ToolWithUsage>("/tools", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }).then((created) => {
+    patchToolsCache((list) => [created, ...list]);
+    return created;
+  });
+}
+
+export function updateTool(
+  id: string,
+  data: Partial<ToolWithUsage> & { toggle_period?: string },
+): Promise<ToolWithUsage> {
+  return req<ToolWithUsage>(`/tools/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((updated) => {
+    patchToolsCache((list) =>
+      list.map((t) => (t.id === updated.id ? updated : t)),
+    );
+    return updated;
+  });
+}
+
+export function deleteTool(id: string): Promise<void> {
+  return req<void>(`/tools/${id}`, { method: "DELETE" }).then(() => {
+    patchToolsCache((list) => list.filter((t) => t.id !== id));
+  });
+}
+
+export function upsertToolUsage(
+  toolId: string,
+  data: { month: string; amount: number; notes?: string | null },
+): Promise<ToolUsageEntry> {
+  return req<ToolUsageEntry>(`/tools/${toolId}/usage`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  }).then((entry) => {
+    patchToolsCache((list) =>
+      list.map((t) => {
+        if (t.id !== toolId) return t;
+        const rest = (t.usage ?? []).filter((u) => u.month !== entry.month);
+        return { ...t, usage: [entry, ...rest] };
+      }),
+    );
+    return entry;
   });
 }

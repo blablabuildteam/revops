@@ -429,6 +429,7 @@ async function _init() {
       await ensureTodoAssigneesTable();
       await ensureSlackDueNotificationsTable();
       await ensureNetworkContactsTable();
+      await ensureToolsTable();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -691,6 +692,7 @@ async function _init() {
   await ensureTodoAssigneesTable();
   await ensureSlackDueNotificationsTable();
   await ensureNetworkContactsTable();
+  await ensureToolsTable();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
@@ -1392,5 +1394,103 @@ async function ensureNetworkContactsTable() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS network_contacts_status ON network_contacts (status)`;
   await sql`CREATE INDEX IF NOT EXISTS network_contacts_name ON network_contacts (name)`;
+}
+
+async function ensureToolsTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS tool_subscriptions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      vendor TEXT,
+      category TEXT NOT NULL DEFAULT 'other'
+        CHECK (category IN ('software', 'ai', 'hosting', 'design', 'comms', 'other')),
+      cost_type TEXT NOT NULL DEFAULT 'fixed'
+        CHECK (cost_type IN ('fixed', 'usage', 'hybrid')),
+      billing_frequency TEXT NOT NULL DEFAULT 'monthly'
+        CHECK (billing_frequency IN ('monthly', 'yearly')),
+      our_cost NUMERIC(12,2) NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'paused', 'ended')),
+      start_date DATE,
+      end_date DATE,
+      bill_to_company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+      pass_through BOOLEAN NOT NULL DEFAULT true,
+      notes TEXT,
+      login_url TEXT,
+      invoiced_periods JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS tool_usage_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tool_id UUID NOT NULL REFERENCES tool_subscriptions(id) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE (tool_id, month)
+    )
+  `;
+
+  await sql`CREATE INDEX IF NOT EXISTS tool_subscriptions_status ON tool_subscriptions (status)`;
+  await sql`CREATE INDEX IF NOT EXISTS tool_subscriptions_bill_to ON tool_subscriptions (bill_to_company_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS tool_usage_entries_tool_month ON tool_usage_entries (tool_id, month DESC)`;
+
+  const { rows: seedFlag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v1'
+  `;
+  if (seedFlag[0]?.value === "true") return;
+
+  const { rows: existing } = await sql`
+    SELECT COUNT(*)::int AS c FROM tool_subscriptions
+  `;
+  if (Number(existing[0]?.c) === 0) {
+    await sql`
+      INSERT INTO tool_subscriptions (
+        name, vendor, category, cost_type, billing_frequency, our_cost, status, notes
+      ) VALUES
+        (
+          'Cursor',
+          'Anysphere',
+          'software',
+          'fixed',
+          'monthly',
+          0,
+          'active',
+          'Voorbeeld — vul jullie echte bedrag in'
+        ),
+        (
+          'OpenAI',
+          'OpenAI',
+          'ai',
+          'usage',
+          'monthly',
+          0,
+          'active',
+          'Voorbeeld — usage per maand invullen; optioneel koppelen aan klant'
+        ),
+        (
+          'Vercel',
+          'Vercel',
+          'hosting',
+          'hybrid',
+          'monthly',
+          0,
+          'active',
+          'Voorbeeld — vast plan + usage overage'
+        )
+    `;
+  }
+
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES ('tools_seeded_v1', 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
 }
 

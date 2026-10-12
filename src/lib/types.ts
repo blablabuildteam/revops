@@ -136,6 +136,84 @@ export interface RetainerWithEntries extends RetainerAgreement {
   entries: RetainerTimeEntry[];
 }
 
+export type ToolCategory =
+  | "software"
+  | "ai"
+  | "hosting"
+  | "design"
+  | "comms"
+  | "other";
+export type ToolCostType = "fixed" | "usage" | "hybrid";
+export type ToolBillingFrequency = "monthly" | "yearly";
+export type ToolStatus = "active" | "paused" | "ended";
+
+export interface ToolSubscription {
+  id: string;
+  name: string;
+  vendor?: string | null;
+  category: ToolCategory;
+  cost_type: ToolCostType;
+  billing_frequency: ToolBillingFrequency;
+  /** Fixed amount per billing cycle (0 for pure usage). */
+  our_cost: number;
+  currency: string;
+  status: ToolStatus;
+  start_date?: string | null;
+  end_date?: string | null;
+  bill_to_company_id?: string | null;
+  /** Company name joined for list views. */
+  bill_to_company_name?: string | null;
+  pass_through: boolean;
+  notes?: string | null;
+  login_url?: string | null;
+  invoiced_periods: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolUsageEntry {
+  id: string;
+  tool_id: string;
+  /** YYYY-MM */
+  month: string;
+  amount: number;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ToolWithUsage extends ToolSubscription {
+  usage: ToolUsageEntry[];
+}
+
+export type NewToolSubscription = Omit<
+  ToolSubscription,
+  "id" | "created_at" | "updated_at" | "bill_to_company_name" | "invoiced_periods"
+> & {
+  invoiced_periods?: string[];
+};
+
+export const TOOL_CATEGORY_LABELS: Record<ToolCategory, string> = {
+  software: "Software",
+  ai: "AI",
+  hosting: "Hosting",
+  design: "Design",
+  comms: "Comms",
+  other: "Other",
+};
+
+export const TOOL_COST_TYPE_LABELS: Record<ToolCostType, string> = {
+  fixed: "Vast",
+  usage: "Usage",
+  hybrid: "Hybrid",
+};
+
+export const TOOL_STATUS_LABELS: Record<ToolStatus, string> = {
+  active: "Actief",
+  paused: "Gepauzeerd",
+  ended: "Gestopt",
+};
+
 /** Client-facing retainer payload — no rates, invoices, or internal notes. */
 export interface PublicRetainerEntry {
   id: string;

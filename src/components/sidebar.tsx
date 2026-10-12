@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   Contact,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
@@ -42,6 +43,7 @@ const NAV_SECTIONS = [
     label: "Business",
     items: [
       { href: "/finance", label: "Finance", icon: Euro },
+      { href: "/tools", label: "Tools", icon: Wrench },
       { href: "/companies", label: "Companies", icon: Building2 },
       { href: "/network", label: "Network", icon: Contact },
     ],

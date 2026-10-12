@@ -15,6 +15,7 @@ import {
   getRetainers,
   getSlaAgreements,
   getTaxSettings,
+  getTools,
   getUsers,
   type ApiUser,
   type BunqPots,
@@ -31,6 +32,7 @@ import type {
   Opportunity,
   RetainerWithEntries,
   SlaAgreement,
+  ToolWithUsage,
 } from "@/lib/types";
 
 export function useOpportunities() {
@@ -98,4 +100,8 @@ export function useBunqPots() {
 
 export function useNetworkContacts() {
   return useCachedQuery<NetworkContact[]>(cacheKeys.networkContacts, getNetworkContacts);
+}
+
+export function useTools() {
+  return useCachedQuery<ToolWithUsage[]>(cacheKeys.tools, getTools);
 }
