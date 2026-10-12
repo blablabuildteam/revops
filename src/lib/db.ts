@@ -1634,5 +1634,108 @@ async function ensureToolsTable() {
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
+
+  // Apollo + Hunter pass-through for Thuishaven and Recruitment Scout (shared seats).
+  const { rows: v3Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v3_apollo_hunter'
+  `;
+  if (v3Flag[0]?.value !== "true") {
+    async function ensureCompany(name: string, industry: string) {
+      const { rows: existing } = await sql`
+        SELECT id FROM companies WHERE name ILIKE ${name} LIMIT 1
+      `;
+      if (existing[0]?.id) return String(existing[0].id);
+      const { rows: created } = await sql`
+        INSERT INTO companies (name, industry, country)
+        VALUES (${name}, ${industry}, 'NL')
+        RETURNING id
+      `;
+      return String(created[0].id);
+    }
+
+    const thuishavenId = await ensureCompany("Thuishaven", "Hospitality");
+    const scoutId = await ensureCompany("Recruitment Scout", "Recruitment");
+
+    async function ensureBilledTool(
+      toolName: string,
+      companyId: string,
+      companyLabel: string,
+    ) {
+      const { rows: templateRows } = await sql`
+        SELECT * FROM tool_subscriptions
+        WHERE name ILIKE ${toolName}
+        ORDER BY created_at ASC
+        LIMIT 1
+      `;
+      if (!templateRows[0]) return;
+
+      const { rows: existing } = await sql`
+        SELECT id FROM tool_subscriptions
+        WHERE name ILIKE ${toolName}
+          AND bill_to_company_id = ${companyId}
+        LIMIT 1
+      `;
+      if (existing[0]) {
+        await sql`
+          UPDATE tool_subscriptions
+          SET pass_through = true, status = 'active', updated_at = now()
+          WHERE id = ${existing[0].id}
+        `;
+        return;
+      }
+
+      const unassigned = await sql`
+        SELECT id FROM tool_subscriptions
+        WHERE name ILIKE ${toolName}
+          AND bill_to_company_id IS NULL
+        ORDER BY created_at ASC
+        LIMIT 1
+      `;
+      if (unassigned.rows[0]?.id) {
+        await sql`
+          UPDATE tool_subscriptions SET
+            bill_to_company_id = ${companyId},
+            pass_through = true,
+            notes = ${`${String(templateRows[0].notes ?? toolName)} · doorbelasten ${companyLabel} (gedeeld)`},
+            updated_at = now()
+          WHERE id = ${unassigned.rows[0].id}
+        `;
+        return;
+      }
+
+      const t = templateRows[0];
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          currency, status, bill_to_company_id, pass_through, notes, logo_url, login_url
+        ) VALUES (
+          ${String(t.name)},
+          ${t.vendor ?? null},
+          ${String(t.category)},
+          ${String(t.cost_type)},
+          ${String(t.billing_frequency)},
+          ${Number(t.our_cost) || 0},
+          ${String(t.currency ?? "EUR")},
+          'active',
+          ${companyId},
+          true,
+          ${`${String(t.notes ?? t.name)} · doorbelasten ${companyLabel} (gedeeld)`},
+          ${t.logo_url ?? null},
+          ${t.login_url ?? null}
+        )
+      `;
+    }
+
+    for (const toolName of ["Apollo", "Hunter"]) {
+      await ensureBilledTool(toolName, thuishavenId, "Thuishaven");
+      await ensureBilledTool(toolName, scoutId, "Recruitment Scout");
+    }
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v3_apollo_hunter', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 
