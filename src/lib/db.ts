@@ -1946,5 +1946,36 @@ async function ensureToolsTable() {
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
+
+  // Resend plan is $20/mo total — split across billed clients so KPIs don't double-count.
+  const { rows: v6Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v6_resend_cost'
+  `;
+  if (v6Flag[0]?.value !== "true") {
+    const { rows: resendRows } = await sql`
+      SELECT id FROM tool_subscriptions
+      WHERE name ILIKE 'Resend' AND status = 'active'
+    `;
+    const share =
+      resendRows.length > 0
+        ? Math.round((20 / resendRows.length) * 100) / 100
+        : 20;
+    for (const row of resendRows) {
+      await sql`
+        UPDATE tool_subscriptions SET
+          our_cost = ${share},
+          currency = 'USD',
+          cost_type = 'fixed',
+          billing_frequency = 'monthly',
+          updated_at = now()
+        WHERE id = ${row.id}
+      `;
+    }
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v6_resend_cost', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 
