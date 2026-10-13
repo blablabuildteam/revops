@@ -1977,5 +1977,59 @@ async function ensureToolsTable() {
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
+
+  // Firecrawl web crawl / scrape API.
+  const { rows: v7Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v7_firecrawl'
+  `;
+  if (v7Flag[0]?.value !== "true") {
+    const { rows: existing } = await sql`
+      SELECT id FROM tool_subscriptions
+      WHERE name ILIKE 'Firecrawl' OR name ILIKE 'FireCrawl'
+      LIMIT 1
+    `;
+    if (!existing[0]) {
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          status, notes, logo_url, login_url, pass_through
+        ) VALUES (
+          'Firecrawl',
+          'Firecrawl',
+          'software',
+          'usage',
+          'monthly',
+          0,
+          'active',
+          'Web scraping / crawl API — usage per maand; koppel klant om door te belasten',
+          '/tools/firecrawl.png',
+          'https://www.firecrawl.dev',
+          false
+        )
+      `;
+    } else {
+      await sql`
+        UPDATE tool_subscriptions SET
+          name = 'Firecrawl',
+          vendor = 'Firecrawl',
+          category = 'software',
+          cost_type = 'usage',
+          logo_url = COALESCE(logo_url, '/tools/firecrawl.png'),
+          login_url = COALESCE(login_url, 'https://www.firecrawl.dev'),
+          notes = COALESCE(
+            NULLIF(notes, ''),
+            'Web scraping / crawl API — usage per maand; koppel klant om door te belasten'
+          ),
+          status = 'active',
+          updated_at = now()
+        WHERE id = ${existing[0].id}
+      `;
+    }
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v7_firecrawl', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 
