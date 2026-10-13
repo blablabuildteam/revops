@@ -1737,5 +1737,108 @@ async function ensureToolsTable() {
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
+
+  // Resend (email) + KvK API (Thuishaven pass-through).
+  const { rows: v4Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v4_resend_kvk'
+  `;
+  if (v4Flag[0]?.value !== "true") {
+    const { rows: existingResend } = await sql`
+      SELECT id FROM tool_subscriptions WHERE name ILIKE 'Resend' LIMIT 1
+    `;
+    if (!existingResend[0]) {
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          status, notes, logo_url, login_url, pass_through
+        ) VALUES (
+          'Resend',
+          'Resend',
+          'comms',
+          'usage',
+          'monthly',
+          0,
+          'active',
+          'Transactional email API — usage per maand',
+          '/tools/resend.png',
+          'https://resend.com',
+          false
+        )
+      `;
+    } else {
+      await sql`
+        UPDATE tool_subscriptions SET
+          vendor = 'Resend',
+          category = 'comms',
+          cost_type = 'usage',
+          logo_url = COALESCE(logo_url, '/tools/resend.png'),
+          login_url = COALESCE(login_url, 'https://resend.com'),
+          notes = COALESCE(NULLIF(notes, ''), 'Transactional email API — usage per maand'),
+          status = 'active',
+          updated_at = now()
+        WHERE id = ${existingResend[0].id}
+      `;
+    }
+
+    let thuishavenId: string | null = null;
+    const { rows: thuishavenRows } = await sql`
+      SELECT id FROM companies WHERE name ILIKE 'Thuishaven' LIMIT 1
+    `;
+    if (thuishavenRows[0]?.id) {
+      thuishavenId = String(thuishavenRows[0].id);
+    }
+
+    const { rows: existingKvk } = await sql`
+      SELECT id FROM tool_subscriptions
+      WHERE name ILIKE 'KvK API' OR name ILIKE 'KvK'
+      LIMIT 1
+    `;
+    if (!existingKvk[0]) {
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          status, bill_to_company_id, pass_through, notes, logo_url, login_url
+        ) VALUES (
+          'KvK API',
+          'Kamer van Koophandel',
+          'software',
+          'usage',
+          'monthly',
+          0,
+          'active',
+          ${thuishavenId},
+          ${thuishavenId != null},
+          'KvK handelsregister data voor Thuishaven — usage per maand doorbelasten',
+          '/tools/kvk.png',
+          'https://developers.kvk.nl'
+        )
+      `;
+    } else {
+      await sql`
+        UPDATE tool_subscriptions SET
+          name = 'KvK API',
+          vendor = 'Kamer van Koophandel',
+          category = 'software',
+          cost_type = 'usage',
+          bill_to_company_id = COALESCE(bill_to_company_id, ${thuishavenId}),
+          pass_through = true,
+          logo_url = COALESCE(logo_url, '/tools/kvk.png'),
+          login_url = COALESCE(login_url, 'https://developers.kvk.nl'),
+          notes = COALESCE(
+            NULLIF(notes, ''),
+            'KvK handelsregister data voor Thuishaven — usage per maand doorbelasten'
+          ),
+          status = 'active',
+          updated_at = now()
+        WHERE id = ${existingKvk[0].id}
+      `;
+    }
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v4_resend_kvk', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 
