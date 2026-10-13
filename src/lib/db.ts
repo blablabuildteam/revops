@@ -1840,5 +1840,111 @@ async function ensureToolsTable() {
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
+
+  // Resend pass-through for CityBiteGuide + Elite Escort Group.
+  const { rows: v5Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v5_resend_clients'
+  `;
+  if (v5Flag[0]?.value !== "true") {
+    async function ensureNamedCompany(name: string, industry: string) {
+      const { rows: existing } = await sql`
+        SELECT id FROM companies WHERE name ILIKE ${name} LIMIT 1
+      `;
+      if (existing[0]?.id) return String(existing[0].id);
+      const { rows: created } = await sql`
+        INSERT INTO companies (name, industry, country)
+        VALUES (${name}, ${industry}, 'NL')
+        RETURNING id
+      `;
+      return String(created[0].id);
+    }
+
+    const cityId = await ensureNamedCompany("CityBiteGuide", "Local guides");
+    let eliteId: string | null = null;
+    const { rows: eliteRows } = await sql`
+      SELECT id FROM companies
+      WHERE name ILIKE 'Elite Escort Group'
+         OR name ILIKE 'EliteEscortGroup'
+      LIMIT 1
+    `;
+    if (eliteRows[0]?.id) {
+      eliteId = String(eliteRows[0].id);
+    } else {
+      eliteId = await ensureNamedCompany("Elite Escort Group", "Entertainment");
+    }
+
+    async function ensureResendFor(companyId: string, companyLabel: string) {
+      const { rows: templateRows } = await sql`
+        SELECT * FROM tool_subscriptions
+        WHERE name ILIKE 'Resend'
+        ORDER BY created_at ASC
+        LIMIT 1
+      `;
+      if (!templateRows[0]) return;
+
+      const { rows: existing } = await sql`
+        SELECT id FROM tool_subscriptions
+        WHERE name ILIKE 'Resend' AND bill_to_company_id = ${companyId}
+        LIMIT 1
+      `;
+      if (existing[0]) {
+        await sql`
+          UPDATE tool_subscriptions
+          SET pass_through = true, status = 'active', updated_at = now()
+          WHERE id = ${existing[0].id}
+        `;
+        return;
+      }
+
+      const { rows: unassigned } = await sql`
+        SELECT id FROM tool_subscriptions
+        WHERE name ILIKE 'Resend' AND bill_to_company_id IS NULL
+        ORDER BY created_at ASC
+        LIMIT 1
+      `;
+      if (unassigned[0]?.id) {
+        await sql`
+          UPDATE tool_subscriptions SET
+            bill_to_company_id = ${companyId},
+            pass_through = true,
+            notes = ${`Transactional email API — doorbelasten ${companyLabel} (gedeeld)`},
+            updated_at = now()
+          WHERE id = ${unassigned[0].id}
+        `;
+        return;
+      }
+
+      const t = templateRows[0];
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          currency, status, bill_to_company_id, pass_through, notes, logo_url, login_url
+        ) VALUES (
+          'Resend',
+          ${t.vendor ?? "Resend"},
+          ${String(t.category ?? "comms")},
+          ${String(t.cost_type ?? "usage")},
+          ${String(t.billing_frequency ?? "monthly")},
+          ${Number(t.our_cost) || 0},
+          ${String(t.currency ?? "EUR")},
+          'active',
+          ${companyId},
+          true,
+          ${`Transactional email API — doorbelasten ${companyLabel} (gedeeld)`},
+          ${t.logo_url ?? "/tools/resend.png"},
+          ${t.login_url ?? "https://resend.com"}
+        )
+      `;
+    }
+
+    await ensureResendFor(cityId, "CityBiteGuide");
+    if (eliteId) await ensureResendFor(eliteId, "Elite Escort Group");
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v5_resend_clients', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
 }
 
