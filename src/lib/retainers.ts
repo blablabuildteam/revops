@@ -203,7 +203,7 @@ export function includedHoursForWeek(
 ): number {
   const included = Number(retainer.hours_included) || 0;
   if (retainer.hours_cadence === "monthly") {
-    return Math.round((included / 4.333) * 10) / 10;
+    return Math.round((included / 4.333) * 100) / 100;
   }
   return included;
 }
@@ -214,7 +214,7 @@ export function includedHoursForPeriod(
   const included = Number(retainer.hours_included) || 0;
   if (retainer.hours_cadence === "weekly") {
     // Rolling/calendar billing period ≈ 1 month ≈ 4.333 weeks
-    return Math.round(included * 4.333 * 10) / 10;
+    return Math.round(included * 4.333 * 100) / 100;
   }
   return included;
 }
@@ -249,7 +249,7 @@ export function flexHoursBalance(
   return {
     included,
     used,
-    balance: Math.round((included - used) * 10) / 10,
+    balance: Math.round((included - used) * 100) / 100,
   };
 }
 

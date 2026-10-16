@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useMemo } from "react";
 import { Plus, AlertCircle, FolderKanban, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createProject, getCompanies, updateProject, bindProjectSlack, type ProjectWithStats } from "@/lib/api";
+import { createProject, getCompanies, getProject, updateProject, bindProjectSlack, type ProjectWithStats } from "@/lib/api";
 import { useProjects } from "@/hooks/use-api-data";
 import {
   Company,
@@ -489,7 +489,12 @@ function ProjectRow({
         ) : (
           <div className="w-8 h-8 rounded-md bg-neutral-800 border border-neutral-700 shrink-0" />
         )}
-        <Link href={`/projects/${project.id}`} className="flex items-center min-w-0 flex-1">
+        <Link
+          href={`/projects/${project.id}`}
+          className="flex items-center min-w-0 flex-1"
+          onMouseEnter={() => void getProject(project.id).catch(() => {})}
+          onFocus={() => void getProject(project.id).catch(() => {})}
+        >
         <p className={`min-w-0 text-sm transition-colors truncate flex items-center gap-1.5 ${
           isCompleted ? "text-neutral-500 group-hover:text-neutral-300" : "text-neutral-200 group-hover:text-white"
         }`}>

@@ -10,40 +10,34 @@ export async function GET(
   const { id } = await params;
   try {
     await ensureTables();
-    const { rows: projectRows } = await sql`
-      SELECT p.*, json_build_object('id', c.id, 'name', c.name, 'logo_url', c.logo_url) AS company
-      FROM projects p
-      LEFT JOIN companies c ON c.id = p.company_id
-      WHERE p.id = ${id}
-    `;
+    // Run all three reads in parallel; comment/attachment counts are scoped to
+    // this project's tasks instead of aggregating every row in the database.
+    const [{ rows: projectRows }, { rows: milestones }, { rows: tasks }] = await Promise.all([
+      sql`
+        SELECT p.*, json_build_object('id', c.id, 'name', c.name, 'logo_url', c.logo_url) AS company
+        FROM projects p
+        LEFT JOIN companies c ON c.id = p.company_id
+        WHERE p.id = ${id}
+      `,
+      sql`
+        SELECT * FROM milestones WHERE project_id = ${id} ORDER BY position, created_at
+      `,
+      sql`
+        SELECT
+          t.*,
+          (SELECT COUNT(*)::int FROM task_comments tc WHERE tc.task_id = t.id) AS comment_count,
+          EXISTS (SELECT 1 FROM task_attachments ta WHERE ta.task_id = t.id) AS has_attachments
+        FROM tasks t
+        WHERE t.project_id = ${id}
+        ORDER BY
+          CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+          t.position,
+          t.created_at
+      `,
+    ]);
     if (!projectRows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const project = await applyDeadlineDefaultPriority(projectRows[0]);
-
-    const { rows: milestones } = await sql`
-      SELECT * FROM milestones WHERE project_id = ${id} ORDER BY position, created_at
-    `;
-
-    const { rows: tasks } = await sql`
-      SELECT
-        t.*,
-        COALESCE(cc.count, 0)::int AS comment_count,
-        (ha.task_id IS NOT NULL) AS has_attachments
-      FROM tasks t
-      LEFT JOIN (
-        SELECT task_id, COUNT(*)::int AS count
-        FROM task_comments
-        GROUP BY task_id
-      ) cc ON cc.task_id = t.id
-      LEFT JOIN (
-        SELECT DISTINCT task_id FROM task_attachments
-      ) ha ON ha.task_id = t.id
-      WHERE t.project_id = ${id}
-      ORDER BY
-        CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-        t.position,
-        t.created_at
-    `;
 
     project.milestones = milestones.map((m) => ({
       ...m,

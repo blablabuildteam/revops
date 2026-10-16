@@ -29,6 +29,7 @@ import {
 } from "@/lib/retainers";
 import type { PublicRetainer, PublicRetainerEntry } from "@/lib/types";
 import { TASK_ASSIGNEES } from "@/lib/types";
+import { formatHours } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 function CircularProgress({
@@ -83,7 +84,7 @@ function CircularProgress({
             over ? "text-amber-300" : "text-neutral-100"
           )}
         >
-          {value.toFixed(1)}
+          {formatHours(value)}
         </span>
         <span className="text-xs text-neutral-500">van {max}u</span>
       </div>
@@ -147,7 +148,7 @@ function BucketBar({
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm text-neutral-300">{label}</span>
         <span className="text-sm font-mono text-neutral-400 tabular-nums">
-          {hours.toFixed(1)}u
+          {formatHours(hours)}u
         </span>
       </div>
       <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
@@ -433,7 +434,7 @@ export function RetainerHoursReport({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-2xl font-semibold text-[#d4e052] font-mono tabular-nums">
-                    {remaining.toFixed(1)}u
+                    {formatHours(remaining)}u
                   </p>
                   <p className="text-xs text-neutral-500">beschikbaar</p>
                 </div>
@@ -462,13 +463,13 @@ export function RetainerHoursReport({
         <StatCard
           icon={Clock}
           label="Deze periode"
-          value={`${periodHours.toFixed(1)}u`}
+          value={`${formatHours(periodHours)}u`}
           subtext={`van ${periodCap}u`}
         />
         <StatCard
           icon={TrendingUp}
           label="Totaal gelogd"
-          value={`${totalHours.toFixed(1)}u`}
+          value={`${formatHours(totalHours)}u`}
           subtext="alle periodes"
         />
         <StatCard
@@ -560,10 +561,10 @@ export function RetainerHoursReport({
                         weekOver ? "text-amber-300" : "text-neutral-400"
                       )}
                     >
-                      {weekTotal.toFixed(1)}u
+                      {formatHours(weekTotal)}u
                       {weekOver && (
                         <span className="text-amber-400/70 ml-1">
-                          (+{(weekTotal - weekCap).toFixed(1)})
+                          (+{formatHours(weekTotal - weekCap)})
                         </span>
                       )}
                     </span>
@@ -670,7 +671,7 @@ export function RetainerHoursReport({
                           )}
                         </div>
                         <span className="font-mono text-sm text-neutral-300 tabular-nums shrink-0">
-                          {Number(entry.hours).toFixed(1)}u
+                          {formatHours(Number(entry.hours))}u
                         </span>
                         {editable && (
                           <Pencil className="w-3.5 h-3.5 text-neutral-700 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 mt-0.5 shrink-0" />

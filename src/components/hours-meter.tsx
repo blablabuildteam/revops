@@ -1,3 +1,4 @@
+import { formatHours } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function HoursMeter({
@@ -23,7 +24,7 @@ export function HoursMeter({
             over ? "text-amber-300" : "text-neutral-200",
           )}
         >
-          {used.toFixed(1)} / {cap}u
+          {formatHours(used)} / {cap}u
         </span>
       </div>
       <div
@@ -44,7 +45,7 @@ export function HoursMeter({
       </div>
       {over && (
         <p className="text-[10px] text-amber-400/90 text-right">
-          +{(used - cap).toFixed(1)}u over
+          +{formatHours(used - cap)}u over
         </p>
       )}
     </div>

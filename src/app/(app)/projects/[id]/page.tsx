@@ -1381,9 +1381,14 @@ function MilestoneSection({
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [tasksByMilestone, setTasksByMilestone] = useState<TasksByMilestone>({});
-  const [loading, setLoading] = useState(true);
+  // Render straight from the client cache (e.g. prefetched on hover) when available.
+  const [project, setProject] = useState<ProjectDetail | null>(
+    () => getCached<ProjectDetail>(cacheKeys.project(id)) ?? null,
+  );
+  const [tasksByMilestone, setTasksByMilestone] = useState<TasksByMilestone>(() =>
+    project ? buildTasksByMilestone(project.milestones, project.unassigned_tasks || []) : {},
+  );
+  const [loading, setLoading] = useState(() => !project);
   const [newMilestoneName, setNewMilestoneName] = useState("");
   const [newMilestoneColor, setNewMilestoneColor] = useState(CUSTOM_PHASE_DEFAULT_COLOR);
   const [addingMilestone, setAddingMilestone] = useState(false);

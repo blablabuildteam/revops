@@ -27,7 +27,7 @@ import {
   updateRetainerAgreement,
   updateRetainerTimeEntry,
 } from "@/lib/api";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatHours } from "@/lib/format";
 import {
   addDays,
   addMonths,
@@ -576,7 +576,7 @@ function RetainerCard({
                             : "text-neutral-600",
                       )}
                     >
-                      {weekHours.toFixed(1)}u
+                      {formatHours(weekHours)}u
                     </span>
                     <span className="text-xs text-neutral-600">
                       / {weekCap}u
@@ -692,7 +692,7 @@ function RetainerCard({
                                     </p>
                                   </div>
                                   <span className="font-mono text-sm text-neutral-300 shrink-0 pt-0.5">
-                                    {Number(entry.hours).toFixed(1)}u
+                                    {formatHours(Number(entry.hours))}u
                                   </span>
                                   <Pencil className="w-3.5 h-3.5 text-neutral-700 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 mt-1 shrink-0" />
                                 </button>

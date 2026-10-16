@@ -7,6 +7,17 @@ export function formatCurrency(value: number, currency = "EUR"): string {
   }).format(value);
 }
 
+const hoursFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 2,
+  useGrouping: false,
+});
+
+/** Hours with quarter-hour precision: 2 → "2.0", 2.5 → "2.5", 2.25 → "2.25". */
+export function formatHours(value: number): string {
+  return hoursFormatter.format(value);
+}
+
 export function parseLocalDate(dateStr?: string | Date | null): Date | null {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return dateStr;
