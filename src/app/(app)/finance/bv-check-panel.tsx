@@ -41,6 +41,38 @@ const BvComparisonChart = dynamicImport(
 
 const CHART_MAX_PROFIT = 800_000;
 const CHART_STEP = 10_000;
+const HIGHER_SALARY = 96_000;
+
+const PAYOUT_SCENARIOS = [
+  {
+    id: "holding",
+    label: "Low salary, keep the rest",
+    salary: GEBRUIKELIJK_LOON,
+    dividendShare: 0,
+    hint: "Holding case — this is when a BV usually wins",
+  },
+  {
+    id: "higher-salary",
+    label: "Higher salary, keep the rest",
+    salary: HIGHER_SALARY,
+    dividendShare: 0,
+    hint: "More cash now, less left in the company",
+  },
+  {
+    id: "mix",
+    label: "Salary + half dividend",
+    salary: GEBRUIKELIJK_LOON,
+    dividendShare: 0.5,
+    hint: "Some private payout, half the surplus stays",
+  },
+  {
+    id: "all-out",
+    label: "Pay everything out",
+    salary: GEBRUIKELIJK_LOON,
+    dividendShare: 1,
+    hint: "Salary plus full dividend, box 2 this year",
+  },
+] as const;
 
 function Verdict({
   favoursBv,
@@ -89,7 +121,14 @@ export function BvCheckPanel({
   onSettingsChange: (patch: Partial<TaxSettings>) => void;
   bunqYearTotalInclVat?: number | null;
 }) {
-  const [retainProfit, setRetainProfit] = useState(true);
+  const [dividendShare, setDividendShare] = useState(0);
+  const keepsProfit = dividendShare < 1;
+  const activeScenario =
+    PAYOUT_SCENARIOS.find(
+      (scenario) =>
+        scenario.dividendShare === dividendShare &&
+        scenario.salary === settings.bv_dga_salary,
+    )?.id ?? null;
   const year = new Date().getFullYear();
   const partners = TASK_ASSIGNEES.length;
 
@@ -139,10 +178,9 @@ export function BvCheckPanel({
       startersaftrek: settings.tax_startersaftrek,
       dgaSalary: settings.bv_dga_salary,
       extraAnnualCost: settings.bv_extra_annual_cost,
-      // Holding-style by default: salary out, rest stays in the BV after VPB.
-      payout: (retainProfit ? "salary_only" : "full") as "salary_only" | "full",
+      dividendShare,
     }),
-    [partners, settings, retainProfit],
+    [partners, settings, dividendShare],
   );
 
   const series = useMemo(
@@ -178,9 +216,9 @@ export function BvCheckPanel({
         partners,
         dgaSalary: settings.bv_dga_salary,
         extraAnnualCost: settings.bv_extra_annual_cost,
-        payout: retainProfit ? "salary_only" : "full",
+        dividendShare,
       }),
-    [profit, partners, settings, retainProfit],
+    [profit, partners, settings, dividendShare],
   );
 
   const favoursBv = current.difference > 0;
@@ -191,7 +229,7 @@ export function BvCheckPanel({
   const toBreakEven = range.from !== null ? range.from - profit : null;
 
   const headline = favoursBv
-    ? retainProfit
+    ? keepsProfit
       ? `A BV would leave you about ${formatCurrency(current.difference)} richer per year`
       : `A BV would net you about ${formatCurrency(current.difference)} more cash per year`
     : range.from === null
@@ -199,13 +237,13 @@ export function BvCheckPanel({
       : `Stay a VOF — a BV would leave you about ${formatCurrency(-current.difference)} worse off`;
 
   const body = favoursBv
-    ? retainProfit
-      ? `At ${formatCurrency(profit)} profit you take two statutory salaries and leave the rest in the work BV / personal holdings after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — you just have not paid box 2 on it yet.`
-      : `At ${formatCurrency(profit)} profit, even after paying box 2 on a full dividend, the BV still beats the VOF.`
+    ? keepsProfit
+      ? `At ${formatCurrency(profit)} profit each of you takes ${formatCurrency(settings.bv_dga_salary)} salary and ${dividendShare === 0 ? "leaves the rest" : "pays part out as dividend and leaves the rest"} in the work BV / holdings after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — box 2 is only due when you take it privately.`
+      : `At ${formatCurrency(profit)} profit, even after paying box 2 on a full dividend on top of ${formatCurrency(settings.bv_dga_salary)} salary, the BV still beats the VOF.`
     : range.from === null
-      ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current settings."
+      ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current salary and payout."
       : toBreakEven !== null && toBreakEven > 0
-        ? `You would need roughly ${formatCurrency(toBreakEven)} more yearly profit before it flips. Below that, two salaries of ${formatCurrency(settings.bv_dga_salary)} plus ${formatCurrency(settings.bv_extra_annual_cost)} of holding admin eat the rate advantage.`
+        ? `You would need roughly ${formatCurrency(toBreakEven)} more yearly profit before it flips. A higher salary, or paying dividend now, spends the advantage — the holding only wins when surplus stays in the company.`
         : `Your profit sits above the band where a holding wins under these assumptions.`;
 
   return (
@@ -238,7 +276,7 @@ export function BvCheckPanel({
           label="As a BV"
           value={formatCurrency(current.bvNet)}
           sub={
-            retainProfit
+            keepsProfit
               ? `Salary in hand + ${formatCurrency(current.bvRetained)} left in BV`
               : `Salary + dividend after box 2 · ${formatPercent(bv.effectiveRate)} tax`
           }
@@ -247,7 +285,7 @@ export function BvCheckPanel({
           label="Difference"
           value={`${favoursBv ? "+" : "−"}${formatCurrency(Math.abs(current.difference))}`}
           sub={
-            retainProfit
+            keepsProfit
               ? favoursBv
                 ? "Richer with a BV (incl. retained equity)"
                 : "VOF still ahead on total wealth"
@@ -364,9 +402,10 @@ export function BvCheckPanel({
               {
                 title: "Box 2 later",
                 body: "Money left in the holding after VPB still carries deferred box 2 when you take a private dividend.",
-                amount: retainProfit
-                  ? `≈ ${formatCurrency(bv.deferredBox2)} parked`
-                  : "paid this year",
+                amount:
+                  bv.deferredBox2 > 0
+                    ? `≈ ${formatCurrency(bv.deferredBox2)} parked`
+                    : "paid this year",
               },
             ].map((item) => (
               <li
@@ -473,17 +512,42 @@ export function BvCheckPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-medium text-neutral-300">
-              {retainProfit ? "Wealth by legal form" : "Cash by legal form"}
+              {keepsProfit ? "Wealth by legal form" : "Cash by legal form"}
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
-              {retainProfit
-                ? "VOF = cash after tax. BV = net salary + equity left in the company after VPB (box 2 deferred)."
-                : "Both sides paid out privately this year, including box 2 on BV dividends."}
+              A BV pays off when surplus stays in the holding. A higher salary or a dividend now moves that money into box 1 or box 2 and the chart usually closes the gap with the VOF.
             </p>
           </div>
-          <ToggleChip active={retainProfit} onClick={() => setRetainProfit((v) => !v)}>
-            Keep profit in the BV
-          </ToggleChip>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+          {PAYOUT_SCENARIOS.map((scenario) => (
+            <button
+              key={scenario.id}
+              type="button"
+              onClick={() => {
+                setDividendShare(scenario.dividendShare);
+                if (settings.bv_dga_salary !== scenario.salary) {
+                  onSettingsChange({ bv_dga_salary: scenario.salary });
+                }
+              }}
+              className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                activeScenario === scenario.id
+                  ? "border-[#d4e052]/50 bg-[#d4e052]/10"
+                  : "border-neutral-800 bg-neutral-950/40 hover:border-neutral-600"
+              }`}
+            >
+              <p className="text-xs font-medium text-neutral-100">{scenario.label}</p>
+              <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
+                {formatCurrency(scenario.salary)} salary
+                {scenario.dividendShare === 0
+                  ? " · rest stays"
+                  : scenario.dividendShare === 1
+                    ? " · all surplus as dividend"
+                    : " · half the surplus as dividend"}
+                . {scenario.hint}
+              </p>
+            </button>
+          ))}
         </div>
         <div className="flex items-center gap-4 text-xs -mt-1">
           <span className="flex items-center gap-1.5">
@@ -570,14 +634,22 @@ export function BvCheckPanel({
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-medium text-neutral-300">BV scenario</h2>
             <span className="text-xs text-neutral-500">
-              {retainProfit ? "Holding-style (retain)" : "Full dividend payout"}
+              {dividendShare === 0
+                ? "Salary only, rest stays"
+                : dividendShare === 1
+                  ? "Full dividend payout"
+                  : "Salary + partial dividend"}
             </span>
           </div>
           <AmountRow label="Profit before salaries" value={profit} />
           <AmountRow
             label={`Salaries (${partners} × ${formatCurrency(bv.dgaSalaryTotal / partners)})`}
             value={bv.dgaSalaryTotal}
-            hint="Statutory minimum for a director-shareholder"
+            hint={
+              settings.bv_dga_salary <= GEBRUIKELIJK_LOON
+                ? "Around the statutory minimum — leaves more profit in the holding"
+                : "Above the statutory minimum — more private cash, less retained"
+            }
             tone="muted"
             negative
           />
@@ -596,27 +668,28 @@ export function BvCheckPanel({
             negative
           />
           <AmountRow label="Income tax on salaries" value={bv.salaryTaxTotal} tone="negative" negative />
-          {retainProfit ? (
-            <>
-              <AmountRow label="Net salary in hand" value={bv.totalNet} emphasis tone="accent" />
-              <AmountRow
-                label="Retained in the BV"
-                value={bv.retainedInBv}
-                hint={`Carries ${formatCurrency(bv.deferredBox2)} of box 2 tax when you pay it out later`}
-                tone="muted"
-              />
-            </>
-          ) : (
-            <>
-              <AmountRow
-                label={`Box 2 on dividend (${formatPercent(BOX2_LOW_RATE, 1)})`}
-                value={bv.box2Total}
-                hint={`${formatCurrency(bv.dividendPerPartner)} dividend per partner`}
-                tone="negative"
-                negative
-              />
-              <AmountRow label="Net for both partners" value={bv.totalNet} emphasis tone="accent" />
-            </>
+          {bv.box2Total > 0 && (
+            <AmountRow
+              label={`Box 2 on dividend (${formatPercent(BOX2_LOW_RATE, 1)})`}
+              value={bv.box2Total}
+              hint={`${formatCurrency(bv.dividendPerPartner)} dividend per partner`}
+              tone="negative"
+              negative
+            />
+          )}
+          <AmountRow
+            label={keepsProfit ? "Net cash this year" : "Net for both partners"}
+            value={bv.totalNet}
+            emphasis
+            tone="accent"
+          />
+          {bv.retainedInBv > 0 && (
+            <AmountRow
+              label="Left in the holding"
+              value={bv.retainedInBv}
+              hint={`Still yours. Box 2 of about ${formatCurrency(bv.deferredBox2)} only when you pay it out privately`}
+              tone="muted"
+            />
           )}
         </div>
       </div>
@@ -630,7 +703,7 @@ export function BvCheckPanel({
             step={1000}
             value={settings.bv_dga_salary}
             onChange={(value) => onSettingsChange({ bv_dga_salary: value })}
-            hint={`Statutory minimum is ${formatCurrency(GEBRUIKELIJK_LOON)}`}
+            hint={`Play with this. Statutory floor is about ${formatCurrency(GEBRUIKELIJK_LOON)}; a higher salary makes the BV less attractive`}
           />
           <NumberField
             label="Extra yearly cost of the holding"
@@ -669,11 +742,11 @@ export function BvCheckPanel({
         <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
         <div className="space-y-1.5 leading-relaxed">
           <p>
-            Default view matches a holding: each director takes the statutory salary from the
-            work BV, the company pays {formatPercent(VPB_LOW_RATE, 0)} VPB on the rest, and that
-            equity stays in the group (work BV and/or personal holdings) until you take a private
-            dividend — which is when box 2 is due. Turn off “Keep profit in the BV” to force a
-            full payout comparison instead.
+            The interesting case is a modest salary and the rest left in the holding after{" "}
+            {formatPercent(VPB_LOW_RATE, 0)} VPB. That equity is still yours; box 2 only hits when
+            you take a private dividend. Paying yourselves more, or taking dividend now, is a mix
+            — the chart shows how quickly that closes the gap with the VOF. The salary field and
+            the four scenarios both drive the same comparison.
           </p>
           <p>
             The costs / benefits cards list what changes operationally. The chart only prices the

@@ -411,6 +411,11 @@ export type BvOptions = {
   extraAnnualCost?: number;
   /** Distribute everything as dividend, or leave the surplus in the BV. */
   payout?: "full" | "salary_only";
+  /**
+   * Share of after-VPB profit paid as dividend now (0–1).
+   * 0 = leave it in the holding, 1 = pay it all out. Overrides `payout`.
+   */
+  dividendShare?: number;
 };
 
 export type BvTaxResult = {
@@ -450,13 +455,20 @@ function salaryTax(gross: number): number {
   return Math.max(0, taxBeforeCredits - credits);
 }
 
+function dividendFraction(options: BvOptions): number {
+  if (options.dividendShare != null && Number.isFinite(options.dividendShare)) {
+    return Math.min(1, Math.max(0, options.dividendShare));
+  }
+  return options.payout === "salary_only" ? 0 : 1;
+}
+
 export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
   const {
     partners,
     dgaSalary = GEBRUIKELIJK_LOON,
     extraAnnualCost = 0,
-    payout = "full",
   } = options;
+  const fraction = dividendFraction(options);
 
   const profit = Math.max(0, totalProfit);
   // A BV cannot pay out more salary than it earns; below that the tax office
@@ -474,32 +486,15 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
   const salaryTaxTotal = salaryTax(affordableSalary) * partners;
   const netSalaryTotal = dgaSalaryTotal - salaryTaxTotal;
 
-  if (payout === "salary_only") {
-    const deferredBox2 = box2Tax(distributable / partners) * partners;
-    const economicNet = netSalaryTotal + distributable;
-    return {
-      totalProfit: profit,
-      dgaSalaryTotal,
-      employerZvw,
-      extraAnnualCost,
-      vpbBase,
-      vpb,
-      distributable,
-      dividendPerPartner: 0,
-      box2Total: 0,
-      salaryTaxTotal,
-      totalNet: netSalaryTotal,
-      retainedInBv: distributable,
-      deferredBox2,
-      economicNet,
-      // Tax paid this year only — deferred box 2 is not counted yet.
-      effectiveRate: profit > 0 ? (salaryTaxTotal + vpb + employerZvw) / profit : 0,
-    };
-  }
-
-  const dividendPerPartner = distributable / partners;
+  const dividendPool = distributable * fraction;
+  const retainedInBv = distributable - dividendPool;
+  const dividendPerPartner = partners > 0 ? dividendPool / partners : 0;
   const box2Total = box2Tax(dividendPerPartner) * partners;
-  const totalNet = netSalaryTotal + distributable - box2Total;
+  const deferredBox2 =
+    retainedInBv > 0 ? box2Tax(retainedInBv / partners) * partners : 0;
+  const totalNet = netSalaryTotal + dividendPool - box2Total;
+  const economicNet = totalNet + retainedInBv;
+  const taxPaidNow = salaryTaxTotal + vpb + employerZvw + box2Total;
 
   return {
     totalProfit: profit,
@@ -513,10 +508,10 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
     box2Total,
     salaryTaxTotal,
     totalNet,
-    retainedInBv: 0,
-    deferredBox2: 0,
-    economicNet: totalNet,
-    effectiveRate: profit > 0 ? (profit - totalNet) / profit : 0,
+    retainedInBv,
+    deferredBox2,
+    economicNet,
+    effectiveRate: profit > 0 ? taxPaidNow / profit : 0,
   };
 }
 
