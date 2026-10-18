@@ -1,4 +1,4 @@
-import { resolveSessionUser, type SessionUser } from "@/lib/auth";
+import { getSession, resolveSessionUser, type SessionUser } from "@/lib/auth";
 import { ensureTables, sql } from "@/lib/db";
 import { formatOpportunityRow } from "@/lib/format";
 import { applyDeadlineDefaultPriorities } from "@/lib/project-deadline-priority";
@@ -37,13 +37,27 @@ async function fetchProjects(): Promise<ProjectWithStats[]> {
     SELECT
       p.*,
       json_build_object('id', c.id, 'name', c.name, 'industry', c.industry, 'logo_url', c.logo_url) AS company,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.approved = true) AS task_count,
-      (SELECT COUNT(*) FROM tasks t
-        INNER JOIN milestones m ON m.id = t.milestone_id
-        WHERE t.project_id = p.id AND t.approved = true AND LOWER(m.name) = 'done') AS done_count,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.created_by = 'client' AND t.approved = false) AS pending_requests
+      COALESCE(stats.task_count, 0) AS task_count,
+      COALESCE(stats.done_count, 0) AS done_count,
+      COALESCE(stats.pending_requests, 0) AS pending_requests
     FROM projects p
     LEFT JOIN companies c ON c.id = p.company_id
+    LEFT JOIN (
+      SELECT
+        t.project_id,
+        COUNT(*) FILTER (WHERE t.approved = true) AS task_count,
+        COUNT(*) FILTER (
+          WHERE t.approved = true
+            AND m.id IS NOT NULL
+            AND LOWER(m.name) = 'done'
+        ) AS done_count,
+        COUNT(*) FILTER (
+          WHERE t.created_by = 'client' AND t.approved = false
+        ) AS pending_requests
+      FROM tasks t
+      LEFT JOIN milestones m ON m.id = t.milestone_id
+      GROUP BY t.project_id
+    ) stats ON stats.project_id = p.id
     ORDER BY
       CASE p.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
       CASE p.status WHEN 'active' THEN 0 WHEN 'on_hold' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
@@ -79,12 +93,12 @@ async function fetchOpportunities(): Promise<Opportunity[]> {
 }
 
 /**
- * Session only — cheap enough to block the shell on, since the sidebar needs it.
+ * Sidebar identity from the login cookie only.
+ * A database lookup here blocks every cold start before any HTML is sent.
  */
 export async function prefetchSession(): Promise<SessionUser | null> {
   try {
-    await ensureTables();
-    return await resolveSessionUser();
+    return await getSession();
   } catch (err) {
     console.error("prefetchSession failed", err);
     return null;
