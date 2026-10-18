@@ -416,6 +416,12 @@ export type BvOptions = {
    * 0 = leave it in the holding, 1 = pay it all out. Overrides `payout`.
    */
   dividendShare?: number;
+  /**
+   * Private cash each partner should reach this year (salary net + dividend
+   * after box 2). Dividend is only the top-up; anything above that stays.
+   * Overrides `dividendShare`.
+   */
+  targetNetPerPartner?: number;
 };
 
 export type BvTaxResult = {
@@ -462,14 +468,36 @@ function dividendFraction(options: BvOptions): number {
   return options.payout === "salary_only" ? 0 : 1;
 }
 
+/** Smallest dividend share that puts `targetNetTotal` in the partners' pockets. */
+function shareForTargetCash(
+  distributable: number,
+  partners: number,
+  netSalaryTotal: number,
+  targetNetTotal: number,
+): number {
+  const cashAt = (fraction: number) => {
+    const dividendPool = distributable * fraction;
+    const perPartner = partners > 0 ? dividendPool / partners : 0;
+    return netSalaryTotal + dividendPool - box2Tax(perPartner) * partners;
+  };
+  if (targetNetTotal <= netSalaryTotal || distributable <= 0) return 0;
+  if (cashAt(1) <= targetNetTotal) return 1;
+  let low = 0;
+  let high = 1;
+  for (let i = 0; i < 28; i++) {
+    const mid = (low + high) / 2;
+    if (cashAt(mid) >= targetNetTotal) high = mid;
+    else low = mid;
+  }
+  return high;
+}
+
 export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
   const {
     partners,
     dgaSalary = GEBRUIKELIJK_LOON,
     extraAnnualCost = 0,
   } = options;
-  const fraction = dividendFraction(options);
-
   const profit = Math.max(0, totalProfit);
   // A BV cannot pay out more salary than it earns; below that the tax office
   // generally accepts a lower salary than the statutory minimum.
@@ -485,6 +513,16 @@ export function bvTax(totalProfit: number, options: BvOptions): BvTaxResult {
 
   const salaryTaxTotal = salaryTax(affordableSalary) * partners;
   const netSalaryTotal = dgaSalaryTotal - salaryTaxTotal;
+
+  const fraction =
+    options.targetNetPerPartner != null && Number.isFinite(options.targetNetPerPartner)
+      ? shareForTargetCash(
+          distributable,
+          partners,
+          netSalaryTotal,
+          options.targetNetPerPartner * partners,
+        )
+      : dividendFraction(options);
 
   const dividendPool = distributable * fraction;
   const retainedInBv = distributable - dividendPool;

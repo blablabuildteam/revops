@@ -43,37 +43,43 @@ const CHART_MAX_PROFIT = 800_000;
 const CHART_STEP = 10_000;
 /** Gross that nets about €5,500 per month, holiday pay included in the year. */
 const SALARY_FOR_5500_NET = 107_500;
+const TARGET_NET_MONTH = 5_500;
+const TARGET_NET_YEAR = TARGET_NET_MONTH * 12;
 
 const PAYOUT_SCENARIOS = [
+  {
+    id: "top-up",
+    label: "€5,500 net via dividend",
+    salary: GEBRUIKELIJK_LOON,
+    dividendShare: 0,
+    targetNetPerPartner: TARGET_NET_YEAR as number | null,
+    hint: "Recommended. Low salary, dividend only until you reach €5,500",
+  },
+  {
+    id: "net-5500",
+    label: "€5,500 net as salary",
+    salary: SALARY_FOR_5500_NET,
+    dividendShare: 0,
+    targetNetPerPartner: null,
+    hint: "Same pocket money, almost nothing left to save",
+  },
   {
     id: "holding",
     label: "Low salary, keep the rest",
     salary: GEBRUIKELIJK_LOON,
     dividendShare: 0,
-    hint: "Holding case — this is when a BV usually wins",
-  },
-  {
-    id: "net-5500",
-    label: "€5,500 net, rest stays",
-    salary: SALARY_FOR_5500_NET,
-    dividendShare: 0,
-    hint: "Each of you. Anything left can stay in the work BV or your own holding",
-  },
-  {
-    id: "mix",
-    label: "Salary + half dividend",
-    salary: GEBRUIKELIJK_LOON,
-    dividendShare: 0.5,
-    hint: "Some private payout, half the surplus stays",
+    targetNetPerPartner: null,
+    hint: "Most wealth stays in the holding. About €3,600 net per month",
   },
   {
     id: "all-out",
     label: "Pay everything out",
     salary: GEBRUIKELIJK_LOON,
     dividendShare: 1,
+    targetNetPerPartner: null,
     hint: "Salary plus full dividend, box 2 this year",
   },
-] as const;
+];
 
 function Verdict({
   favoursBv,
@@ -123,13 +129,21 @@ export function BvCheckPanel({
   bunqYearTotalInclVat?: number | null;
 }) {
   const [dividendShare, setDividendShare] = useState(0);
-  const keepsProfit = dividendShare < 1;
+  const [targetNetPerPartner, setTargetNetPerPartner] = useState<number | null>(
+    () => (settings.bv_dga_salary <= GEBRUIKELIJK_LOON ? TARGET_NET_YEAR : null),
+  );
   const activeScenario =
-    PAYOUT_SCENARIOS.find(
-      (scenario) =>
-        scenario.dividendShare === dividendShare &&
-        scenario.salary === settings.bv_dga_salary,
-    )?.id ?? null;
+    PAYOUT_SCENARIOS.find((scenario) => {
+      const sameSalary = scenario.salary === settings.bv_dga_salary;
+      if (scenario.targetNetPerPartner != null) {
+        return sameSalary && targetNetPerPartner === scenario.targetNetPerPartner;
+      }
+      return (
+        sameSalary &&
+        targetNetPerPartner == null &&
+        scenario.dividendShare === dividendShare
+      );
+    })?.id ?? null;
   const year = new Date().getFullYear();
   const partners = TASK_ASSIGNEES.length;
 
@@ -180,8 +194,9 @@ export function BvCheckPanel({
       dgaSalary: settings.bv_dga_salary,
       extraAnnualCost: settings.bv_extra_annual_cost,
       dividendShare,
+      targetNetPerPartner: targetNetPerPartner ?? undefined,
     }),
-    [partners, settings, dividendShare],
+    [partners, settings, dividendShare, targetNetPerPartner],
   );
 
   const series = useMemo(
@@ -218,9 +233,15 @@ export function BvCheckPanel({
         dgaSalary: settings.bv_dga_salary,
         extraAnnualCost: settings.bv_extra_annual_cost,
         dividendShare,
+        targetNetPerPartner: targetNetPerPartner ?? undefined,
       }),
-    [profit, partners, settings, dividendShare],
+    [profit, partners, settings, dividendShare, targetNetPerPartner],
   );
+
+  const keepsProfit = bv.retainedInBv > 1;
+  const salaryNetMonth = Math.round((bv.dgaSalaryTotal - bv.salaryTaxTotal) / partners / 12);
+  const netPerPersonMonth = Math.round(bv.totalNet / partners / 12);
+  const dividendNetMonth = Math.max(0, netPerPersonMonth - salaryNetMonth);
 
   const favoursBv = current.difference > 0;
   const inBand =
@@ -237,9 +258,11 @@ export function BvCheckPanel({
       ? "A BV does not pay off at any profit level for you"
       : `Stay a VOF — a BV would leave you about ${formatCurrency(-current.difference)} worse off`;
 
-  const body = favoursBv
+  const body = targetNetPerPartner != null
+    ? `Each of you takes the statutory salary, about ${formatCurrency(salaryNetMonth)} net per month, plus roughly ${formatCurrency(dividendNetMonth)} net from dividend. That lands on about ${formatCurrency(netPerPersonMonth)} net per month. ${formatCurrency(bv.retainedInBv)} stays in the BV for later — taking the same €5,500 entirely as salary would leave nothing there.`
+    : favoursBv
     ? keepsProfit
-      ? `At ${formatCurrency(profit)} profit each of you takes ${formatCurrency(settings.bv_dga_salary)} salary and ${dividendShare === 0 ? "leaves the rest" : "pays part out as dividend and leaves the rest"} in the work BV / holdings after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — box 2 is only due when you take it privately.`
+      ? `At ${formatCurrency(profit)} profit each of you takes ${formatCurrency(settings.bv_dga_salary)} salary and ${bv.dividendPerPartner === 0 ? "leaves the rest" : "pays part out as dividend and leaves the rest"} in the work BV / holdings after ${formatPercent(VPB_LOW_RATE, 0)} VPB. That retained equity is still yours — box 2 is only due when you take it privately.`
       : `At ${formatCurrency(profit)} profit, even after paying box 2 on a full dividend on top of ${formatCurrency(settings.bv_dga_salary)} salary, the BV still beats the VOF.`
     : range.from === null
       ? "The mkb-winstvrijstelling keeps the VOF ahead across the whole range at your current salary and payout."
@@ -530,6 +553,7 @@ export function BvCheckPanel({
               key={scenario.id}
               type="button"
               onClick={() => {
+                setTargetNetPerPartner(scenario.targetNetPerPartner);
                 setDividendShare(scenario.dividendShare);
                 if (settings.bv_dga_salary !== scenario.salary) {
                   onSettingsChange({ bv_dga_salary: scenario.salary });
@@ -543,12 +567,11 @@ export function BvCheckPanel({
             >
               <p className="text-xs font-medium text-neutral-100">{scenario.label}</p>
               <p className="text-[11px] text-neutral-500 mt-1 leading-relaxed">
-                {formatCurrency(scenario.salary)} salary
-                {scenario.dividendShare === 0
-                  ? " · rest stays"
-                  : scenario.dividendShare === 1
-                    ? " · all surplus as dividend"
-                    : " · half the surplus as dividend"}
+                {scenario.targetNetPerPartner != null
+                  ? `${formatCurrency(scenario.salary)} salary · dividend up to €5,500 net`
+                  : scenario.dividendShare === 0
+                    ? `${formatCurrency(scenario.salary)} salary · rest stays`
+                    : `${formatCurrency(scenario.salary)} salary · all surplus as dividend`}
                 . {scenario.hint}
               </p>
             </button>
@@ -639,11 +662,13 @@ export function BvCheckPanel({
           <div className="flex items-baseline justify-between">
             <h2 className="text-sm font-medium text-neutral-300">BV scenario</h2>
             <span className="text-xs text-neutral-500">
-              {dividendShare === 0
-                ? "Salary only, rest stays"
-                : dividendShare === 1
-                  ? "Full dividend payout"
-                  : "Salary + partial dividend"}
+              {targetNetPerPartner != null
+                ? "Salary + dividend top-up"
+                : bv.dividendPerPartner === 0
+                  ? "Salary only, rest stays"
+                  : bv.retainedInBv > 1
+                    ? "Salary + partial dividend"
+                    : "Full dividend payout"}
             </span>
           </div>
           <AmountRow label="Profit before salaries" value={profit} />
@@ -685,6 +710,7 @@ export function BvCheckPanel({
           <AmountRow
             label={keepsProfit ? "Net cash this year" : "Net for both partners"}
             value={bv.totalNet}
+            hint={`${formatCurrency(salaryNetMonth)} salary + ${formatCurrency(dividendNetMonth)} dividend = ${formatCurrency(netPerPersonMonth)} net per person / month`}
             emphasis
             tone="accent"
           />
@@ -707,7 +733,10 @@ export function BvCheckPanel({
             prefix="€"
             step={1000}
             value={settings.bv_dga_salary}
-            onChange={(value) => onSettingsChange({ bv_dga_salary: value })}
+            onChange={(value) => {
+              setTargetNetPerPartner(null);
+              onSettingsChange({ bv_dga_salary: value });
+            }}
             hint={`Play with this. Statutory floor is about ${formatCurrency(GEBRUIKELIJK_LOON)}; a higher salary makes the BV less attractive`}
           />
           <NumberField
@@ -747,13 +776,11 @@ export function BvCheckPanel({
         <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
         <div className="space-y-1.5 leading-relaxed">
           <p>
-            €5,500 net per month is about {formatCurrency(SALARY_FOR_5500_NET)} gross per person,
-            holiday pay included in that year. Whatever is left after that salary and{" "}
-            {formatPercent(VPB_LOW_RATE, 0)} VPB can stay in the work BV or move to a personal
-            holding — same tax either way, until someone pays it out privately. That private choice
-            is the dividend. Box 2 is only due then. The chart shows that a high salary leaves
-            little or nothing to save, so the holding advantage only appears once profit is high
-            enough.
+            Keep the salary near the statutory {formatCurrency(GEBRUIKELIJK_LOON)} and use dividend
+            only to top private cash up to €5,500 net per month. The same €5,500 taken entirely as
+            salary is about {formatCurrency(SALARY_FOR_5500_NET)} gross and leaves nothing in the
+            company. Money that stays can sit in the work BV or move to a personal holding; box 2
+            is due only when someone pays it out privately.
           </p>
           <p>
             The costs / benefits cards list what changes operationally. The chart only prices the
