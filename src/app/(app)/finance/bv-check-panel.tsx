@@ -41,7 +41,8 @@ const BvComparisonChart = dynamicImport(
 
 const CHART_MAX_PROFIT = 800_000;
 const CHART_STEP = 10_000;
-const HIGHER_SALARY = 96_000;
+/** Gross that nets about €5,500 per month, holiday pay included in the year. */
+const SALARY_FOR_5500_NET = 107_500;
 
 const PAYOUT_SCENARIOS = [
   {
@@ -52,11 +53,11 @@ const PAYOUT_SCENARIOS = [
     hint: "Holding case — this is when a BV usually wins",
   },
   {
-    id: "higher-salary",
-    label: "Higher salary, keep the rest",
-    salary: HIGHER_SALARY,
+    id: "net-5500",
+    label: "€5,500 net, rest stays",
+    salary: SALARY_FOR_5500_NET,
     dividendShare: 0,
-    hint: "More cash now, less left in the company",
+    hint: "Each of you. Anything left can stay in the work BV or your own holding",
   },
   {
     id: "mix",
@@ -390,8 +391,12 @@ export function BvCheckPanel({
                 amount: formatCurrency(settings.bv_extra_annual_cost) + "/yr",
               },
               {
-                title: "Statutory salaries",
-                body: `${partners} × ${formatCurrency(settings.bv_dga_salary)} gebruikelijk loon — taxed in box 1, plus employer Zvw (${formatPercent(0.061, 1)}).`,
+                title: "Director salaries",
+                body: `${partners} × ${formatCurrency(settings.bv_dga_salary)} — taxed in box 1, plus employer Zvw (${formatPercent(0.061, 1)}).${
+                  settings.bv_dga_salary <= GEBRUIKELIJK_LOON
+                    ? " Around the statutory minimum."
+                    : ""
+                }`,
                 amount: formatCurrency(bv.dgaSalaryTotal) + "/yr",
               },
               {
@@ -742,11 +747,13 @@ export function BvCheckPanel({
         <Info className="w-4 h-4 shrink-0 mt-px text-neutral-600" />
         <div className="space-y-1.5 leading-relaxed">
           <p>
-            The interesting case is a modest salary and the rest left in the holding after{" "}
-            {formatPercent(VPB_LOW_RATE, 0)} VPB. That equity is still yours; box 2 only hits when
-            you take a private dividend. Paying yourselves more, or taking dividend now, is a mix
-            — the chart shows how quickly that closes the gap with the VOF. The salary field and
-            the four scenarios both drive the same comparison.
+            €5,500 net per month is about {formatCurrency(SALARY_FOR_5500_NET)} gross per person,
+            holiday pay included in that year. Whatever is left after that salary and{" "}
+            {formatPercent(VPB_LOW_RATE, 0)} VPB can stay in the work BV or move to a personal
+            holding — same tax either way, until someone pays it out privately. That private choice
+            is the dividend. Box 2 is only due then. The chart shows that a high salary leaves
+            little or nothing to save, so the holding advantage only appears once profit is high
+            enough.
           </p>
           <p>
             The costs / benefits cards list what changes operationally. The chart only prices the
