@@ -6,6 +6,12 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 
 /**
+ * Cold starts skip DDL/seeds once this flag is set.
+ * Bump the key when ensure* must run again after a schema change.
+ */
+const SCHEMA_READY_KEY = "app_schema_ready_v8";
+
+/**
  * Ensures the schema is ready for requests.
  * Warm path: no-op after first call in this isolate.
  * Cold path when tables already exist: single existence check only.
@@ -367,8 +373,29 @@ async function ensureAllocationsTable() {
   `;
 }
 
+async function markSchemaReady() {
+  await sql`
+    INSERT INTO finance_settings (key, value, updated_at)
+    VALUES (${SCHEMA_READY_KEY}, 'true', now())
+    ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+  `;
+}
+
 async function _init() {
   const runMigrations = process.env.RUN_DB_MIGRATIONS === "true";
+
+  // One indexed lookup. Avoids re-running DDL and seed checks on every cold start.
+  try {
+    const { rows: ready } = await sql`
+      SELECT value FROM finance_settings WHERE key = ${SCHEMA_READY_KEY}
+    `;
+    if (ready[0]?.value === "true") {
+      initialized = true;
+      return;
+    }
+  } catch {
+    // finance_settings may not exist on a brand-new database.
+  }
 
   // Check if tables already exist (fast path for warm/cold instances after first deploy)
   try {
@@ -435,6 +462,7 @@ async function _init() {
       if (runMigrations) {
         await runSchemaMigrations();
       }
+      await markSchemaReady();
       initialized = true;
       return;
     }
@@ -706,6 +734,7 @@ async function _init() {
 
   await runSchemaMigrations();
 
+  await markSchemaReady();
   initialized = true;
 }
 
@@ -2028,6 +2057,66 @@ async function ensureToolsTable() {
     await sql`
       INSERT INTO finance_settings (key, value, updated_at)
       VALUES ('tools_seeded_v7_firecrawl', 'true', now())
+      ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
+    `;
+  }
+
+  // Apideck (Apidy) pass-through for Recruitment Scout, same as Apollo.
+  const { rows: v8Flag } = await sql`
+    SELECT value FROM finance_settings WHERE key = 'tools_seeded_v8_apideck'
+  `;
+  if (v8Flag[0]?.value !== "true") {
+    let scoutId: string | null = null;
+    const { rows: scoutRows } = await sql`
+      SELECT id FROM companies
+      WHERE name ILIKE 'Recruitment Scout'
+      LIMIT 1
+    `;
+    if (scoutRows[0]?.id) scoutId = String(scoutRows[0].id);
+
+    const { rows: existing } = await sql`
+      SELECT id FROM tool_subscriptions
+      WHERE name ILIKE 'Apideck' OR name ILIKE 'Apidy'
+      LIMIT 1
+    `;
+    if (!existing[0]) {
+      await sql`
+        INSERT INTO tool_subscriptions (
+          name, vendor, category, cost_type, billing_frequency, our_cost,
+          status, bill_to_company_id, pass_through, notes, logo_url, login_url
+        ) VALUES (
+          'Apideck',
+          'Apideck',
+          'software',
+          'fixed',
+          'monthly',
+          0,
+          'active',
+          ${scoutId},
+          ${scoutId != null},
+          'Unified API — Recruitment Scout (zelfde gebruik als Apollo)',
+          '/tools/apideck.png',
+          'https://app.apideck.com'
+        )
+      `;
+    } else if (scoutId) {
+      await sql`
+        UPDATE tool_subscriptions SET
+          name = 'Apideck',
+          vendor = 'Apideck',
+          bill_to_company_id = COALESCE(bill_to_company_id, ${scoutId}),
+          pass_through = true,
+          logo_url = COALESCE(logo_url, '/tools/apideck.png'),
+          login_url = COALESCE(login_url, 'https://app.apideck.com'),
+          status = 'active',
+          updated_at = now()
+        WHERE id = ${existing[0].id}
+      `;
+    }
+
+    await sql`
+      INSERT INTO finance_settings (key, value, updated_at)
+      VALUES ('tools_seeded_v8_apideck', 'true', now())
       ON CONFLICT (key) DO UPDATE SET value = 'true', updated_at = now()
     `;
   }
