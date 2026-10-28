@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Cold starts skip DDL/seeds once this flag is set.
  * Bump the key when ensure* must run again after a schema change.
  */
-const SCHEMA_READY_KEY = "app_schema_ready_v8";
+const SCHEMA_READY_KEY = "app_schema_ready_v9";
 
 /**
  * Ensures the schema is ready for requests.

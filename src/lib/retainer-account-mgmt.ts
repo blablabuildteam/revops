@@ -19,6 +19,15 @@ function currentWeekStart(): string {
  * (not backfilled on resume), and deleted auto-entries are not recreated.
  */
 export async function syncAccountManagementEntries(): Promise<void> {
+  try {
+    await logMissingWeeks();
+  } catch (err) {
+    // Never let the auto-log break loading retainers.
+    console.error("Account management auto-log failed", err);
+  }
+}
+
+async function logMissingWeeks(): Promise<void> {
   const currentWeek = currentWeekStart();
   const { rows } = await sql`
     SELECT * FROM retainer_agreements
