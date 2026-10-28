@@ -74,24 +74,46 @@ async function logMissingWeeks(): Promise<void> {
 }
 
 /**
- * Applies a new weekly value: turning it on starts with the current week,
- * a change rewrites this week's auto-entry, and 0 turns it off.
+ * Applies a new weekly value: turning it on starts with the current week
+ * (or `startDate`'s week, backfilling every week since), a change rewrites
+ * this week's auto-entry, and 0 turns it off.
  */
 export async function setAccountManagementHours(
   retainerId: string,
   hours: number,
+  startDate?: string | null,
 ): Promise<void> {
   const currentWeek = currentWeekStart();
-  if (hours > 0) {
+  if (hours > 0 && startDate) {
+    const startWeek = weekStartFromDateOnly(startDate);
     await sql`
       UPDATE retainer_agreements SET
         account_mgmt_hours = ${hours},
+        account_mgmt_start = ${startWeek},
+        account_mgmt_logged_through = ${addDays(startWeek, -7)},
+        updated_at = now()
+      WHERE id = ${retainerId}
+    `;
+    // Start moved later — drop auto-entries from before it.
+    await sql`
+      DELETE FROM retainer_time_entries
+      WHERE retainer_id = ${retainerId}
+        AND week_start < ${startWeek}
+        AND source = ${ACCOUNT_MGMT_SOURCE}
+    `;
+  } else if (hours > 0) {
+    await sql`
+      UPDATE retainer_agreements SET
+        account_mgmt_hours = ${hours},
+        account_mgmt_start = COALESCE(account_mgmt_start, ${currentWeek}::date),
         account_mgmt_logged_through = COALESCE(
           account_mgmt_logged_through, ${addDays(currentWeek, -7)}::date
         ),
         updated_at = now()
       WHERE id = ${retainerId}
     `;
+  }
+  if (hours > 0) {
     await sql`
       UPDATE retainer_time_entries SET hours = ${hours}, updated_at = now()
       WHERE retainer_id = ${retainerId}
@@ -102,6 +124,7 @@ export async function setAccountManagementHours(
     await sql`
       UPDATE retainer_agreements SET
         account_mgmt_hours = 0,
+        account_mgmt_start = NULL,
         account_mgmt_logged_through = NULL,
         updated_at = now()
       WHERE id = ${retainerId}

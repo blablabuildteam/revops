@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { HoursMeter } from "@/components/hours-meter";
 import { RetainerLogForm } from "@/components/retainer-log-form";
 import { SlackChannelBinder } from "@/components/slack-channel-picker";
@@ -31,6 +32,7 @@ import { formatCurrency, formatHours } from "@/lib/format";
 import {
   addDays,
   addMonths,
+  compareWeekEntries,
   currentBillingPeriod,
   defaultWorkDateForWeek,
   entryInMonth,
@@ -44,6 +46,7 @@ import {
   hoursInBillingPeriod,
   includedHoursForPeriod,
   includedHoursForWeek,
+  isAccountMgmtEntry,
   listRetainerBillingPeriods,
   monthKeyOf,
   sumHours,
@@ -94,15 +97,20 @@ function RetainerCard({
   const [accountMgmt, setAccountMgmt] = useState(() =>
     retainer.account_mgmt_hours ? String(retainer.account_mgmt_hours) : "",
   );
-  const [syncedAccountMgmt, setSyncedAccountMgmt] = useState(
-    retainer.account_mgmt_hours,
+  const [accountMgmtStart, setAccountMgmtStart] = useState(
+    retainer.account_mgmt_start ?? "",
   );
-  if (syncedAccountMgmt !== retainer.account_mgmt_hours) {
-    // Saved value changed elsewhere (undo, other tab) — reset the input.
-    setSyncedAccountMgmt(retainer.account_mgmt_hours);
+  const [syncedAccountMgmt, setSyncedAccountMgmt] = useState(
+    `${retainer.account_mgmt_hours}|${retainer.account_mgmt_start ?? ""}`,
+  );
+  const savedAccountMgmt = `${retainer.account_mgmt_hours}|${retainer.account_mgmt_start ?? ""}`;
+  if (syncedAccountMgmt !== savedAccountMgmt) {
+    // Saved value changed elsewhere (undo, other tab) — reset the inputs.
+    setSyncedAccountMgmt(savedAccountMgmt);
     setAccountMgmt(
       retainer.account_mgmt_hours ? String(retainer.account_mgmt_hours) : "",
     );
+    setAccountMgmtStart(retainer.account_mgmt_start ?? "");
   }
 
   const period = useMemo(
@@ -295,22 +303,29 @@ function RetainerCard({
     });
   }
 
-  async function saveAccountMgmt() {
+  async function saveAccountMgmt(start = accountMgmtStart) {
     const parsed = parseFloat(accountMgmt.replace(",", "."));
     const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
     const previous = retainer.account_mgmt_hours ?? 0;
-    if (next === previous) {
+    const previousStart = retainer.account_mgmt_start ?? "";
+    const nextStart = start ? weekStartFromDateOnly(start) : "";
+    if (next === previous && (next === 0 || nextStart === previousStart)) {
       setAccountMgmt(previous ? String(previous) : "");
+      setAccountMgmtStart(previousStart);
       return;
     }
     await withUndo({
       label: next > 0 ? "Accountmanagement ingesteld" : "Accountmanagement uitgezet",
       run: async () => {
-        await updateRetainerAgreement(retainer.id, { account_mgmt_hours: next });
+        await updateRetainerAgreement(retainer.id, {
+          account_mgmt_hours: next,
+          ...(nextStart ? { account_mgmt_start: nextStart } : {}),
+        });
       },
       undo: async () => {
         await updateRetainerAgreement(retainer.id, {
           account_mgmt_hours: previous,
+          ...(previousStart ? { account_mgmt_start: previousStart } : {}),
         });
       },
     });
@@ -418,7 +433,16 @@ function RetainerCard({
                 placeholder="0"
                 className="w-12 bg-neutral-900 border border-neutral-700 rounded px-1.5 py-0.5 text-right font-mono text-[11px] text-neutral-200 placeholder:text-neutral-600 outline-none focus:border-neutral-500"
               />
-              <span>u / week · automatisch gelogd</span>
+              <span>u / week vanaf</span>
+              <DatePicker
+                value={accountMgmtStart}
+                onChange={(next) => {
+                  setAccountMgmtStart(next);
+                  void saveAccountMgmt(next);
+                }}
+                placeholder="deze week"
+                className="h-6 w-32 px-1.5 text-[11px] bg-neutral-900 border-neutral-700 text-neutral-200"
+              />
             </form>
             <div className="mt-3">
               <SlackChannelBinder
@@ -673,12 +697,7 @@ function RetainerCard({
                     ) : (
                       <ul className="divide-y divide-neutral-800/80 border border-neutral-800 rounded-lg overflow-hidden">
                         {[...weekEntries]
-                          .sort((a, b) => {
-                            const da = a.work_date || a.week_start || "";
-                            const db = b.work_date || b.week_start || "";
-                            if (da !== db) return da.localeCompare(db);
-                            return (a.created_at || "").localeCompare(b.created_at || "");
-                          })
+                          .sort(compareWeekEntries)
                           .map((entry) => (
                           <li
                             key={entry.id}
@@ -737,12 +756,14 @@ function RetainerCard({
                                   className="flex-1 min-w-0 flex flex-wrap sm:flex-nowrap items-start gap-3 text-left rounded-md -m-1 p-1 hover:bg-neutral-900/50 transition-colors group"
                                 >
                                   <span className="text-xs text-neutral-500 font-mono w-[8.75rem] shrink-0 pt-1">
-                                    {formatDayLabel(entry.work_date || entry.week_start)}
+                                    {isAccountMgmtEntry(entry)
+                                      ? ""
+                                      : formatDayLabel(entry.work_date || entry.week_start)}
                                   </span>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm text-neutral-200">
                                       {entry.activity}
-                                      {entry.source === "account_mgmt" && (
+                                      {isAccountMgmtEntry(entry) && (
                                         <span className="ml-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
                                           Auto
                                         </span>

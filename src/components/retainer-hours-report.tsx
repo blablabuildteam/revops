@@ -21,6 +21,7 @@ import {
   formatDayLabel,
   formatWeekLabel,
   groupRetainerEntriesByWeek,
+  isAccountMgmtEntry,
   includedHoursForPeriod,
   includedHoursForWeek,
   listRetainerBillingPeriods,
@@ -641,11 +642,13 @@ export function RetainerHoursReport({
                           : {})}
                       >
                         <div className="w-20 shrink-0">
-                          <span className="text-xs text-neutral-500 font-mono">
-                            {formatDayLabel(
-                              entry.work_date || entry.week_start
-                            )}
-                          </span>
+                          {!isAccountMgmtEntry(entry) && (
+                            <span className="text-xs text-neutral-500 font-mono">
+                              {formatDayLabel(
+                                entry.work_date || entry.week_start
+                              )}
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-neutral-200">

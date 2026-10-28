@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Cold starts skip DDL/seeds once this flag is set.
  * Bump the key when ensure* must run again after a schema change.
  */
-const SCHEMA_READY_KEY = "app_schema_ready_v9";
+const SCHEMA_READY_KEY = "app_schema_ready_v10";
 
 /**
  * Ensures the schema is ready for requests.
@@ -995,6 +995,8 @@ async function ensureRetainersTable() {
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_hours NUMERIC(6,2) NOT NULL DEFAULT 0`;
   // Last week (Monday) the account-management auto-log has covered; NULL = off.
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_logged_through DATE`;
+  // First week (Monday) the account-management hours apply to.
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_start DATE`;
   await sql`
     UPDATE retainer_agreements
     SET share_token = encode(gen_random_bytes(16), 'hex')

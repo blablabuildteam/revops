@@ -32,10 +32,17 @@ export async function PUT(
       periods = toggleInvoicedPeriod(periods, body.toggle_period);
     }
 
-    const accountMgmtChanged = body.account_mgmt_hours !== undefined;
+    const accountMgmtChanged =
+      body.account_mgmt_hours !== undefined || body.account_mgmt_start !== undefined;
     if (accountMgmtChanged) {
-      const hours = Math.round(Math.max(0, Number(body.account_mgmt_hours) || 0) * 100) / 100;
-      await setAccountManagementHours(id, hours);
+      const rawHours = body.account_mgmt_hours ?? existing.account_mgmt_hours;
+      const hours = Math.round(Math.max(0, Number(rawHours) || 0) * 100) / 100;
+      const start =
+        typeof body.account_mgmt_start === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(body.account_mgmt_start)
+          ? body.account_mgmt_start
+          : null;
+      await setAccountManagementHours(id, hours, start);
     }
 
     const hourBucketsJson =

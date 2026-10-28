@@ -292,8 +292,27 @@ export function formatDayLabel(dateOnly?: string | null): string {
   });
 }
 
+/** Auto-logged account management spans the week — it has no single day. */
+export function isAccountMgmtEntry(entry: { source?: string | null }): boolean {
+  return entry.source === "account_mgmt";
+}
+
+/** Account management first, then by day, then by log time. */
+export function compareWeekEntries(
+  a: Pick<RetainerTimeEntry, "work_date" | "week_start" | "source"> & { created_at?: string },
+  b: Pick<RetainerTimeEntry, "work_date" | "week_start" | "source"> & { created_at?: string },
+): number {
+  const autoA = isAccountMgmtEntry(a);
+  const autoB = isAccountMgmtEntry(b);
+  if (autoA !== autoB) return autoA ? -1 : 1;
+  const da = a.work_date || a.week_start || "";
+  const db = b.work_date || b.week_start || "";
+  if (da !== db) return da.localeCompare(db);
+  return (a.created_at || "").localeCompare(b.created_at || "");
+}
+
 export function groupRetainerEntriesByWeek<
-  T extends Pick<RetainerTimeEntry, "work_date" | "week_start"> & {
+  T extends Pick<RetainerTimeEntry, "work_date" | "week_start" | "source"> & {
     created_at?: string;
   },
 >(entries: T[]): { weekStart: string; entries: T[] }[] {
@@ -312,12 +331,7 @@ export function groupRetainerEntriesByWeek<
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([weekStart, list]) => ({
       weekStart,
-      entries: [...list].sort((a, b) => {
-        const da = a.work_date || a.week_start || "";
-        const db = b.work_date || b.week_start || "";
-        if (da !== db) return da.localeCompare(db);
-        return (a.created_at || "").localeCompare(b.created_at || "");
-      }),
+      entries: [...list].sort(compareWeekEntries),
     }));
 }
 
@@ -342,6 +356,7 @@ export function toPublicRetainer(
       category: entry.category ?? null,
       work_date: entry.work_date ?? null,
       week_start: entry.week_start,
+      source: entry.source ?? null,
     })),
   };
 }
@@ -464,6 +479,9 @@ export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement 
     slack_channel_id: (row.slack_channel_id as string | null) ?? null,
     slack_channel_name: (row.slack_channel_name as string | null) ?? null,
     account_mgmt_hours: Number(row.account_mgmt_hours) || 0,
+    account_mgmt_start: row.account_mgmt_start
+      ? toDateInputValue(row.account_mgmt_start as string | Date)
+      : null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
