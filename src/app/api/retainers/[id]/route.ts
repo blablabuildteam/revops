@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { setAccountManagementHours } from "@/lib/retainer-account-mgmt";
 import {
   mapRetainerRow,
+  mapTimeEntryRow,
   normalizeInvoicedPeriods,
   toggleInvoicedPeriod,
 } from "@/lib/retainers";
@@ -28,6 +30,12 @@ export async function PUT(
       periods = normalizeInvoicedPeriods(body.invoiced_periods);
     } else if (typeof body.toggle_period === "string" && body.toggle_period) {
       periods = toggleInvoicedPeriod(periods, body.toggle_period);
+    }
+
+    const accountMgmtChanged = body.account_mgmt_hours !== undefined;
+    if (accountMgmtChanged) {
+      const hours = Math.round(Math.max(0, Number(body.account_mgmt_hours) || 0) * 100) / 100;
+      await setAccountManagementHours(id, hours);
     }
 
     const hourBucketsJson =
@@ -60,7 +68,19 @@ export async function PUT(
       WHERE id = ${id}
       RETURNING *
     `;
-    return NextResponse.json(mapRetainerRow(rows[0]));
+    if (!accountMgmtChanged) {
+      return NextResponse.json(mapRetainerRow(rows[0]));
+    }
+    // The auto-log may have added or changed entries — return them too.
+    const { rows: entryRows } = await sql`
+      SELECT * FROM retainer_time_entries
+      WHERE retainer_id = ${id}
+      ORDER BY week_start DESC, created_at DESC
+    `;
+    return NextResponse.json({
+      ...mapRetainerRow(rows[0]),
+      entries: entryRows.map(mapTimeEntryRow),
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

@@ -229,7 +229,9 @@ export function updateRetainerAgreement(
   }).then((updated) => {
     patchRetainersCache((list) =>
       list.map((r) =>
-        r.id === updated.id ? { ...r, ...updated, entries: r.entries } : r,
+        r.id === updated.id
+          ? { ...r, ...updated, entries: updated.entries ?? r.entries }
+          : r,
       ),
     );
     return updated;
@@ -369,7 +371,9 @@ export function bindRetainerSlack(
   }).then((updated) => {
     patchRetainersCache((list) =>
       list.map((r) =>
-        r.id === updated.id ? { ...r, ...updated, entries: r.entries } : r,
+        r.id === updated.id
+          ? { ...r, ...updated, entries: updated.entries ?? r.entries }
+          : r,
       ),
     );
     return updated;

@@ -992,6 +992,9 @@ async function ensureRetainersTable() {
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS share_token TEXT`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS slack_channel_name TEXT`;
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_hours NUMERIC(6,2) NOT NULL DEFAULT 0`;
+  // Last week (Monday) the account-management auto-log has covered; NULL = off.
+  await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_logged_through DATE`;
   await sql`
     UPDATE retainer_agreements
     SET share_token = encode(gen_random_bytes(16), 'hex')
@@ -1021,6 +1024,13 @@ async function ensureRetainersTable() {
     )
   `;
   await sql`ALTER TABLE retainer_time_entries ADD COLUMN IF NOT EXISTS category TEXT`;
+  // 'account_mgmt' for entries the weekly auto-log created; NULL = logged by hand.
+  await sql`ALTER TABLE retainer_time_entries ADD COLUMN IF NOT EXISTS source TEXT`;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS retainer_time_entries_account_mgmt_week_idx
+    ON retainer_time_entries (retainer_id, week_start)
+    WHERE source = 'account_mgmt'
+  `;
 
   await sql`
     CREATE INDEX IF NOT EXISTS retainer_time_entries_retainer_week_idx

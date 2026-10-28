@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { syncAccountManagementEntries } from "@/lib/retainer-account-mgmt";
 import { mapRetainerRow, mapTimeEntryRow, toPublicRetainer } from "@/lib/retainers";
 
 export async function GET(
@@ -8,6 +9,7 @@ export async function GET(
 ) {
   try {
     await ensureTables();
+    await syncAccountManagementEntries();
     const { token } = await params;
     if (!token) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

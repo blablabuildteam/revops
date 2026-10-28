@@ -91,6 +91,19 @@ function RetainerCard({
   const [editSaving, setEditSaving] = useState(false);
   const [newRepo, setNewRepo] = useState("");
   const [repoBusy, setRepoBusy] = useState(false);
+  const [accountMgmt, setAccountMgmt] = useState(() =>
+    retainer.account_mgmt_hours ? String(retainer.account_mgmt_hours) : "",
+  );
+  const [syncedAccountMgmt, setSyncedAccountMgmt] = useState(
+    retainer.account_mgmt_hours,
+  );
+  if (syncedAccountMgmt !== retainer.account_mgmt_hours) {
+    // Saved value changed elsewhere (undo, other tab) — reset the input.
+    setSyncedAccountMgmt(retainer.account_mgmt_hours);
+    setAccountMgmt(
+      retainer.account_mgmt_hours ? String(retainer.account_mgmt_hours) : "",
+    );
+  }
 
   const period = useMemo(
     () => currentBillingPeriod(retainer),
@@ -282,6 +295,27 @@ function RetainerCard({
     });
   }
 
+  async function saveAccountMgmt() {
+    const parsed = parseFloat(accountMgmt.replace(",", "."));
+    const next = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    const previous = retainer.account_mgmt_hours ?? 0;
+    if (next === previous) {
+      setAccountMgmt(previous ? String(previous) : "");
+      return;
+    }
+    await withUndo({
+      label: next > 0 ? "Accountmanagement ingesteld" : "Accountmanagement uitgezet",
+      run: async () => {
+        await updateRetainerAgreement(retainer.id, { account_mgmt_hours: next });
+      },
+      undo: async () => {
+        await updateRetainerAgreement(retainer.id, {
+          account_mgmt_hours: previous,
+        });
+      },
+    });
+  }
+
   async function addRepo(e: React.FormEvent) {
     e.preventDefault();
     const name = newRepo.trim().replace(/^\/+|\/+$/g, "");
@@ -365,6 +399,27 @@ function RetainerCard({
             {retainer.notes && (
               <p className="text-[11px] text-neutral-600 mt-1">{retainer.notes}</p>
             )}
+            <form
+              className="mt-2 flex items-center gap-1.5 text-[11px] text-neutral-500"
+              onSubmit={(e) => {
+                e.preventDefault();
+                (e.currentTarget.elements.namedItem("account-mgmt") as HTMLInputElement | null)?.blur();
+              }}
+              title="Wordt elke week automatisch gelogd"
+            >
+              <label htmlFor={`account-mgmt-${retainer.id}`}>Accountmanagement</label>
+              <input
+                id={`account-mgmt-${retainer.id}`}
+                name="account-mgmt"
+                inputMode="decimal"
+                value={accountMgmt}
+                onChange={(e) => setAccountMgmt(e.target.value)}
+                onBlur={() => void saveAccountMgmt()}
+                placeholder="0"
+                className="w-12 bg-neutral-900 border border-neutral-700 rounded px-1.5 py-0.5 text-right font-mono text-[11px] text-neutral-200 placeholder:text-neutral-600 outline-none focus:border-neutral-500"
+              />
+              <span>u / week · automatisch gelogd</span>
+            </form>
             <div className="mt-3">
               <SlackChannelBinder
                 kind="retainer"
@@ -685,7 +740,14 @@ function RetainerCard({
                                     {formatDayLabel(entry.work_date || entry.week_start)}
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-neutral-200">{entry.activity}</p>
+                                    <p className="text-sm text-neutral-200">
+                                      {entry.activity}
+                                      {entry.source === "account_mgmt" && (
+                                        <span className="ml-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
+                                          Auto
+                                        </span>
+                                      )}
+                                    </p>
                                     <p className="text-[11px] text-neutral-600 mt-0.5">
                                       {entry.logged_by ?? "—"}
                                       {entry.category ? ` · ${entry.category}` : ""}

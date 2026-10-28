@@ -463,6 +463,7 @@ export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement 
     notes: (row.notes as string | null) ?? null,
     slack_channel_id: (row.slack_channel_id as string | null) ?? null,
     slack_channel_name: (row.slack_channel_name as string | null) ?? null,
+    account_mgmt_hours: Number(row.account_mgmt_hours) || 0,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };
@@ -482,6 +483,7 @@ export function mapTimeEntryRow(row: Record<string, unknown>): RetainerTimeEntry
     work_date: row.work_date
       ? toDateInputValue(row.work_date as string | Date)
       : null,
+    source: (row.source as string | null) ?? null,
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };

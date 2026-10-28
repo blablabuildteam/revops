@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
+import { syncAccountManagementEntries } from "@/lib/retainer-account-mgmt";
 import { mapRetainerRow, mapTimeEntryRow } from "@/lib/retainers";
 
 export async function GET() {
   try {
     await ensureTables();
+    await syncAccountManagementEntries();
     const { rows } = await sql`
       SELECT * FROM retainer_agreements
       ORDER BY

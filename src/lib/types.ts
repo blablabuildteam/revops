@@ -112,6 +112,8 @@ export interface RetainerAgreement {
   notes?: string | null;
   slack_channel_id?: string | null;
   slack_channel_name?: string | null;
+  /** Hours auto-logged as account management every week (0 = off). */
+  account_mgmt_hours: number;
   created_at: string;
   updated_at: string;
 }
@@ -128,6 +130,8 @@ export interface RetainerTimeEntry {
   logged_by?: string | null;
   /** Optional specific day within the week. */
   work_date?: string | null;
+  /** "account_mgmt" when created by the weekly auto-log. */
+  source?: string | null;
   created_at: string;
   updated_at: string;
 }

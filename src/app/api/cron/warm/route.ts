@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureTables, sql } from "@/lib/db";
+import { syncAccountManagementEntries } from "@/lib/retainer-account-mgmt";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,7 +19,10 @@ function isCronAuthorized(req: NextRequest): boolean {
   return false;
 }
 
-/** Keeps a server instance and the database connection warm between visits. */
+/**
+ * Keeps a server instance and the database connection warm between visits,
+ * and logs the weekly retainer account-management hours.
+ */
 export async function GET(req: NextRequest) {
   if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -27,5 +31,6 @@ export async function GET(req: NextRequest) {
   const started = Date.now();
   await ensureTables();
   await sql`SELECT 1`;
+  await syncAccountManagementEntries();
   return NextResponse.json({ ok: true, ms: Date.now() - started });
 }
