@@ -7,6 +7,7 @@ import { Plus, X, Check, Send } from "lucide-react";
 import { getPublicProject, submitClientTask } from "@/lib/api";
 import { Project, Milestone, Task, resolvePhaseColor } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { ClientTicketForm } from "@/components/client-ticket-form";
 
 type PublicProject = Project & {
   milestones: (Milestone & { tasks: Task[] })[];
@@ -29,6 +30,10 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
       .then((p) => { setProject(p as PublicProject); setLoading(false); })
       .catch(() => { setNotFound(true); setLoading(false); });
   }, [token]);
+
+  function reloadProject() {
+    getPublicProject(token).then((p) => setProject(p as PublicProject)).catch(() => {});
+  }
 
   async function handleSubmitRequest(e: React.FormEvent) {
     e.preventDefault();
@@ -177,7 +182,11 @@ export default function ClientProjectPage({ params }: { params: Promise<{ token:
             </button>
           </div>
 
-          {requestOpen && (
+          {requestOpen && project.ai_mode && (
+            <ClientTicketForm token={token} onSubmitted={reloadProject} />
+          )}
+
+          {requestOpen && !project.ai_mode && (
             <form onSubmit={handleSubmitRequest} className="p-4 space-y-3">
               {submitted ? (
                 <div className="flex items-center gap-2 text-stone-300 py-2">

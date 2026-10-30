@@ -18,6 +18,9 @@ import {
   Task,
   TaskComment,
   TaskAttachment,
+  AgentAction,
+  AgentEvent,
+  TicketTriage,
   ToolUsageEntry,
   ToolWithUsage,
 } from "./types";
@@ -500,6 +503,24 @@ export function getPublicRetainer(token: string): Promise<PublicRetainer> {
   return req(`/retainer/${token}`);
 }
 
+/** AI-mode intake. Sent as multipart when a screenshot is attached. */
+export async function submitClientTicket(
+  token: string,
+  data: { ticket_type: "bug" | "feature"; title: string; intake: Record<string, string> },
+  screenshot?: File | null,
+): Promise<Task> {
+  if (!screenshot) {
+    return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
+  }
+  const form = new FormData();
+  form.set("payload", JSON.stringify(data));
+  form.set("screenshot", screenshot);
+  const res = await fetch(`${base}/project/${token}`, { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? "Request failed");
+  return body;
+}
+
 export function submitClientTask(token: string, data: { title: string; description?: string; milestone_id?: string }): Promise<Task> {
   return req(`/project/${token}`, { method: "POST", body: JSON.stringify(data) });
 }
@@ -812,4 +833,67 @@ export function upsertToolUsage(
     );
     return entry;
   });
+}
+
+// AI ticket handling (admin side)
+export type AgentTicketView = {
+  id: string;
+  ticket_type: Task["ticket_type"];
+  triage_status: Task["triage_status"];
+  triage: TicketTriage | null;
+  agent_branch: string | null;
+  pr_url: string | null;
+  preview_url: string | null;
+  client_content: { intake: Record<string, string> | null };
+  actions: AgentAction[];
+  events: AgentEvent[];
+};
+
+export function getTaskAgent(taskId: string): Promise<AgentTicketView> {
+  return req(`/tasks/${taskId}/agent`);
+}
+
+export function taskAgentCommand(
+  taskId: string,
+  action: "start_triage" | "start_execution" | "answer",
+  text?: string,
+): Promise<{ dispatched?: boolean; reason?: string }> {
+  return req(`/tasks/${taskId}/agent`, { method: "POST", body: JSON.stringify({ action, text }) });
+}
+
+export function decideAgentAction(
+  actionId: string,
+  decision: "approve" | "reject" | "sent",
+  text?: string,
+): Promise<AgentAction> {
+  return req(`/agent-actions/${actionId}`, { method: "POST", body: JSON.stringify({ decision, text }) });
+}
+
+export type AgentKeyRow = {
+  id: string;
+  name: string;
+  prefix: string;
+  scope: "agent" | "operator";
+  user_name: string | null;
+  project_id: string | null;
+  project_name: string | null;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export function getAgentKeys(): Promise<AgentKeyRow[]> {
+  return req("/agent-keys");
+}
+
+export function createAgentKeyRequest(data: {
+  name: string;
+  scope: "agent" | "operator";
+  project_id?: string | null;
+}): Promise<{ key: string; record: AgentKeyRow }> {
+  return req("/agent-keys", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function revokeAgentKeyRequest(id: string): Promise<{ ok: true }> {
+  return req(`/agent-keys/${id}`, { method: "DELETE" });
 }

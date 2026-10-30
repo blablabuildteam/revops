@@ -63,7 +63,12 @@ export async function PUT(
     const {
       name, description, company_id, opportunity_id,
       status, priority, priority_manual, client_name, client_email, start_date, end_date, lead,
+      ai_mode, repo_full_name, repo_default_branch, ai_config,
     } = body;
+    const repoName = typeof repo_full_name === "string" ? repo_full_name.trim() : "";
+    if ("repo_full_name" in body && repoName && !/^[\w.-]+\/[\w.-]+$/.test(repoName)) {
+      return NextResponse.json({ error: "Repo must look like owner/name" }, { status: 400 });
+    }
     const nextPriorityManual = "priority_manual" in body
       ? Boolean(priority_manual)
       : "priority" in body;
@@ -91,6 +96,10 @@ export async function PUT(
         start_date = CASE WHEN ${"start_date" in body} THEN ${start_date || null} ELSE start_date END,
         end_date = CASE WHEN ${"end_date" in body} THEN ${end_date || null} ELSE end_date END,
         lead = CASE WHEN ${"lead" in body} THEN ${lead || null} ELSE lead END,
+        ai_mode = CASE WHEN ${"ai_mode" in body} THEN ${Boolean(ai_mode)} ELSE ai_mode END,
+        repo_full_name = CASE WHEN ${"repo_full_name" in body} THEN ${repoName || null} ELSE repo_full_name END,
+        repo_default_branch = CASE WHEN ${"repo_default_branch" in body} THEN ${repo_default_branch?.trim() || "main"} ELSE repo_default_branch END,
+        ai_config = CASE WHEN ${"ai_config" in body} THEN ${JSON.stringify(ai_config ?? {})}::jsonb ELSE ai_config END,
         updated_at = now()
       WHERE id = ${id}
       RETURNING *

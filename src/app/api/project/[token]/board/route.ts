@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
-import { resolveEditToken } from "@/lib/edit-token";
+import { resolveEditToken, withoutAgentFields } from "@/lib/edit-token";
 
 export async function GET(
   _req: NextRequest,
@@ -18,7 +18,7 @@ export async function GET(
       SELECT * FROM milestones WHERE project_id = ${project.id} ORDER BY position, created_at
     `;
 
-    const { rows: tasks } = await sql`
+    const { rows: taskRows } = await sql`
       SELECT
         t.*,
         COALESCE(cc.count, 0)::int AS comment_count,
@@ -37,6 +37,7 @@ export async function GET(
         t.position,
         t.created_at
     `;
+    const tasks = taskRows.map(withoutAgentFields);
 
     const payload = {
       ...project,

@@ -44,6 +44,7 @@ import { BoardLinkChips } from "@/components/linkified-text";
 import { extractLinks } from "@/lib/linkify";
 import { CompanyAvatar } from "@/components/company-avatar";
 import { SlackChannelBinder } from "@/components/slack-channel-picker";
+import { ProjectAiSettings } from "@/components/project-ai-settings";
 import { suggestedSlackChannelName } from "@/lib/slack-channel-name";
 import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
@@ -2451,6 +2452,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 project.name,
               )}
               compact
+            />
+            <ProjectAiSettings
+              project={project}
+              onSaved={(updated) => setProject((prev) => (prev ? { ...prev, ...updated } : prev))}
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, ensureTables } from "@/lib/db";
 import { resolveSessionUser } from "@/lib/auth";
-import { resolveEditToken } from "@/lib/edit-token";
+import { withoutAgentFields, resolveEditToken } from "@/lib/edit-token";
 
 export async function POST(
   req: NextRequest,
@@ -44,7 +44,7 @@ export async function POST(
       )
       RETURNING *
     `;
-    return NextResponse.json(rows[0], { status: 201 });
+    return NextResponse.json(withoutAgentFields(rows[0]), { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

@@ -21,6 +21,7 @@ import { useUndoToast } from "@/components/mutation-provider";
 import { useSessionOptional } from "@/components/session-provider";
 import { LinkifiedText } from "@/components/linkified-text";
 import { NotesField } from "@/components/notes-field";
+import { TaskAgentPanel } from "@/components/task-agent-panel";
 
 export type TaskDetailDialogApi = TaskAttachmentsApi & {
   updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
@@ -382,6 +383,10 @@ export function TaskDetailDialog({
                     }}
                     api={api}
                   />
+                ) : null}
+                {/* Team-only: edit-board viewers have no session and never get triage fields. */}
+                {!isCreate && task?.triage_status && session?.user ? (
+                  <TaskAgentPanel taskId={task.id} />
                 ) : null}
               </div>
               <DialogFooter className="bg-transparent border-t border-neutral-800 px-8 py-5 mt-auto shrink-0 mx-0 mb-0 rounded-none flex-row items-center justify-between gap-4">
