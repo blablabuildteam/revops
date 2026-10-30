@@ -4,6 +4,7 @@ import {
   assertMilestoneInEditProject,
   assertTaskInEditProject,
   resolveEditToken,
+  withoutAgentFields,
 } from "@/lib/edit-token";
 
 export async function PUT(
@@ -60,7 +61,7 @@ export async function PUT(
       WHERE id = ${id}
       RETURNING *
     `;
-    return NextResponse.json(rows[0]);
+    return NextResponse.json(withoutAgentFields(rows[0]));
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

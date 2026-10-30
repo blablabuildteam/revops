@@ -31,3 +31,10 @@ export async function assertMilestoneInEditProject(milestoneId: string, projectI
   `;
   return rows.length > 0;
 }
+
+/** Edit-board viewers are outside the team: never send triage drafts, plans or agent PR details. */
+export function withoutAgentFields<T extends Record<string, unknown>>(task: T) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { intake, triage, triage_status, agent_branch, pr_url, preview_url, legacy_backfilled, ...rest } = task;
+  return rest;
+}
