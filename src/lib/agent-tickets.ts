@@ -326,7 +326,11 @@ export async function markMessageSent(actionId: string, decider: Decider) {
       403,
     );
   }
-  await setTriageStatus(action.task_id, "needs_client");
+  // Waiting on the client only while still in triage; an approved, ready plan stays ready.
+  await sql`
+    UPDATE tasks SET triage_status = 'needs_client', updated_at = now()
+    WHERE id = ${action.task_id} AND triage_status IN ('new', 'needs_admin', 'needs_spec')
+  `;
   await logEvent(action.task_id, deciderActor(decider.via), "client_message_sent", { action_id: action.id }, name);
   return action;
 }

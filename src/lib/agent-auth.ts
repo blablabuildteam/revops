@@ -19,7 +19,7 @@ export async function requireAgentKey(
     return { error: NextResponse.json({ error: "Invalid or missing API key" }, { status: 401 }) };
   }
   if (key.scope !== scope) {
-    return { error: NextResponse.json({ error: `This endpoint needs a ${scope} key` }, { status: 403 }) };
+    return { error: NextResponse.json({ error: `This endpoint needs an ${scope} key` }, { status: 403 }) };
   }
   return { key };
 }
