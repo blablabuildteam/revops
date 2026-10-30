@@ -13,6 +13,12 @@ function secret() {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Machine API (agent runtime + Grok Bots MCP): bearer key only, verified in the route.
+  if (pathname.startsWith("/api/agent/") || pathname === "/api/mcp") {
+    if (req.headers.get("authorization")?.startsWith("Bearer ")) return NextResponse.next();
+    return NextResponse.json({ error: "Missing API key" }, { status: 401 });
+  }
+
   // Allow public routes and API routes that don't need auth
   const isPublic =
     PUBLIC.some((p) => pathname.startsWith(p)) ||
