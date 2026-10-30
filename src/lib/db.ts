@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Cold starts skip DDL/seeds once this flag is set.
  * Bump the key when ensure* must run again after a schema change.
  */
-const SCHEMA_READY_KEY = "app_schema_ready_v10";
+const SCHEMA_READY_KEY = "app_schema_ready_v11";
 
 /**
  * Ensures the schema is ready for requests.
@@ -457,6 +457,7 @@ async function _init() {
       await ensureSlackDueNotificationsTable();
       await ensureNetworkContactsTable();
       await ensureToolsTable();
+      await ensureAgentTables();
       // Fast path: skip remaining DDL/backfill unless explicitly requested.
       // runSchemaMigrations already covers allocations, created_by, and phases.
       if (runMigrations) {
@@ -721,6 +722,7 @@ async function _init() {
   await ensureSlackDueNotificationsTable();
   await ensureNetworkContactsTable();
   await ensureToolsTable();
+  await ensureAgentTables();
 
   await sql`
     INSERT INTO finance_settings (key, value) VALUES
@@ -1435,6 +1437,93 @@ async function ensureNetworkContactsTable() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS network_contacts_status ON network_contacts (status)`;
   await sql`CREATE INDEX IF NOT EXISTS network_contacts_name ON network_contacts (name)`;
+}
+
+/** AI ticket handling: per-project AI mode, ticket triage fields, approval gates, audit log, machine keys. */
+async function ensureAgentTables() {
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS ai_mode BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_full_name TEXT`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_default_branch TEXT DEFAULT 'main'`;
+  await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS ai_config JSONB NOT NULL DEFAULT '{}'::jsonb`;
+
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ticket_type TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS intake JSONB`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS triage_status TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS triage JSONB`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS agent_branch TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pr_url TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS preview_url TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS legacy_backfilled BOOLEAN DEFAULT false`;
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_ticket_type_check`;
+  await sql`
+    ALTER TABLE tasks ADD CONSTRAINT tasks_ticket_type_check
+    CHECK (ticket_type IS NULL OR ticket_type IN ('bug', 'change', 'feature', 'question'))
+  `;
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_triage_status_check`;
+  await sql`
+    ALTER TABLE tasks ADD CONSTRAINT tasks_triage_status_check
+    CHECK (triage_status IS NULL OR triage_status IN (
+      'new', 'needs_admin', 'needs_client', 'needs_spec', 'ready',
+      'human_only', 'stale', 'in_progress', 'pr_open', 'done'
+    ))
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS tasks_project_triage
+    ON tasks (project_id, triage_status) WHERE triage_status IS NOT NULL
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS agent_actions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL
+        CHECK (kind IN ('approve_plan', 'client_message', 'start_execution')),
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      edited_payload JSONB,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'sent')),
+      decided_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      decided_via TEXT CHECK (decided_via IS NULL OR decided_via IN ('ui', 'mcp')),
+      decided_at TIMESTAMPTZ,
+      sent_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS agent_actions_task ON agent_actions (task_id, created_at)`;
+  await sql`
+    CREATE INDEX IF NOT EXISTS agent_actions_pending
+    ON agent_actions (status, created_at) WHERE status = 'pending'
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS agent_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      actor TEXT NOT NULL
+        CHECK (actor IN ('agent', 'operator', 'admin', 'system', 'client')),
+      actor_label TEXT,
+      kind TEXT NOT NULL,
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS agent_events_task ON agent_events (task_id, created_at)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS agent_api_keys (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      prefix TEXT NOT NULL UNIQUE,
+      key_hash TEXT NOT NULL,
+      scope TEXT NOT NULL CHECK (scope IN ('agent', 'operator')),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+      last_used_at TIMESTAMPTZ,
+      revoked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      CHECK (scope <> 'operator' OR user_id IS NOT NULL)
+    )
+  `;
 }
 
 async function ensureToolsTable() {
