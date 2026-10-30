@@ -460,3 +460,94 @@ export async function recordAgentEvent(
   await logEvent(taskId, "agent", input.kind, input.data ?? {});
   if (input.triage_status) await setTriageStatus(taskId, input.triage_status);
 }
+
+/**
+ * Shadow triage for the existing backlog: open, top-level tasks that were never triaged.
+ * Marks them legacy_backfilled and dispatches triage in batches (one workflow run per ticket).
+ */
+export async function startBacklogTriage(projectId: string, decider: Decider, limit = 25) {
+  const name = await userName(decider.userId);
+  const { rows: project } = await sql`SELECT ai_mode FROM projects WHERE id = ${projectId}`;
+  if (!project[0]) throw new GateError("Project not found", 404);
+  if (!project[0].ai_mode) throw new GateError("AI mode is off for this project", 403);
+
+  const { rows: picked } = await sql`
+    UPDATE tasks SET triage_status = 'new', legacy_backfilled = true, updated_at = now()
+    WHERE id IN (
+      SELECT t.id FROM tasks t
+      LEFT JOIN milestones m ON m.id = t.milestone_id
+      WHERE t.project_id = ${projectId}
+        AND t.parent_id IS NULL
+        AND t.triage_status IS NULL
+        AND t.status <> 'done'
+        AND (m.id IS NULL OR LOWER(m.name) <> 'done')
+      ORDER BY t.created_at
+      LIMIT ${Math.min(Math.max(limit, 1), 100)}
+    )
+    RETURNING id
+  `;
+  for (const { id } of picked) {
+    await logEvent(id, deciderActor(decider.via), "backlog_triage_requested", {}, name);
+  }
+  const results = await Promise.all(picked.map(({ id }) => dispatchAgentRun(id, "triage")));
+  const remaining = await backlogStats(projectId);
+  return {
+    started: picked.length,
+    dispatched: results.filter((r) => r.dispatched).length,
+    skipped_reason: results.find((r) => !r.dispatched)?.reason ?? null,
+    untriaged_left: remaining.untriaged_open,
+  };
+}
+
+/** Phase 6 measurements: where the backfilled backlog landed. */
+export async function backlogStats(projectId: string) {
+  const { rows } = await sql`
+    SELECT
+      COUNT(*) FILTER (
+        WHERE t.triage_status IS NULL AND t.status <> 'done' AND t.parent_id IS NULL
+          AND (m.id IS NULL OR LOWER(m.name) <> 'done')
+      )::int AS untriaged_open,
+      COUNT(*) FILTER (WHERE t.legacy_backfilled)::int AS backfilled
+    FROM tasks t LEFT JOIN milestones m ON m.id = t.milestone_id
+    WHERE t.project_id = ${projectId}
+  `;
+  const { rows: byStatus } = await sql`
+    SELECT triage_status, COUNT(*)::int AS count
+    FROM tasks
+    WHERE project_id = ${projectId} AND legacy_backfilled = true AND triage_status IS NOT NULL
+    GROUP BY triage_status
+  `;
+  return {
+    untriaged_open: rows[0].untriaged_open as number,
+    backfilled: rows[0].backfilled as number,
+    by_status: Object.fromEntries(byStatus.map((r) => [r.triage_status, r.count])) as Record<string, number>,
+  };
+}
+
+/**
+ * Approved, unsent client messages for a project combined into one text,
+ * so the client gets one WhatsApp message instead of many.
+ */
+export async function clientBundle(projectId: string) {
+  const { rows } = await sql`
+    SELECT a.id AS action_id, a.task_id, t.title,
+           COALESCE(a.edited_payload->>'text', a.payload->>'text') AS text
+    FROM agent_actions a JOIN tasks t ON t.id = a.task_id
+    WHERE t.project_id = ${projectId}
+      AND a.kind = 'client_message' AND a.status = 'approved' AND a.decided_by IS NOT NULL
+    ORDER BY t.created_at, a.created_at
+  `;
+  const text = rows.length === 0
+    ? ""
+    : rows.length === 1
+      ? `About "${rows[0].title}":\n${rows[0].text}`
+      : ["A few questions so we can pick these up:", ...rows.map((r, i) => `${i + 1}. ${r.title}\n${r.text}`)].join("\n\n");
+  return { text, action_ids: rows.map((r) => r.action_id as string), items: rows };
+}
+
+/** Marks every message in a sent bundle as sent. Each one must still be approved. */
+export async function markBundleSent(actionIds: string[], decider: Decider) {
+  const sent = [];
+  for (const id of actionIds) sent.push(await markMessageSent(id, decider));
+  return { sent: sent.length };
+}
