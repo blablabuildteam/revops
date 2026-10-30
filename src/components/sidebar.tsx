@@ -16,6 +16,7 @@ import {
   Moon,
   Contact,
   Wrench,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme-provider";
@@ -37,6 +38,7 @@ const NAV_SECTIONS = [
       { href: "/projects", label: "Projects", icon: FolderKanban },
       { href: "/retainers", label: "Retainers", icon: Repeat },
       { href: "/capacity", label: "Capacity", icon: Users },
+      { href: "/ai-review", label: "AI review", icon: Bot },
     ],
   },
   {

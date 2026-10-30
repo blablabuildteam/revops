@@ -897,3 +897,49 @@ export function createAgentKeyRequest(data: {
 export function revokeAgentKeyRequest(id: string): Promise<{ ok: true }> {
   return req(`/agent-keys/${id}`, { method: "DELETE" });
 }
+
+export type BacklogStats = {
+  untriaged_open: number;
+  backfilled: number;
+  by_status: Record<string, number>;
+};
+
+export type AiReview = {
+  projects: { id: string; name: string; repo_full_name: string | null; stats: BacklogStats }[];
+  awaiting: {
+    task_id: string;
+    title: string;
+    triage_status: Task["triage_status"];
+    ticket_type: Task["ticket_type"];
+    pr_url: string | null;
+    project_id: string;
+    project_name: string;
+    updated_at: string;
+    open_actions: { id: string; kind: AgentAction["kind"]; status: AgentAction["status"] }[];
+  }[];
+};
+
+export function getAiReview(): Promise<AiReview> {
+  return req("/ai-review");
+}
+
+export function startBacklogTriageRequest(
+  projectId: string,
+  limit = 25,
+): Promise<{ started: number; dispatched: number; skipped_reason: string | null; untriaged_left: number }> {
+  return req(`/projects/${projectId}/ai-backlog`, { method: "POST", body: JSON.stringify({ limit }) });
+}
+
+export type ClientBundle = {
+  text: string;
+  action_ids: string[];
+  items: { action_id: string; task_id: string; title: string; text: string }[];
+};
+
+export function getClientBundle(projectId: string): Promise<ClientBundle> {
+  return req(`/projects/${projectId}/ai-bundle`);
+}
+
+export function markClientBundleSent(projectId: string, actionIds: string[]): Promise<{ sent: number }> {
+  return req(`/projects/${projectId}/ai-bundle`, { method: "POST", body: JSON.stringify({ action_ids: actionIds }) });
+}

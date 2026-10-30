@@ -41,7 +41,7 @@ function actionText(action: AgentAction) {
 }
 
 /** AI triage panel inside the task dialog. Rendered only for tasks that have a triage status. */
-export function TaskAgentPanel({ taskId }: { taskId: string }) {
+export function TaskAgentPanel({ taskId, onChange }: { taskId: string; onChange?: () => void }) {
   const [view, setView] = useState<AgentTicketView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +65,7 @@ export function TaskAgentPanel({ taskId }: { taskId: string }) {
       const res = (await fn()) as { reason?: string } | undefined;
       if (res && typeof res === "object" && "reason" in res && res.reason) setNotice(`Not dispatched: ${res.reason}`);
       load();
+      onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action failed");
     } finally {
@@ -96,6 +97,7 @@ export function TaskAgentPanel({ taskId }: { taskId: string }) {
         {view.ticket_type && (
           <span className="text-[11px] rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{view.ticket_type}</span>
         )}
+        {!view.triage_status && <span className="text-[11px] text-neutral-500">Not triaged yet</span>}
         {view.triage_status && (
           <span className="text-[11px] rounded bg-[#d4e052]/15 px-1.5 py-0.5 text-[#d4e052]">
             {STATUS_LABELS[view.triage_status]}
@@ -122,7 +124,7 @@ export function TaskAgentPanel({ taskId }: { taskId: string }) {
               onClick={() => act("triage", () => taskAgentCommand(taskId, "start_triage"))}
               className="h-7 text-xs gap-1.5 border-neutral-700 bg-transparent text-neutral-300"
             >
-              <RefreshCw className="w-3 h-3" /> Re-triage
+              <RefreshCw className="w-3 h-3" /> {view.triage_status ? "Re-triage" : "Start triage"}
             </Button>
           )}
         </div>

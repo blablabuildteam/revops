@@ -2658,6 +2658,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         onSave={handleTaskUpdate}
         api={taskDetailApi}
         milestones={project.milestones}
+        aiMode={Boolean(project.ai_mode)}
       />
 
       <form onSubmit={handleAddMilestone} className="flex items-center gap-3">

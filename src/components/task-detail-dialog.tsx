@@ -67,6 +67,7 @@ export function TaskDetailDialog({
   api,
   milestones = [],
   defaultMilestoneId: defaultMilestoneIdProp,
+  aiMode = false,
 }: {
   task: Task | null;
   open: boolean;
@@ -76,6 +77,8 @@ export function TaskDetailDialog({
   /** Phases shown in create mode. */
   milestones?: Milestone[];
   defaultMilestoneId?: string;
+  /** Project has AI mode: show the AI panel (with "Start triage") on untriaged tasks too. */
+  aiMode?: boolean;
 }) {
   const isCreate = open && !task;
   const session = useSessionOptional();
@@ -385,7 +388,7 @@ export function TaskDetailDialog({
                   />
                 ) : null}
                 {/* Team-only: edit-board viewers have no session and never get triage fields. */}
-                {!isCreate && task?.triage_status && session?.user ? (
+                {!isCreate && task && (task.triage_status || aiMode) && session?.user ? (
                   <TaskAgentPanel taskId={task.id} />
                 ) : null}
               </div>
