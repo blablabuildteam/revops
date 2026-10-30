@@ -395,6 +395,12 @@ export interface Project {
   /** Slack channel linked to this project. */
   slack_channel_id?: string | null;
   slack_channel_name?: string | null;
+  /** AI triage and execution for SLA tickets. Off = board behaves as before. */
+  ai_mode?: boolean;
+  /** GitHub repo the agent works in, e.g. "blablabuild/comfortzzzone". */
+  repo_full_name?: string | null;
+  repo_default_branch?: string | null;
+  ai_config?: ProjectAiConfig | null;
   milestones?: Milestone[];
   created_at: string;
   updated_at: string;
@@ -431,6 +437,14 @@ export interface Task {
   url?: string | null;
   priority: TaskPriority;
   position: number;
+  ticket_type?: TicketType | null;
+  intake?: Record<string, string> | null;
+  triage_status?: TriageStatus | null;
+  triage?: TicketTriage | null;
+  agent_branch?: string | null;
+  pr_url?: string | null;
+  preview_url?: string | null;
+  legacy_backfilled?: boolean | null;
   comment_count?: number;
   has_attachments?: boolean;
   created_at: string;
@@ -949,4 +963,70 @@ export function buildInsightSeries(
     });
   }
   return series;
+}
+
+export type TicketType = "bug" | "change" | "feature" | "question";
+
+export const TRIAGE_STATUSES = [
+  "new",
+  "needs_admin",
+  "needs_client",
+  "needs_spec",
+  "ready",
+  "human_only",
+  "stale",
+  "in_progress",
+  "pr_open",
+  "done",
+] as const;
+export type TriageStatus = (typeof TRIAGE_STATUSES)[number];
+
+export interface ProjectAiConfig {
+  allowed_ticket_types?: TicketType[];
+  /** How the client is reached for clarifications. */
+  client_contact_mode?: "whatsapp" | "none";
+  /** Paths the agent must not change (checkout, payments, auth, ...). */
+  sensitive_paths?: string[];
+}
+
+/** What the triage run wrote back. All fields optional so partial runs still save. */
+export interface TicketTriage {
+  summary?: string;
+  files?: string[];
+  plan?: string[];
+  checklist?: { item: string; ok: boolean; note?: string }[];
+  questions?: string[];
+  size?: "xs" | "s" | "m" | "l" | "xl";
+  in_sla?: boolean;
+  estimate_hours?: number;
+}
+
+export type AgentActionKind = "approve_plan" | "client_message" | "start_execution";
+export type AgentActionStatus = "pending" | "approved" | "rejected" | "sent";
+
+export interface AgentAction {
+  id: string;
+  task_id: string;
+  kind: AgentActionKind;
+  payload: Record<string, unknown>;
+  edited_payload?: Record<string, unknown> | null;
+  status: AgentActionStatus;
+  decided_by?: string | null;
+  decided_by_name?: string | null;
+  decided_via?: "ui" | "mcp" | null;
+  decided_at?: string | null;
+  sent_at?: string | null;
+  created_at: string;
+}
+
+export type AgentEventActor = "agent" | "operator" | "admin" | "system" | "client";
+
+export interface AgentEvent {
+  id: string;
+  task_id: string;
+  actor: AgentEventActor;
+  actor_label?: string | null;
+  kind: string;
+  data: Record<string, unknown>;
+  created_at: string;
 }
