@@ -2,6 +2,7 @@ import { toDateInputValue } from "@/lib/format";
 import type {
   PublicRetainer,
   RetainerAgreement,
+  RetainerAgreementType,
   RetainerBillingModel,
   RetainerHoursCadence,
   RetainerPeriodAnchor,
@@ -198,9 +199,29 @@ export function sumHours(entries: Pick<RetainerTimeEntry, "hours">[]): number {
   return entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
 }
 
+/** On-demand retainers have no agreed hours — track and bill what is logged. */
+export function isOnDemandRetainer(
+  retainer: Pick<RetainerAgreement, "agreement_type">,
+): boolean {
+  return retainer.agreement_type === "on_demand";
+}
+
+/** Short Dutch description of the hours agreement, e.g. "12u / week". */
+export function retainerHoursLabel(
+  retainer: Pick<RetainerAgreement, "agreement_type" | "hours_cadence" | "hours_included">,
+): string {
+  if (isOnDemandRetainer(retainer)) return "Op afroep · geen vaste uren";
+  return retainer.hours_cadence === "weekly"
+    ? `${retainer.hours_included}u / week`
+    : `${retainer.hours_included}u / maand`;
+}
+
+/** 0 for on-demand retainers (no cap). */
 export function includedHoursForWeek(
-  retainer: Pick<RetainerAgreement, "hours_cadence" | "hours_included">,
+  retainer: Pick<RetainerAgreement, "hours_cadence" | "hours_included"> &
+    Partial<Pick<RetainerAgreement, "agreement_type">>,
 ): number {
+  if (retainer.agreement_type === "on_demand") return 0;
   const included = Number(retainer.hours_included) || 0;
   if (retainer.hours_cadence === "monthly") {
     return Math.round((included / 4.333) * 100) / 100;
@@ -208,9 +229,12 @@ export function includedHoursForWeek(
   return included;
 }
 
+/** 0 for on-demand retainers (no cap). */
 export function includedHoursForPeriod(
-  retainer: Pick<RetainerAgreement, "hours_cadence" | "hours_included">,
+  retainer: Pick<RetainerAgreement, "hours_cadence" | "hours_included"> &
+    Partial<Pick<RetainerAgreement, "agreement_type">>,
 ): number {
+  if (retainer.agreement_type === "on_demand") return 0;
   const included = Number(retainer.hours_included) || 0;
   if (retainer.hours_cadence === "weekly") {
     // Rolling/calendar billing period ≈ 1 month ≈ 4.333 weeks
@@ -341,6 +365,8 @@ export function toPublicRetainer(
   return {
     client_name: retainer.client_name,
     status: retainer.status,
+    agreement_type: retainer.agreement_type,
+    logo_url: retainer.company_logo_url ?? null,
     hours_cadence: retainer.hours_cadence,
     hours_included: retainer.hours_included,
     start_date: retainer.start_date,
@@ -461,7 +487,16 @@ export function mapRetainerRow(row: Record<string, unknown>): RetainerAgreement 
     id: String(row.id),
     client_name: String(row.client_name),
     company_id: (row.company_id as string | null) ?? null,
+    // Only set when the query joined companies — a plain UPDATE … RETURNING
+    // must not wipe the logo already in the client cache.
+    ...("company_logo_url" in row
+      ? { company_logo_url: (row.company_logo_url as string | null) ?? null }
+      : {}),
     status,
+    agreement_type:
+      (row.agreement_type as RetainerAgreementType) === "on_demand"
+        ? "on_demand"
+        : "fixed",
     hours_cadence: (row.hours_cadence as RetainerHoursCadence) ?? "weekly",
     hours_included: Number(row.hours_included) || 0,
     billing_model: (row.billing_model as RetainerBillingModel) ?? "hourly",

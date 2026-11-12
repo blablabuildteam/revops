@@ -222,6 +222,15 @@ function patchRetainersCache(updater: (list: RetainerWithEntries[]) => RetainerW
   setCached(cacheKeys.retainers, updater(current));
 }
 
+/** Reflect a freshly uploaded company logo on every retainer of that company. */
+export function setRetainerCompanyLogo(companyId: string, logoUrl: string) {
+  patchRetainersCache((list) =>
+    list.map((r) =>
+      r.company_id === companyId ? { ...r, company_logo_url: logoUrl } : r,
+    ),
+  );
+}
+
 export function updateRetainerAgreement(
   id: string,
   data: Partial<RetainerWithEntries> & { toggle_period?: string },

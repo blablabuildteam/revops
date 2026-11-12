@@ -16,7 +16,10 @@ export async function GET(
     }
 
     const { rows } = await sql`
-      SELECT * FROM retainer_agreements WHERE share_token = ${token}
+      SELECT r.*, c.logo_url AS company_logo_url
+      FROM retainer_agreements r
+      LEFT JOIN companies c ON c.id = r.company_id
+      WHERE r.share_token = ${token}
     `;
     if (!rows[0]) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });

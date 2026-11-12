@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CompanyAvatar } from "@/components/company-avatar";
 import { DatePicker } from "@/components/ui/date-picker";
 import { HoursMeter } from "@/components/hours-meter";
 import { RetainerLogForm } from "@/components/retainer-log-form";
@@ -25,6 +26,7 @@ import { useRetainers } from "@/hooks/use-api-data";
 import {
   createRetainerTimeEntry,
   deleteRetainerTimeEntry,
+  setRetainerCompanyLogo,
   updateRetainerAgreement,
   updateRetainerTimeEntry,
 } from "@/lib/api";
@@ -47,8 +49,10 @@ import {
   includedHoursForPeriod,
   includedHoursForWeek,
   isAccountMgmtEntry,
+  isOnDemandRetainer,
   listRetainerBillingPeriods,
   monthKeyOf,
+  retainerHoursLabel,
   sumHours,
   weekStartFromDateOnly,
   weekStartOf,
@@ -144,7 +148,9 @@ function RetainerCard({
   const weekCap = includedHoursForWeek(retainer);
   const periodCap = includedHoursForPeriod(retainer);
   const periodInvoice = estimateInvoiceAmount(retainer, periodHours);
-  const flex = retainer.flex_hours ? flexHoursBalance(retainer) : null;
+  const onDemand = isOnDemandRetainer(retainer);
+  const flex =
+    retainer.flex_hours && !onDemand ? flexHoursBalance(retainer) : null;
   const invoiced = new Set(retainer.invoiced_periods ?? []);
 
   useEffect(() => {
@@ -378,6 +384,18 @@ function RetainerCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
+              <CompanyAvatar
+                id={retainer.company_id ?? undefined}
+                name={retainer.client_name}
+                logoUrl={retainer.company_logo_url}
+                size="md"
+                uploadable={Boolean(retainer.company_id)}
+                onLogoChange={(logoUrl) => {
+                  if (retainer.company_id) {
+                    setRetainerCompanyLogo(retainer.company_id, logoUrl);
+                  }
+                }}
+              />
               <h2 className="text-base font-semibold text-neutral-100">
                 {retainer.client_name}
               </h2>
@@ -396,7 +414,12 @@ function RetainerCard({
               >
                 {STATUS_LABELS[retainer.status]}
               </span>
-              {retainer.flex_hours && (
+              {onDemand && (
+                <span className="text-[11px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300">
+                  Op afroep
+                </span>
+              )}
+              {retainer.flex_hours && !onDemand && (
                 <span className="text-[11px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
                   Flex uren
                 </span>
@@ -405,9 +428,7 @@ function RetainerCard({
             <p className="text-xs text-neutral-500 mt-1">
               Start {retainer.start_date}
               {" · "}
-              {retainer.hours_cadence === "weekly"
-                ? `${retainer.hours_included}u / week`
-                : `${retainer.hours_included}u / maand`}
+              {retainerHoursLabel(retainer)}
               {" · "}
               {formatCurrency(retainer.hourly_rate)} / uur
             </p>
@@ -648,7 +669,7 @@ function RetainerCard({
                     <span
                       className={cn(
                         "font-mono text-sm tabular-nums",
-                        weekHours > weekCap
+                        weekCap > 0 && weekHours > weekCap
                           ? "text-amber-300"
                           : weekHours > 0
                             ? "text-neutral-200"
@@ -657,9 +678,11 @@ function RetainerCard({
                     >
                       {formatHours(weekHours)}u
                     </span>
-                    <span className="text-xs text-neutral-600">
-                      / {weekCap}u
-                    </span>
+                    {weekCap > 0 && (
+                      <span className="text-xs text-neutral-600">
+                        / {weekCap}u
+                      </span>
+                    )}
                   </div>
                 </button>
 

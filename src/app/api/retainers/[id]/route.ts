@@ -55,6 +55,11 @@ export async function PUT(
         client_name = COALESCE(${body.client_name?.trim() ?? null}, client_name),
         company_id = ${body.company_id !== undefined ? body.company_id : existing.company_id},
         status = COALESCE(${body.status ?? null}, status),
+        agreement_type = COALESCE(${
+          body.agreement_type === "on_demand" || body.agreement_type === "fixed"
+            ? body.agreement_type
+            : null
+        }, agreement_type),
         hours_cadence = COALESCE(${body.hours_cadence ?? null}, hours_cadence),
         hours_included = COALESCE(${body.hours_included !== undefined ? Number(body.hours_included) : null}, hours_included),
         billing_model = COALESCE(${body.billing_model ?? null}, billing_model),

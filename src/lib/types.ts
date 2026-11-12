@@ -73,6 +73,8 @@ export type SlaStatus = "active" | "upcoming" | "paused" | "ended";
 export type RetainerStatus = "active" | "upcoming" | "paused" | "ended";
 export type RetainerHoursCadence = "weekly" | "monthly";
 export type RetainerBillingModel = "hourly" | "fixed_monthly";
+/** fixed = agreed hours per week/month; on_demand = no fixed hours, bill what is logged. */
+export type RetainerAgreementType = "fixed" | "on_demand";
 /** calendar = full months; start_day = rolling from start_date day (e.g. 15th→14th). */
 export type RetainerPeriodAnchor = "calendar" | "start_day";
 
@@ -90,7 +92,11 @@ export interface RetainerAgreement {
   id: string;
   client_name: string;
   company_id?: string | null;
+  /** Linked company's logo (joined on list/detail reads). */
+  company_logo_url?: string | null;
   status: RetainerStatus;
+  /** on_demand = no hours cap; hours_included/cadence are ignored. */
+  agreement_type: RetainerAgreementType;
   /** Cap measured per week or per calendar month. */
   hours_cadence: RetainerHoursCadence;
   hours_included: number;
@@ -235,6 +241,8 @@ export interface PublicRetainerEntry {
 export interface PublicRetainer {
   client_name: string;
   status: RetainerStatus;
+  agreement_type: RetainerAgreementType;
+  logo_url?: string | null;
   hours_cadence: RetainerHoursCadence;
   hours_included: number;
   start_date: string;

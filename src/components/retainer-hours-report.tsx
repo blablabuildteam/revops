@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CompanyAvatar } from "@/components/company-avatar";
 import { RetainerLogForm } from "@/components/retainer-log-form";
 import {
   currentBillingPeriod,
@@ -22,9 +23,11 @@ import {
   formatWeekLabel,
   groupRetainerEntriesByWeek,
   isAccountMgmtEntry,
+  isOnDemandRetainer,
   includedHoursForPeriod,
   includedHoursForWeek,
   listRetainerBillingPeriods,
+  retainerHoursLabel,
   sumHours,
   weekStartFromDateOnly,
 } from "@/lib/retainers";
@@ -225,6 +228,7 @@ export function RetainerHoursReport({
   const weekCap = includedHoursForWeek(retainer);
   const totalHours = sumHours(entries);
   const remaining = Math.max(0, periodCap - periodHours);
+  const onDemand = isOnDemandRetainer(retainer);
   const isCurrent = selectedPeriod?.key === currentPeriod?.key;
 
   // Bucket breakdown for selected period
@@ -291,14 +295,17 @@ export function RetainerHoursReport({
     <div className="space-y-8">
       {/* Header */}
       <div className="text-center space-y-2">
+        <CompanyAvatar
+          name={retainer.client_name}
+          logoUrl={retainer.logo_url}
+          size="lg"
+          className="mx-auto w-14 h-14 rounded-lg"
+        />
         <h1 className="text-3xl font-semibold text-neutral-100">
           {retainer.client_name}
         </h1>
         <p className="text-neutral-500">
-          Retainer urenoverzicht
-          {retainer.hours_cadence === "weekly"
-            ? ` · ${retainer.hours_included} uur per week`
-            : ` · ${retainer.hours_included} uur per maand`}
+          Retainer urenoverzicht · {retainerHoursLabel(retainer)}
         </p>
       </div>
 
@@ -419,7 +426,9 @@ export function RetainerHoursReport({
       {selectedPeriod ? (
         <div className="border border-neutral-800 rounded-xl p-6 bg-gradient-to-br from-neutral-900/80 to-neutral-950">
           <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10">
-            <CircularProgress value={periodHours} max={periodCap} />
+            {!onDemand && (
+              <CircularProgress value={periodHours} max={periodCap} />
+            )}
             <div className="flex-1 space-y-4 text-center sm:text-left">
               <div>
                 <p className="text-lg font-medium text-neutral-100">
@@ -435,9 +444,11 @@ export function RetainerHoursReport({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-2xl font-semibold text-[#d4e052] font-mono tabular-nums">
-                    {formatHours(remaining)}u
+                    {formatHours(onDemand ? periodHours : remaining)}u
                   </p>
-                  <p className="text-xs text-neutral-500">beschikbaar</p>
+                  <p className="text-xs text-neutral-500">
+                    {onDemand ? "gelogd" : "beschikbaar"}
+                  </p>
                 </div>
                 <div>
                   <p className="text-2xl font-semibold text-neutral-100 font-mono tabular-nums">
@@ -465,7 +476,7 @@ export function RetainerHoursReport({
           icon={Clock}
           label="Deze periode"
           value={`${formatHours(periodHours)}u`}
-          subtext={`van ${periodCap}u`}
+          subtext={onDemand ? "op afroep" : `van ${periodCap}u`}
         />
         <StatCard
           icon={TrendingUp}
@@ -479,13 +490,23 @@ export function RetainerHoursReport({
           value={`${bucketHours.filter((b) => b.hours > 0).length}`}
           subtext={`van ${retainer.hour_buckets?.length ?? 0}`}
         />
-        <StatCard
-          icon={Calendar}
-          label="Per week"
-          value={`${weekCap}u`}
-          subtext="inclusief"
-          accent
-        />
+        {onDemand ? (
+          <StatCard
+            icon={Calendar}
+            label="Activiteiten"
+            value={`${periodEntries.length}`}
+            subtext="deze periode"
+            accent
+          />
+        ) : (
+          <StatCard
+            icon={Calendar}
+            label="Per week"
+            value={`${weekCap}u`}
+            subtext="inclusief"
+            accent
+          />
+        )}
       </div>
 
       {/* Bucket breakdown */}
@@ -546,7 +567,7 @@ export function RetainerHoursReport({
           <div className="space-y-6">
             {weeks.map(({ weekStart, entries: weekEntries }) => {
               const weekTotal = sumHours(weekEntries);
-              const weekOver = weekTotal > weekCap;
+              const weekOver = weekCap > 0 && weekTotal > weekCap;
               return (
                 <div key={weekStart} className="space-y-2">
                   <div className="flex items-center gap-3">

@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Cold starts skip DDL/seeds once this flag is set.
  * Bump the key when ensure* must run again after a schema change.
  */
-const SCHEMA_READY_KEY = "app_schema_ready_v11";
+const SCHEMA_READY_KEY = "app_schema_ready_v12";
 
 /**
  * Ensures the schema is ready for requests.
@@ -997,6 +997,12 @@ async function ensureRetainersTable() {
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_hours NUMERIC(6,2) NOT NULL DEFAULT 0`;
   // Last week (Monday) the account-management auto-log has covered; NULL = off.
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_logged_through DATE`;
+  // fixed = agreed hours; on_demand = no fixed hours, bill what is logged.
+  await sql`
+    ALTER TABLE retainer_agreements
+    ADD COLUMN IF NOT EXISTS agreement_type TEXT NOT NULL DEFAULT 'fixed'
+      CHECK (agreement_type IN ('fixed', 'on_demand'))
+  `;
   // First week (Monday) the account-management hours apply to.
   await sql`ALTER TABLE retainer_agreements ADD COLUMN IF NOT EXISTS account_mgmt_start DATE`;
   await sql`
@@ -1320,6 +1326,42 @@ async function ensureRetainersTable() {
       )
     `;
   }
+
+  // Thuishaven: no fixed hours agreement, but hours are tracked and billed.
+  const { rows: thuishavenRetainer } = await sql`
+    SELECT id FROM retainer_agreements WHERE client_name ILIKE 'Thuishaven' LIMIT 1
+  `;
+  if (!thuishavenRetainer[0]) {
+    await sql`
+      INSERT INTO retainer_agreements (
+        client_name, company_id, status, agreement_type, hours_cadence,
+        hours_included, billing_model, hourly_rate, monthly_fee, start_date,
+        period_anchor, flex_hours, notes
+      ) VALUES (
+        'Thuishaven',
+        (SELECT id FROM companies WHERE name ILIKE 'Thuishaven' LIMIT 1),
+        'active',
+        'on_demand',
+        'monthly',
+        0,
+        'hourly',
+        150,
+        0,
+        '2026-11-01',
+        'calendar',
+        false,
+        'Op afroep · geen vaste uren · €150/uur · factuur achteraf'
+      )
+    `;
+  }
+  await sql`
+    UPDATE retainer_agreements r
+    SET company_id = c.id, updated_at = now()
+    FROM companies c
+    WHERE r.client_name ILIKE 'Thuishaven'
+      AND r.company_id IS NULL
+      AND c.name ILIKE 'Thuishaven'
+  `;
 
   const { rows: seedFlag } = await sql`
     SELECT value FROM finance_settings WHERE key = 'retainers_seeded_v1'

@@ -8,16 +8,20 @@ export async function GET() {
     await ensureTables();
     await syncAccountManagementEntries();
     const { rows } = await sql`
-      SELECT * FROM retainer_agreements
+      SELECT r.*, c.logo_url AS company_logo_url
+      FROM retainer_agreements r
+      LEFT JOIN companies c ON c.id = r.company_id
       ORDER BY
-        CASE status
+        -- On-demand retainers (no fixed hours) go below the fixed ones.
+        (r.agreement_type = 'on_demand'),
+        CASE r.status
           WHEN 'active' THEN 0
           WHEN 'upcoming' THEN 1
           WHEN 'paused' THEN 2
           ELSE 3
         END,
-        start_date ASC,
-        client_name ASC
+        r.start_date ASC,
+        r.client_name ASC
     `;
     const retainers = rows.map(mapRetainerRow);
 
@@ -58,12 +62,13 @@ export async function POST(req: NextRequest) {
 
     const { rows } = await sql`
       INSERT INTO retainer_agreements (
-        client_name, company_id, status, hours_cadence, hours_included,
+        client_name, company_id, status, agreement_type, hours_cadence, hours_included,
         billing_model, hourly_rate, monthly_fee, start_date, notes
       ) VALUES (
         ${body.client_name.trim()},
         ${body.company_id ?? null},
         ${body.status ?? "upcoming"},
+        ${body.agreement_type === "on_demand" ? "on_demand" : "fixed"},
         ${body.hours_cadence === "monthly" ? "monthly" : "weekly"},
         ${Number(body.hours_included) || 0},
         ${body.billing_model === "fixed_monthly" ? "fixed_monthly" : "hourly"},

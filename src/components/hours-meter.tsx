@@ -12,6 +12,17 @@ export function HoursMeter({
   cap: number;
   className?: string;
 }) {
+  if (cap <= 0) {
+    // No agreed hours (on-demand) — show the total without a meter.
+    return (
+      <div className={cn("flex items-baseline justify-between gap-2 min-w-0", className)}>
+        <span className="text-xs text-neutral-500">{label}</span>
+        <span className="font-mono text-xs tabular-nums text-neutral-200">
+          {formatHours(used)}u
+        </span>
+      </div>
+    );
+  }
   const over = cap > 0 && used > cap;
   const pct = cap > 0 ? Math.min(100, (used / cap) * 100) : 0;
   return (
