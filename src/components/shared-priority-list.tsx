@@ -58,11 +58,11 @@ function PriorityChips({
 }
 
 function alignmentLabel(team: RoadmapPriority | null, partner: RoadmapPriority | null) {
-  if (!team && !partner) return "Nog geen prio";
-  if (team && partner && team === partner) return "Eens";
-  if (team && partner) return "Verschil";
-  if (team) return "Wacht op Emil";
-  return "Wacht op ons";
+  if (!team && !partner) return "No priority yet";
+  if (team && partner && team === partner) return "Agreed";
+  if (team && partner) return "Different";
+  if (team) return "Waiting on Emil";
+  return "Waiting on us";
 }
 
 function whenLabel(team: RoadmapPriority | null, partner: RoadmapPriority | null) {
@@ -141,7 +141,7 @@ export function SharedPriorityList({
         <div>
           <h2 className="text-sm font-medium text-neutral-200">{title}</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Wij en Emil zetten elk een prio. Als Emil nog niets heeft gezet, staat er “Wacht op Emil”.
+            We and Emil each set a priority. If Emil has not rated yet, it shows “Waiting on Emil”.
           </p>
           <div className="flex flex-wrap gap-2 mt-2">
             {ROADMAP_PRIORITIES.map((level) => (
@@ -160,10 +160,10 @@ export function SharedPriorityList({
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              ["all", "Alles"],
-              ["aligned", "Eens"],
-              ["split", "Verschil"],
-              ["open", "Wacht"],
+              ["all", "All"],
+              ["aligned", "Agreed"],
+              ["split", "Different"],
+              ["open", "Waiting"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -184,7 +184,7 @@ export function SharedPriorityList({
 
       {rows.length === 0 ? (
         <p className="px-4 py-6 text-sm text-neutral-600">
-          Nog geen roadmap-items met P1–P3.
+          No roadmap items with P1–P3 yet.
         </p>
       ) : (
         <ul className="divide-y divide-neutral-800/80">
@@ -200,7 +200,7 @@ export function SharedPriorityList({
                     <p className="text-sm text-neutral-100 truncate">{title}</p>
                     {whenLabel(team, partner) && (
                       <p className="text-[11px] text-[#d4e052]/80 mt-0.5">
-                        Wanneer: {whenLabel(team, partner)}
+                        When: {whenLabel(team, partner)}
                       </p>
                     )}
                     {task.description && (
@@ -211,9 +211,9 @@ export function SharedPriorityList({
                   </div>
                   <span
                     className={`shrink-0 text-[11px] px-2 py-0.5 rounded border ${
-                      align === "Eens"
+                      align === "Agreed"
                         ? "border-[#d4e052]/40 text-[#d4e052]"
-                        : align === "Verschil"
+                        : align === "Different"
                           ? "border-amber-400/40 text-amber-300"
                           : "border-neutral-700 text-neutral-500"
                     }`}
@@ -223,7 +223,7 @@ export function SharedPriorityList({
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <PriorityChips
-                    label="Wij"
+                    label="Ours"
                     value={team}
                     disabled={editableSide !== "team" || savingId === task.id}
                     onChange={(next) => setPriority(task, "team", next)}
