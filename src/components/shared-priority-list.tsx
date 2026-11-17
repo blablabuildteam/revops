@@ -37,7 +37,7 @@ function PriorityChips({
             key={level}
             type="button"
             disabled={disabled}
-            title={ROADMAP_PRIORITY_HINT[level]}
+            title={`${ROADMAP_PRIORITY_HINT[level]} · ${ROADMAP_PRIORITY_WINDOW[level]}`}
             onClick={() => onChange(active ? null : level)}
             className={`rounded px-2 py-0.5 text-[11px] font-medium border transition-colors disabled:opacity-40 ${
               active
@@ -58,11 +58,18 @@ function PriorityChips({
 }
 
 function alignmentLabel(team: RoadmapPriority | null, partner: RoadmapPriority | null) {
-  if (!team && !partner) return "—";
-  if (team && partner && team === partner) return "Aligned";
-  if (team && partner) return "Split";
-  if (team) return "Only us";
-  return "Only Emil";
+  if (!team && !partner) return "Nog geen prio";
+  if (team && partner && team === partner) return "Eens";
+  if (team && partner) return "Verschil";
+  if (team) return "Wacht op Emil";
+  return "Wacht op ons";
+}
+
+function whenLabel(team: RoadmapPriority | null, partner: RoadmapPriority | null) {
+  const shared = team && partner && team === partner ? team : null;
+  const best = shared ?? team ?? partner;
+  if (!best) return null;
+  return `${ROADMAP_PRIORITY_LABEL[best]} · ${ROADMAP_PRIORITY_WINDOW[best]}`;
 }
 
 export function SharedPriorityList({
@@ -134,17 +141,29 @@ export function SharedPriorityList({
         <div>
           <h2 className="text-sm font-medium text-neutral-200">{title}</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Ons en Emil geven elk P1–P3. P1 = {ROADMAP_PRIORITY_WINDOW.p1}, P2 ={" "}
-            {ROADMAP_PRIORITY_WINDOW.p2}, P3 = {ROADMAP_PRIORITY_WINDOW.p3}. Gelijk = aligned.
+            Wij en Emil zetten elk een prio. Als Emil nog niets heeft gezet, staat er “Wacht op Emil”.
           </p>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {ROADMAP_PRIORITIES.map((level) => (
+              <span
+                key={level}
+                className="inline-flex items-center gap-1.5 rounded-md border border-neutral-800 bg-neutral-950/80 px-2 py-1 text-[11px] text-neutral-300"
+              >
+                <span className="font-medium text-neutral-100">
+                  {ROADMAP_PRIORITY_LABEL[level]}
+                </span>
+                <span className="text-neutral-500">{ROADMAP_PRIORITY_WINDOW[level]}</span>
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {(
             [
-              ["all", "All"],
-              ["aligned", "Aligned"],
-              ["split", "Split"],
-              ["open", "Waiting"],
+              ["all", "Alles"],
+              ["aligned", "Eens"],
+              ["split", "Verschil"],
+              ["open", "Wacht"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -179,6 +198,11 @@ export function SharedPriorityList({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm text-neutral-100 truncate">{title}</p>
+                    {whenLabel(team, partner) && (
+                      <p className="text-[11px] text-[#d4e052]/80 mt-0.5">
+                        Wanneer: {whenLabel(team, partner)}
+                      </p>
+                    )}
                     {task.description && (
                       <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">
                         {task.description}
@@ -186,10 +210,10 @@ export function SharedPriorityList({
                     )}
                   </div>
                   <span
-                    className={`shrink-0 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded border ${
-                      align === "Aligned"
+                    className={`shrink-0 text-[11px] px-2 py-0.5 rounded border ${
+                      align === "Eens"
                         ? "border-[#d4e052]/40 text-[#d4e052]"
-                        : align === "Split"
+                        : align === "Verschil"
                           ? "border-amber-400/40 text-amber-300"
                           : "border-neutral-700 text-neutral-500"
                     }`}
@@ -199,7 +223,7 @@ export function SharedPriorityList({
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <PriorityChips
-                    label="Us"
+                    label="Wij"
                     value={team}
                     disabled={editableSide !== "team" || savingId === task.id}
                     onChange={(next) => setPriority(task, "team", next)}
