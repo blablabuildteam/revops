@@ -6,6 +6,7 @@ import {
   ROADMAP_PRIORITIES,
   ROADMAP_PRIORITY_HINT,
   ROADMAP_PRIORITY_LABEL,
+  ROADMAP_PRIORITY_WINDOW,
   RoadmapPriority,
   normalizeRoadmapPriority,
   roadmapSortKey,
@@ -133,7 +134,8 @@ export function SharedPriorityList({
         <div>
           <h2 className="text-sm font-medium text-neutral-200">{title}</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            Ons (blablabuild) en Emil geven elk P1 / P2 / P3. Gelijk = aligned.
+            Ons en Emil geven elk P1–P3. P1 = {ROADMAP_PRIORITY_WINDOW.p1}, P2 ={" "}
+            {ROADMAP_PRIORITY_WINDOW.p2}, P3 = {ROADMAP_PRIORITY_WINDOW.p3}. Gelijk = aligned.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">

@@ -385,7 +385,7 @@ export function TaskDetailDialog({
                   {roadmapEditor !== "none" && (
                     <>
                       <div className="space-y-2">
-                        <Label className="text-neutral-400 text-xs">Our P1–P3</Label>
+                        <Label className="text-neutral-400 text-xs">Our P1–P3 (year / 2–4 mo / 2027)</Label>
                         <Select
                           value={form.team_priority || "__none__"}
                           disabled={roadmapEditor === "partner"}
@@ -410,7 +410,7 @@ export function TaskDetailDialog({
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-neutral-400 text-xs">Emil P1–P3</Label>
+                        <Label className="text-neutral-400 text-xs">Emil P1–P3 (year / 2–4 mo / 2027)</Label>
                         <Select
                           value={form.partner_priority || "__none__"}
                           disabled={roadmapEditor === "team"}

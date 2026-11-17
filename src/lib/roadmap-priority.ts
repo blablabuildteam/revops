@@ -11,9 +11,15 @@ export const ROADMAP_PRIORITY_LABEL: Record<RoadmapPriority, string> = {
 };
 
 export const ROADMAP_PRIORITY_HINT: Record<RoadmapPriority, string> = {
-  p1: "Do first",
-  p2: "Next",
-  p3: "Later",
+  p1: "This year (2026)",
+  p2: "Next 2–4 months",
+  p3: "Rest of 2027",
+};
+
+export const ROADMAP_PRIORITY_WINDOW: Record<RoadmapPriority, string> = {
+  p1: "nog dit jaar",
+  p2: "komende 2–4 maanden",
+  p3: "rest van 2027",
 };
 
 /** Map roadmap rating onto the operational board priority. */
