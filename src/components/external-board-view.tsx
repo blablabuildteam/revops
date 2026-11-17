@@ -24,6 +24,8 @@ import {
   type EditBoardProject,
 } from "@/lib/edit-board-api";
 import { Task, CUSTOM_PHASE_DEFAULT_COLOR } from "@/lib/types";
+import { SharedPriorityList } from "@/components/shared-priority-list";
+import { updateEditBoardTask } from "@/lib/edit-board-api";
 
 function upsertTask(prev: Task[], updated: Task): Task[] {
   const idx = prev.findIndex((t) => t.id === updated.id);
@@ -165,8 +167,20 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-end gap-2 mb-3">
+        <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+          <SharedPriorityList
+            tasks={tasks}
+            editableSide="partner"
+            onChangePriority={async (taskId, side, value) => {
+              if (side !== "partner") return;
+              const updated = await updateEditBoardTask(editToken, taskId, {
+                partner_priority: value,
+              });
+              handleTaskUpdate(updated);
+            }}
+          />
+
+          <div className="flex items-center justify-end gap-2">
             <Popover>
               <PopoverTrigger
                 className={`flex items-center gap-1.5 text-xs py-1.5 px-2.5 rounded-lg border transition-colors cursor-pointer ${
@@ -215,6 +229,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
             milestonesOverride={project.milestones}
             onTaskUpdate={handleTaskUpdate}
             onTaskDelete={handleTaskDelete}
+            roadmapEditor="partner"
           />
 
           <form onSubmit={handleAddMilestone} className="flex items-center gap-3 mt-6">
@@ -241,6 +256,7 @@ export function ExternalProjectBoard({ editToken }: { editToken: string }) {
             onSave={handleTaskUpdate}
             api={createApi}
             milestones={project.milestones}
+            roadmapEditor="partner"
           />
 
           <EditStatusesDialog

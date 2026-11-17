@@ -50,6 +50,8 @@ import { useConfirmDelete } from "@/components/confirm-delete-dialog";
 import { EditStatusesDialog } from "@/components/edit-statuses-dialog";
 import { TaskRowIndicators } from "@/components/task-row-indicators";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
+import { SharedPriorityList } from "@/components/shared-priority-list";
+import { boardPriorityForRoadmap } from "@/lib/roadmap-priority";
 import {
   AssigneeNamesProvider,
   AssigneeSelect,
@@ -2564,6 +2566,19 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       {confirmDialog}
 
+      <SharedPriorityList
+        tasks={Object.values(tasksByMilestone).flat()}
+        editableSide="team"
+        onChangePriority={async (taskId, side, value) => {
+          if (side !== "team") return;
+          const updated = await updateTask(taskId, {
+            team_priority: value,
+            priority: boardPriorityForRoadmap(value),
+          });
+          handleTaskUpdate(updated);
+        }}
+      />
+
       {pendingRequests > 0 && (
         <div className="flex items-center gap-3 bg-neutral-900/60 border border-neutral-700 rounded-lg px-4 py-3">
           <div className="w-2 h-2 rounded-full bg-stone-400 animate-pulse shrink-0" />
@@ -2659,6 +2674,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         api={taskDetailApi}
         milestones={project.milestones}
         aiMode={Boolean(project.ai_mode)}
+        roadmapEditor="both"
       />
 
       <form onSubmit={handleAddMilestone} className="flex items-center gap-3">

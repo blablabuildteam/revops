@@ -37,6 +37,8 @@ export async function PUT(
     const url = "url" in body ? body.url : current.url;
     const approved = "approved" in body ? body.approved : current.approved;
     const priority = "priority" in body ? body.priority : (current.priority ?? "low");
+    // External boards (Emil) only change partner_priority; team_priority stays ours.
+    const partner_priority = "partner_priority" in body ? body.partner_priority : current.partner_priority;
     const position = "position" in body ? body.position : current.position;
 
     if (milestone_id) {
@@ -56,6 +58,7 @@ export async function PUT(
         url = ${url},
         approved = ${approved},
         priority = ${priority},
+        partner_priority = ${partner_priority ?? null},
         position = ${position},
         updated_at = now()
       WHERE id = ${id}

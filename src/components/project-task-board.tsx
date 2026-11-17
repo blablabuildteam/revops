@@ -776,6 +776,7 @@ export function ProjectTaskBoardPanel({
   milestonesOverride,
   hideToolbar,
   sortKeyOverride,
+  roadmapEditor = "none",
 }: {
   projectId: string;
   tasks: Task[];
@@ -787,6 +788,7 @@ export function ProjectTaskBoardPanel({
   hideToolbar?: boolean;
   /** Lets an embedding page drive ordering from its own sort control. */
   sortKeyOverride?: TaskBoardSortKey;
+  roadmapEditor?: "team" | "partner" | "both" | "none";
 }) {
   const boardApi = useBoardApi();
   const mutation = useMutationFeedbackOptional();
@@ -1065,6 +1067,7 @@ export function ProjectTaskBoardPanel({
           createTask: (data) => boardApi.createTask(projectId, data),
         }}
         milestones={milestones}
+        roadmapEditor={roadmapEditor}
       />
       <EditStatusesDialog
         open={editStatusesOpen}

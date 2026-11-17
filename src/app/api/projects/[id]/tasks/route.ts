@@ -9,7 +9,10 @@ export async function POST(
   const { id: project_id } = await params;
   try {
     await ensureTables();
-    const { title, description, milestone_id, parent_id, assignee, due_date, url, created_by, priority, position } = await req.json();
+    const {
+      title, description, milestone_id, parent_id, assignee, due_date, url,
+      created_by, priority, position, team_priority, partner_priority,
+    } = await req.json();
     const isClient = created_by === "client";
     const user = await resolveSessionUser();
     const enteredBy = user?.name?.trim()
@@ -25,11 +28,14 @@ export async function POST(
     }
 
     const { rows } = await sql`
-      INSERT INTO tasks (project_id, milestone_id, parent_id, title, description, assignee, due_date, url, created_by, entered_by, approved, priority, position)
+      INSERT INTO tasks (
+        project_id, milestone_id, parent_id, title, description, assignee, due_date, url,
+        created_by, entered_by, approved, priority, team_priority, partner_priority, position
+      )
       VALUES (
         ${project_id}, ${resolvedMilestoneId}, ${parent_id ?? null}, ${title}, ${description ?? null},
         ${assignee ?? null}, ${due_date ?? null}, ${url ?? null}, ${created_by ?? "team"}, ${enteredBy},
-        ${!isClient}, ${priority ?? "low"}, ${position ?? 0}
+        ${!isClient}, ${priority ?? "low"}, ${team_priority ?? null}, ${partner_priority ?? null}, ${position ?? 0}
       )
       RETURNING *
     `;

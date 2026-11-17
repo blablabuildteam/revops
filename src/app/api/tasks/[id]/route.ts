@@ -26,6 +26,8 @@ export async function PUT(
     const url = "url" in body ? body.url : current.url;
     const approved = "approved" in body ? body.approved : current.approved;
     const priority = "priority" in body ? body.priority : (current.priority ?? "low");
+    const team_priority = "team_priority" in body ? body.team_priority : current.team_priority;
+    const partner_priority = "partner_priority" in body ? body.partner_priority : current.partner_priority;
     const position = "position" in body ? body.position : current.position;
 
     if (project_id !== current.project_id) {
@@ -50,6 +52,8 @@ export async function PUT(
         url = ${url},
         approved = ${approved},
         priority = ${priority},
+        team_priority = ${team_priority ?? null},
+        partner_priority = ${partner_priority ?? null},
         position = ${position},
         updated_at = now()
       WHERE id = ${id}

@@ -444,6 +444,10 @@ export interface Task {
   due_date?: string | null;
   url?: string | null;
   priority: TaskPriority;
+  /** Our (blablabuild) roadmap rating — P1 / P2 / P3. */
+  team_priority?: "p1" | "p2" | "p3" | null;
+  /** Partner (e.g. Emil) roadmap rating — P1 / P2 / P3. */
+  partner_priority?: "p1" | "p2" | "p3" | null;
   position: number;
   ticket_type?: TicketType | null;
   intake?: Record<string, string> | null;

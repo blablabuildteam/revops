@@ -22,6 +22,13 @@ import { useSessionOptional } from "@/components/session-provider";
 import { LinkifiedText } from "@/components/linkified-text";
 import { NotesField } from "@/components/notes-field";
 import { TaskAgentPanel } from "@/components/task-agent-panel";
+import {
+  ROADMAP_PRIORITIES,
+  ROADMAP_PRIORITY_LABEL,
+  RoadmapPriority,
+  boardPriorityForRoadmap,
+  normalizeRoadmapPriority,
+} from "@/lib/roadmap-priority";
 
 export type TaskDetailDialogApi = TaskAttachmentsApi & {
   updateTask: (id: string, data: Partial<Task>) => Promise<Task>;
@@ -37,6 +44,8 @@ const emptyForm = {
   description: "",
   url: "",
   priority: "low" as TaskPriority,
+  team_priority: "" as "" | RoadmapPriority,
+  partner_priority: "" as "" | RoadmapPriority,
   milestone_id: "",
 };
 
@@ -68,6 +77,7 @@ export function TaskDetailDialog({
   milestones = [],
   defaultMilestoneId: defaultMilestoneIdProp,
   aiMode = false,
+  roadmapEditor = "team",
 }: {
   task: Task | null;
   open: boolean;
@@ -79,6 +89,8 @@ export function TaskDetailDialog({
   defaultMilestoneId?: string;
   /** Project has AI mode: show the AI panel (with "Start triage") on untriaged tasks too. */
   aiMode?: boolean;
+  /** Who may edit roadmap P1/P2/P3 in this dialog. */
+  roadmapEditor?: "team" | "partner" | "both" | "none";
 }) {
   const isCreate = open && !task;
   const session = useSessionOptional();
@@ -107,6 +119,8 @@ export function TaskDetailDialog({
         description: task.description ?? "",
         url: task.url ?? "",
         priority: task.priority ?? "low",
+        team_priority: normalizeRoadmapPriority(task.team_priority) ?? "",
+        partner_priority: normalizeRoadmapPriority(task.partner_priority) ?? "",
         milestone_id: task.milestone_id ?? "",
       });
       setCommentDraft("");
@@ -159,13 +173,17 @@ export function TaskDetailDialog({
     try {
       if (isCreate) {
         if (!api.createTask) return;
+        const teamPriority = normalizeRoadmapPriority(form.team_priority);
+        const partnerPriority = normalizeRoadmapPriority(form.partner_priority);
         const created = await api.createTask({
           title,
           due_date: form.due_date || null,
           assignee: form.assignee || null,
           description: form.description || null,
           url: form.url || null,
-          priority: form.priority,
+          priority: teamPriority ? boardPriorityForRoadmap(teamPriority) : form.priority,
+          team_priority: teamPriority,
+          partner_priority: partnerPriority,
           milestone_id: form.milestone_id || undefined,
         });
         let uploaded = 0;
@@ -183,6 +201,8 @@ export function TaskDetailDialog({
       }
 
       if (!task) return;
+      const teamPriority = normalizeRoadmapPriority(form.team_priority);
+      const partnerPriority = normalizeRoadmapPriority(form.partner_priority);
       const snapshot = {
         title: task.title,
         due_date: task.due_date ?? null,
@@ -190,6 +210,8 @@ export function TaskDetailDialog({
         description: task.description ?? null,
         url: task.url ?? null,
         priority: task.priority ?? "low",
+        team_priority: task.team_priority ?? null,
+        partner_priority: task.partner_priority ?? null,
       };
       await withUndo({
         label: "Updated",
@@ -200,7 +222,13 @@ export function TaskDetailDialog({
             assignee: form.assignee || null,
             description: form.description || null,
             url: form.url || null,
-            priority: form.priority,
+            priority:
+              roadmapEditor !== "partner" && teamPriority
+                ? boardPriorityForRoadmap(teamPriority)
+                : form.priority,
+            team_priority: roadmapEditor === "partner" ? task.team_priority ?? null : teamPriority,
+            partner_priority:
+              roadmapEditor === "team" ? task.partner_priority ?? null : partnerPriority,
           });
           onSave({ ...updated, comment_count: task.comment_count ?? comments.length, has_attachments: attachments.length > 0 });
           onClose();
@@ -354,6 +382,60 @@ export function TaskDetailDialog({
                       </SelectContent>
                     </Select>
                   </div>
+                  {roadmapEditor !== "none" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-neutral-400 text-xs">Our P1–P3</Label>
+                        <Select
+                          value={form.team_priority || "__none__"}
+                          disabled={roadmapEditor === "partner"}
+                          onValueChange={(v) =>
+                            setForm((f) => ({
+                              ...f,
+                              team_priority: v === "__none__" ? "" : (v as RoadmapPriority),
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100 w-full">
+                            <SelectValue placeholder="Unset" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-neutral-800 border-neutral-700">
+                            <SelectItem value="__none__" className="text-neutral-500">Unset</SelectItem>
+                            {ROADMAP_PRIORITIES.map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {ROADMAP_PRIORITY_LABEL[level]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-neutral-400 text-xs">Emil P1–P3</Label>
+                        <Select
+                          value={form.partner_priority || "__none__"}
+                          disabled={roadmapEditor === "team"}
+                          onValueChange={(v) =>
+                            setForm((f) => ({
+                              ...f,
+                              partner_priority: v === "__none__" ? "" : (v as RoadmapPriority),
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="bg-neutral-800 border-neutral-700 text-neutral-100 w-full">
+                            <SelectValue placeholder="Unset" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-neutral-800 border-neutral-700">
+                            <SelectItem value="__none__" className="text-neutral-500">Unset</SelectItem>
+                            {ROADMAP_PRIORITIES.map((level) => (
+                              <SelectItem key={level} value={level}>
+                                {ROADMAP_PRIORITY_LABEL[level]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-neutral-400 text-xs">URL</Label>

@@ -9,7 +9,7 @@ let initPromise: Promise<void> | null = null;
  * Cold starts skip DDL/seeds once this flag is set.
  * Bump the key when ensure* must run again after a schema change.
  */
-const SCHEMA_READY_KEY = "app_schema_ready_v12";
+const SCHEMA_READY_KEY = "app_schema_ready_v13";
 
 /**
  * Ensures the schema is ready for requests.
@@ -414,6 +414,7 @@ async function _init() {
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_id TEXT`;
       await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS slack_channel_name TEXT`;
       await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS entered_by TEXT`;
+      await ensureRoadmapPriorityColumns();
       const { rows: urgentFlag } = await sql`
         SELECT value FROM finance_settings WHERE key = 'priority_urgent'
       `;
@@ -1481,8 +1482,25 @@ async function ensureNetworkContactsTable() {
   await sql`CREATE INDEX IF NOT EXISTS network_contacts_name ON network_contacts (name)`;
 }
 
+/** Team (blablabuild) + partner (e.g. Emil) P1/P2/P3 ratings for shared roadmap lists. */
+async function ensureRoadmapPriorityColumns() {
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS team_priority TEXT`;
+  await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS partner_priority TEXT`;
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_team_priority_check`;
+  await sql`
+    ALTER TABLE tasks ADD CONSTRAINT tasks_team_priority_check
+    CHECK (team_priority IS NULL OR team_priority IN ('p1', 'p2', 'p3'))
+  `;
+  await sql`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_partner_priority_check`;
+  await sql`
+    ALTER TABLE tasks ADD CONSTRAINT tasks_partner_priority_check
+    CHECK (partner_priority IS NULL OR partner_priority IN ('p1', 'p2', 'p3'))
+  `;
+}
+
 /** AI ticket handling: per-project AI mode, ticket triage fields, approval gates, audit log, machine keys. */
 async function ensureAgentTables() {
+  await ensureRoadmapPriorityColumns();
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS ai_mode BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_full_name TEXT`;
   await sql`ALTER TABLE projects ADD COLUMN IF NOT EXISTS repo_default_branch TEXT DEFAULT 'main'`;
